@@ -7,7 +7,7 @@ import {
   TerrainType,
   axialToPixel
 } from '@catan/core';
-import { Locale } from '../i18n';
+import { Locale, RESOURCE_ICONS } from '../i18n';
 
 export interface BoardSvgProps {
   board: BoardState;
@@ -76,6 +76,13 @@ const SETTLEMENT_SVG_BY_COLOR: Record<PlayerColor, string> = {
   blue: '/settlement_blue.bad4cdb43d65c329deda.svg',
   orange: '/settlement_orange.774ddafc8cc0595acdb7.svg',
   green: '/settlement_green.1b78c696cd137be02fae.svg'
+};
+
+const CITY_SVG_BY_COLOR: Record<PlayerColor, string> = {
+  red: '/city_red.svg',
+  blue: '/city_blue.svg',
+  orange: '/city_orange.svg',
+  green: '/city_green.svg'
 };
 
 function getHexPolygonPoints(cx: number, cy: number, radius = HEX_RADIUS): string {
@@ -184,9 +191,10 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
   // Bounding cell dimensions for pointy-top hex sprite from /terrains_hexes.png
   const hexCellW = Math.sqrt(3) * HEX_RADIUS * 1.04;
   const hexCellH = 2 * HEX_RADIUS * 1.04;
-  const harborBadgeSize = 62;
+  // Larger, high-visibility harbor badges (82x82 px)
+  const harborBadgeSize = 82;
   const harborRadius = harborBadgeSize / 2;
-  const tokenSize = 48;
+  const tokenSize = 54;
   const tokenRadius = tokenSize / 2;
 
   return (
@@ -215,7 +223,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
 
       <svg
         ref={svgRef}
-        viewBox="-540 -500 1080 1000"
+        viewBox="-640 -580 1280 1160"
         style={{
           width: '100%',
           height: '100%',
@@ -255,18 +263,9 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
               <circle cx={harbor.x} cy={harbor.y} r={harborRadius} />
             </clipPath>
           ))}
-
-          {/* Clip path for coastline border segments */}
-          <clipPath id="clip-coast-piece">
-            <rect x={-185} y={-48} width={370} height={96} rx={18} />
-          </clipPath>
         </defs>
 
         <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-          {/* Outer Ocean Backdrop & Sandy Island Frame */}
-          <circle cx={0} cy={0} r={482} fill="#083344" stroke="#f59e0b" strokeWidth={4} strokeOpacity={0.5} />
-          <circle cx={0} cy={0} r={372} fill="#eab308" fillOpacity={0.28} />
-
           {/* 0A. Render 18 Outer Sea Hexes from /terrains_hexes.png (col 0, row 0) */}
           {outerSeaRing.map((sea) => (
             <g key={sea.id}>
@@ -278,7 +277,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                   width={hexCellW * 7}
                   height={hexCellH * 4}
                   preserveAspectRatio="none"
-                  opacity={0.92}
+                  opacity={0.94}
                 />
               </g>
               <polygon
@@ -286,113 +285,24 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 fill="none"
                 stroke="#38bdf8"
                 strokeWidth={1.2}
-                strokeOpacity={0.25}
+                strokeOpacity={0.22}
               />
             </g>
           ))}
 
-          {/* 0B. Render 6 Coastline Border Segments from /coastline.png around the perimeter */}
-          {[0, 1, 2, 3, 4, 5].map((sideIdx) => {
-            const angleDeg = sideIdx * 60 + 30;
-            const dist = 344;
-            const rad = (angleDeg * Math.PI) / 180;
-            const cx = dist * Math.cos(rad);
-            const cy = dist * Math.sin(rad);
-            const rowOffset = sideIdx % 2 === 0 ? 0 : -96;
-            return (
-              <g
-                key={`coast-${sideIdx}`}
-                transform={`translate(${cx.toFixed(1)}, ${cy.toFixed(1)}) rotate(${angleDeg + 90})`}
-                opacity={0.85}
-                style={{ pointerEvents: 'none' }}
-              >
-                <g clipPath="url(#clip-coast-piece)">
-                  <image
-                    href="/coastline.png"
-                    x={-185}
-                    y={-48 + rowOffset}
-                    width={370}
-                    height={192}
-                    preserveAspectRatio="none"
-                  />
-                </g>
-              </g>
-            );
-          })}
+          {/* 0B. Sandy Shoreline Halo behind the 19 Island Hexes */}
+          {Object.values(board.hexes).map((hex) => (
+            <polygon
+              key={`sand-${hex.id}`}
+              points={getHexPolygonPoints(hex.x, hex.y, HEX_RADIUS + 7)}
+              fill="#fde68a"
+              stroke="#d97706"
+              strokeWidth={3}
+              style={{ pointerEvents: 'none' }}
+            />
+          ))}
 
-          {/* 1. Render 9 Harbors & Docks using /harbors.png */}
-          {board.harbors.map((harbor) => {
-            const v1 = board.vertices[harbor.vertexIds[0]];
-            const v2 = board.vertices[harbor.vertexIds[1]];
-            if (!v1 || !v2) return null;
-            const spriteCol = HARBOR_SPRITE_COL[harbor.type] ?? 5;
-
-            return (
-              <g key={harbor.id}>
-                {/* Wooden Piers to coastal vertices */}
-                <line
-                  x1={harbor.x}
-                  y1={harbor.y}
-                  x2={v1.x}
-                  y2={v1.y}
-                  stroke="#78350f"
-                  strokeWidth={8}
-                  strokeLinecap="round"
-                />
-                <line
-                  x1={harbor.x}
-                  y1={harbor.y}
-                  x2={v1.x}
-                  y2={v1.y}
-                  stroke="#fde68a"
-                  strokeWidth={3.5}
-                  strokeDasharray="6,4"
-                  strokeLinecap="round"
-                />
-                <line
-                  x1={harbor.x}
-                  y1={harbor.y}
-                  x2={v2.x}
-                  y2={v2.y}
-                  stroke="#78350f"
-                  strokeWidth={8}
-                  strokeLinecap="round"
-                />
-                <line
-                  x1={harbor.x}
-                  y1={harbor.y}
-                  x2={v2.x}
-                  y2={v2.y}
-                  stroke="#fde68a"
-                  strokeWidth={3.5}
-                  strokeDasharray="6,4"
-                  strokeLinecap="round"
-                />
-
-                {/* Harbor Ship Sprite from /harbors.png */}
-                <circle
-                  cx={harbor.x}
-                  cy={harbor.y}
-                  r={harborRadius + 2}
-                  fill="#fef3c7"
-                  stroke="#b45309"
-                  strokeWidth={2.5}
-                />
-                <g clipPath={`url(#clip-harbor-${harbor.id})`}>
-                  <image
-                    href="/harbors.png"
-                    x={harbor.x - harborRadius - spriteCol * harborBadgeSize}
-                    y={harbor.y - harborRadius}
-                    width={harborBadgeSize * 7}
-                    height={harborBadgeSize}
-                    preserveAspectRatio="none"
-                  />
-                </g>
-              </g>
-            );
-          })}
-
-          {/* 2. Render 19 Island Hex Tiles using /terrains_hexes.png & /numbers.png */}
+          {/* 1. Render 19 Island Hex Tiles using /terrains_hexes.png & /numbers.png */}
           {Object.values(board.hexes).map((hex, hexIdx) => {
             const isHighlighted = highlightedHexes?.has(hex.id) ?? false;
             const hasRobber = board.robberHexId === hex.id;
@@ -434,10 +344,10 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 <polygon
                   data-interactive={isHighlighted ? 'true' : undefined}
                   points={getHexPolygonPoints(hex.x, hex.y, HEX_RADIUS - 1.5)}
-                  fill={isHighlighted ? 'rgba(56, 189, 248, 0.18)' : 'none'}
+                  fill={isHighlighted ? 'rgba(56, 189, 248, 0.2)' : 'none'}
                   stroke={isHighlighted ? '#38bdf8' : '#fde68a'}
-                  strokeWidth={isHighlighted ? 5 : 3.2}
-                  strokeOpacity={isHighlighted ? 1 : 0.78}
+                  strokeWidth={isHighlighted ? 5.5 : 3.2}
+                  strokeOpacity={isHighlighted ? 1 : 0.82}
                 />
 
                 {/* Number Token from /numbers.png */}
@@ -446,10 +356,10 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                     <circle
                       cx={hex.x}
                       cy={hex.y + 2}
-                      r={tokenRadius + 1.5}
+                      r={tokenRadius + 2}
                       fill="#fef3c7"
                       stroke="#78350f"
-                      strokeWidth={2}
+                      strokeWidth={2.5}
                     />
                     <g clipPath={`url(#clip-token-${hex.id})`}>
                       <image
@@ -467,11 +377,11 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 {/* Robber Pawn */}
                 {hasRobber && (
                   <g
-                    transform={`translate(${hex.x + 28}, ${hex.y - 22})`}
+                    transform={`translate(${hex.x + 32}, ${hex.y - 24})`}
                     style={{ pointerEvents: 'none' }}
                   >
-                    <circle cx={0} cy={0} r={18} fill="#111827" stroke="#facc15" strokeWidth={2.5} />
-                    <text x={0} y={6} textAnchor="middle" fontSize="17">
+                    <circle cx={0} cy={0} r={20} fill="#111827" stroke="#facc15" strokeWidth={3} />
+                    <text x={0} y={7} textAnchor="middle" fontSize="19">
                       🥷
                     </text>
                   </g>
@@ -483,13 +393,109 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                     data-interactive="true"
                     cx={hex.x}
                     cy={hex.y + 2}
-                    r={35}
+                    r={38}
                     fill="rgba(56, 189, 248, 0.25)"
                     stroke="#38bdf8"
                     strokeWidth={3.5}
                     strokeDasharray="6,3"
                   />
                 )}
+              </g>
+            );
+          })}
+
+          {/* 2. Render 9 Harbors & Docks on top of Sea & Coastline so they are large and clearly visible */}
+          {board.harbors.map((harbor) => {
+            const v1 = board.vertices[harbor.vertexIds[0]];
+            const v2 = board.vertices[harbor.vertexIds[1]];
+            if (!v1 || !v2) return null;
+            const spriteCol = HARBOR_SPRITE_COL[harbor.type] ?? 5;
+            const ratioText =
+              harbor.type === 'generic' ? '3:1' : `2:1 ${RESOURCE_ICONS[harbor.type]}`;
+
+            return (
+              <g key={harbor.id} style={{ pointerEvents: 'none' }}>
+                {/* Wooden Piers to coastal vertices */}
+                <line
+                  x1={harbor.x}
+                  y1={harbor.y}
+                  x2={v1.x}
+                  y2={v1.y}
+                  stroke="#78350f"
+                  strokeWidth={9}
+                  strokeLinecap="round"
+                />
+                <line
+                  x1={harbor.x}
+                  y1={harbor.y}
+                  x2={v1.x}
+                  y2={v1.y}
+                  stroke="#fde68a"
+                  strokeWidth={4}
+                  strokeDasharray="6,4"
+                  strokeLinecap="round"
+                />
+                <line
+                  x1={harbor.x}
+                  y1={harbor.y}
+                  x2={v2.x}
+                  y2={v2.y}
+                  stroke="#78350f"
+                  strokeWidth={9}
+                  strokeLinecap="round"
+                />
+                <line
+                  x1={harbor.x}
+                  y1={harbor.y}
+                  x2={v2.x}
+                  y2={v2.y}
+                  stroke="#fde68a"
+                  strokeWidth={4}
+                  strokeDasharray="6,4"
+                  strokeLinecap="round"
+                />
+
+                {/* Large Harbor Ship Sprite from /harbors.png */}
+                <circle
+                  cx={harbor.x}
+                  cy={harbor.y}
+                  r={harborRadius + 3}
+                  fill="#fef3c7"
+                  stroke="#b45309"
+                  strokeWidth={3.5}
+                />
+                <g clipPath={`url(#clip-harbor-${harbor.id})`}>
+                  <image
+                    href="/harbors.png"
+                    x={harbor.x - harborRadius - spriteCol * harborBadgeSize}
+                    y={harbor.y - harborRadius}
+                    width={harborBadgeSize * 7}
+                    height={harborBadgeSize}
+                    preserveAspectRatio="none"
+                  />
+                </g>
+
+                {/* Crisp Trade Ratio Pill Badge on the bottom rim of the Harbor */}
+                <rect
+                  x={harbor.x - 28}
+                  y={harbor.y + harborRadius - 12}
+                  width={56}
+                  height={20}
+                  rx={6}
+                  fill="#0f172a"
+                  stroke="#f59e0b"
+                  strokeWidth={1.8}
+                />
+                <text
+                  x={harbor.x}
+                  y={harbor.y + harborRadius + 2}
+                  textAnchor="middle"
+                  fill="#fef3c7"
+                  fontSize="11.5"
+                  fontWeight="800"
+                >
+                  {ratioText}
+                </text>
               </g>
             );
           })}
@@ -522,7 +528,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                       x2={edge.x2}
                       y2={edge.y2}
                       stroke="#0f172a"
-                      strokeWidth={13}
+                      strokeWidth={15}
                       strokeLinecap="round"
                     />
                     <line
@@ -531,7 +537,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                       x2={edge.x2}
                       y2={edge.y2}
                       stroke={ownerColor}
-                      strokeWidth={9}
+                      strokeWidth={10}
                       strokeLinecap="round"
                     />
                   </>
@@ -546,7 +552,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                       x2={edge.x2}
                       y2={edge.y2}
                       stroke="#38bdf8"
-                      strokeWidth={14}
+                      strokeWidth={15}
                       strokeOpacity={0.8}
                       strokeLinecap="round"
                     />
@@ -554,7 +560,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                       data-interactive="true"
                       cx={(edge.x1 + edge.x2) / 2}
                       cy={(edge.y1 + edge.y2) / 2}
-                      r={10}
+                      r={11}
                       fill="#38bdf8"
                       stroke="#0f172a"
                       strokeWidth={2}
@@ -565,7 +571,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             );
           })}
 
-          {/* 4. Render Vertices (Built Settlements, Cities & Highlighted Legal Vertices) */}
+          {/* 4. Render Vertices (Built Settlements, Cities WITHOUT circles, larger & colored per player) */}
           {Object.values(board.vertices).map((vertex) => {
             const building = board.buildings[vertex.id];
             const isHighlighted = highlightedVertices?.has(vertex.id) ?? false;
@@ -574,7 +580,6 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             const pColor: PlayerColor = building
               ? playerColors[building.ownerId] ?? 'red'
               : 'red';
-            const fillHex = PLAYER_COLOR_HEX[pColor];
 
             return (
               <g
@@ -588,29 +593,31 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 style={{ cursor: isHighlighted ? 'pointer' : 'default' }}
               >
                 {building && building.type === 'settlement' && (
-                  <g>
-                    <circle cx={0} cy={0} r={17} fill={fillHex} stroke="#fff" strokeWidth={2.5} />
-                    <image
-                      href={SETTLEMENT_SVG_BY_COLOR[pColor]}
-                      x={-13}
-                      y={-13}
-                      width={26}
-                      height={26}
-                    />
-                  </g>
+                  <image
+                    href={SETTLEMENT_SVG_BY_COLOR[pColor]}
+                    x={-22}
+                    y={-22}
+                    width={44}
+                    height={44}
+                    style={{
+                      filter:
+                        'drop-shadow(0 2px 4px rgba(0,0,0,0.85)) drop-shadow(0 0 2px rgba(255,255,255,0.75))'
+                    }}
+                  />
                 )}
 
                 {building && building.type === 'city' && (
-                  <g>
-                    <circle cx={0} cy={0} r={22} fill={fillHex} stroke="#facc15" strokeWidth={3.5} />
-                    <image
-                      href="/city_gold.ae8ea43a6dc22d3aace7.svg"
-                      x={-15}
-                      y={-15}
-                      width={30}
-                      height={30}
-                    />
-                  </g>
+                  <image
+                    href={CITY_SVG_BY_COLOR[pColor]}
+                    x={-27}
+                    y={-27}
+                    width={54}
+                    height={54}
+                    style={{
+                      filter:
+                        'drop-shadow(0 3px 5px rgba(0,0,0,0.9)) drop-shadow(0 0 2px rgba(255,255,255,0.8))'
+                    }}
+                  />
                 )}
 
                 {isHighlighted && (
@@ -618,7 +625,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                     data-interactive="true"
                     cx={0}
                     cy={0}
-                    r={building ? 24 : 15}
+                    r={building ? 26 : 16}
                     fill="rgba(56, 189, 248, 0.5)"
                     stroke="#38bdf8"
                     strokeWidth={3.5}

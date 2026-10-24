@@ -44,7 +44,6 @@ import { saveReplayToHistory } from './storage';
 import {
   AI_DIFFICULTY_LABELS,
   AI_STYLE_LABELS,
-  DEV_CARD_LABELS,
   Locale,
   PARTICIPANT_TYPE_LABELS,
   PHASE_LABELS,
@@ -255,7 +254,6 @@ export const App: React.FC = () => {
 
     if (!needsBotMove) return;
 
-    // Give extra time right after a dice roll so the dice animation is clearly visible between turns
     const delayMs = st.phase === 'turn_start' ? 520 : 340;
     const timer = setTimeout(() => {
       executeOneAiStep();
@@ -797,19 +795,16 @@ export const App: React.FC = () => {
 
                 <div className="form-field">
                   <label>{t.boardLayout}</label>
-                  <select
-                    value={rules.boardLayout}
-                    onChange={(e) =>
-                      setRules({
-                        ...rules,
-                        boardLayout: e.target.value as GameRulesConfig['boardLayout']
-                      })
+                  <input
+                    type="text"
+                    readOnly
+                    value={
+                      locale === 'ro'
+                        ? 'Spirala Oficială Regulament (A–R ceasornic)'
+                        : 'Official Rulebook Spiral (A–R clockwise)'
                     }
-                  >
-                    <option value="random_balanced">{t.boardBalanced}</option>
-                    <option value="random_pure">{t.boardPure}</option>
-                    <option value="beginner_fixed">{t.boardBeginner}</option>
-                  </select>
+                    style={{ color: 'var(--accent-gold)', fontWeight: 600 }}
+                  />
                 </div>
 
                 <div className="form-field">
@@ -844,7 +839,7 @@ export const App: React.FC = () => {
       {/* TAB 2: ACTIVE GAME SCREEN (Full-Window Zero-Scroll Layout + Modals) */}
       {activeTab === 'game' && gameState && playerView && (
         <main className="game-viewport">
-          {/* Left HUD Column: Compact Players, Bank Stock & Modal Triggers */}
+          {/* Left HUD Column (345px wide): Compact Players, Single-Row Bank Stock & Modal Triggers */}
           <aside className="game-left-hud">
             <div className="panel" style={{ flex: 1, minHeight: 0 }}>
               <h2>
@@ -857,7 +852,7 @@ export const App: React.FC = () => {
                   const hasLargestArmy = playerView.largestArmyOwnerId === p.id;
                   return (
                     <div key={p.id} className={`player-card ${isCurrent ? 'active-turn' : ''}`}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.83rem' }}>
                         <span>
                           <span
                             className="color-dot"
@@ -874,7 +869,7 @@ export const App: React.FC = () => {
                       </div>
 
                       {p.resources ? (
-                        <div style={{ display: 'flex', gap: 3, marginTop: 4 }}>
+                        <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
                           {ALL_RESOURCES.map((r) => (
                             <ResourceCardSprite
                               key={r}
@@ -886,12 +881,12 @@ export const App: React.FC = () => {
                           ))}
                         </div>
                       ) : (
-                        <div style={{ fontSize: '0.75rem', marginTop: 3, color: 'var(--text-muted)' }}>
+                        <div style={{ fontSize: '0.76rem', marginTop: 3, color: 'var(--text-muted)' }}>
                           🎴 {p.resourceCount} resurse · 🃏 {p.devCardCount} dezvoltare
                         </div>
                       )}
 
-                      <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', fontSize: '0.72rem', marginTop: '0.3rem', color: 'var(--text-muted)' }}>
+                      <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', fontSize: '0.73rem', marginTop: '0.3rem', color: 'var(--text-muted)' }}>
                         <span>🛣️ Drum: {p.longestRoadLength}</span>
                         <span>⚔️ Cavaleri: {p.knightsPlayed}</span>
                         {hasLongestRoad && (
@@ -907,14 +902,14 @@ export const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Compact Bank Stock & Control Buttons */}
-            <div className="panel" style={{ flexShrink: 0, padding: '0.65rem' }}>
-              <h2 style={{ marginBottom: '0.4rem', fontSize: '0.86rem' }}>
+            {/* Single-Row Bank Stock & Spacious Control Buttons */}
+            <div className="panel" style={{ flexShrink: 0, padding: '0.7rem' }}>
+              <h2 style={{ marginBottom: '0.45rem', fontSize: '0.88rem' }}>
                 🏦 Bancă & Control Partidă
               </h2>
-              <div className="res-badges" style={{ marginBottom: '0.45rem', marginTop: 0 }}>
+              <div className="bank-single-row">
                 {ALL_RESOURCES.map((r) => (
-                  <span key={r} className="res-badge">
+                  <span key={r} className="res-badge" title={RESOURCE_LABELS[locale][r]}>
                     {RESOURCE_ICONS[r]} {playerView.bank[r]}
                   </span>
                 ))}
@@ -923,7 +918,7 @@ export const App: React.FC = () => {
                 </span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
                 <button
                   type="button"
                   className="btn"
@@ -1225,7 +1220,6 @@ export const App: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Interactive selectors for Year of Plenty & Monopoly if playable */}
                   {isHumanTurn && canPlayDevCardType(gameState, activePlayerObj, 'year_of_plenty') && (
                     <div className="candidate-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
                       <strong>🎁 Anul Abundenței (alege 2 resurse din bancă):</strong>
@@ -1741,7 +1735,7 @@ export const App: React.FC = () => {
             <h2>📖 Ghidul Regulilor & Galerie Asset-uri (<code>poze/</code>)</h2>
             <div className="panel-scroll" style={{ fontSize: '0.8rem', lineHeight: 1.45, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <p>
-                <strong>1. Tabla și Producția:</strong> 19 hexagoane cu texturi din <code>terrains_hexes.png</code>, 6 coaste din <code>coastline.png</code>, 9 porturi din <code>harbors.png</code> și jetoane numerice din <code>numbers.png</code>.
+                <strong>1. Tabla și Producția:</strong> 19 hexagoane așezate în spirală (în sensul acelor de ceasornic) cu jetoane numerice alfabetice <code>A–R</code> (sărind peste Deșert), texturi din <code>terrains_hexes.png</code> și 9 porturi din <code>harbors.png</code>.
               </p>
               <p>
                 <strong>2. Reguli Configurabile:</strong> Prag de victorie (10, 12 sau 14 VP), furt Cavaler simplu sau multiplu (de la toți jucătorii prezenți pe hexagon), și limită de 1 carte de dezvoltare pe tură sau 1 din fiecare tip.
