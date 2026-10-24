@@ -96,12 +96,12 @@ Sistemul va separa trei concepte: numărul de locuri ocupate, numărul de oameni
 Catan clasic este destinat partidelor cu 3–4 jucători. Prin urmare:
 
 - 3–4 participanți: preset standard, cu reguli clasice.
-- 1–2 participanți: preset de antrenament sau variantă adaptată, clar identificată în lobby.
+- 1–2 participanți: preset adaptat în care se adaugă automat jucători neutri / boți pasivi până la minimum 3 participanți pe tablă (astfel încât densitatea construcțiilor, blocajele și dinamica tablei să rămână autentice).
 - 4 AI: partidă complet automată, cu suport pentru accelerarea simulării.
 - 1 om + 3 AI: partidă normală din perspectiva interfeței, cu trei adversari algoritmici.
 - 4 oameni: partidă multiplayer clasică.
 
-Nu vom introduce reguli speciale pentru doi jucători în presetul standard. Variantele pentru puțini participanți vor fi definite separat, documentate și testate.
+Nu vom introduce reguli speciale pentru doi jucători în presetul standard. Variantele pentru puțini participanți sunt controlate explicit prin configurația presetului.
 
 # 3. Specificația regulilor jocului
 
@@ -219,7 +219,7 @@ Motorul va implementa:
 - Schimburi la 2:1 pentru resursa specifică a unui port special.
 - Schimburi între jucători, numai când regulile și faza turei permit.
 
-Orice ofertă de schimb trebuie să definească resursele oferite, cele solicitate și participanții implicați. Acceptarea unei tranzacții va fi atomică: ori se aplică integral, ori deloc. si e limitata ca timp
+Orice ofertă de schimb trebuie să definească resursele oferite, cele solicitate și participanții implicați. Acceptarea unei tranzacții va fi atomică: ori se aplică integral, ori deloc, și are o limită de timp configurabilă (ex. 30 secunde per ofertă activă, cu expirare automată dacă nu este acceptată).
 
 ## 3.6 Cărțile de dezvoltare
 
@@ -233,10 +233,15 @@ Motorul va suporta toate tipurile standard:
 
 Reguli importante:
 
-- Cărțile de dezvoltare cumpărate în tura curentă nu pot fi jucate imediat, cu excepția punctelor de victorie, care sunt ținute ascunse până la dezvăluirea necesară.
-- În mod standard, se poate juca cel mult o carte de dezvoltare identica pe tură.
-- Cartea Cavaler mută hoțul și permite furtul conform regulilor (poate lua carti de la toti jucatorii prezenti pe resursa blocata).
-- Cele trei cărți de progres au efectele specifice, cu verificarea resurselor, drumurilor și a țintei monopolului.
+- Cărțile de dezvoltare cumpărate în tura curentă nu pot fi jucate imediat, cu excepția punctelor de victorie, care sunt ținute ascunse până la dezvăluirea necesară (când jucătorul atinge pragul de victorie în tura sa).
+- O carte de dezvoltare (de ex. Cavaler) poate fi jucată în orice moment al turei proprii, inclusiv **înainte de aruncarea zarurilor**.
+- Numărul de cărți de dezvoltare jucabile pe tură este configurabil în presetul partidei:
+  - **Mod Standard**: cel mult 1 carte de dezvoltare în total pe tură (exceptând cărțile de Punct de Victorie).
+  - **Mod Extins**: cel mult 1 carte de dezvoltare de fiecare tip (identică) pe tură.
+- Cartea Cavaler mută hoțul și permite furtul conform regulii alese în lobby:
+  - **Mod Standard**: fură 1 carte aleatorie de la un singur adversar ales care are o construcție adiacentă hexagonului blocat.
+  - **Mod House-Rule (Furt Multiplu)**: Cavalerul poate lua câte 1 carte aleatorie de la toți jucătorii prezenți pe resursa blocată.
+- Cele trei cărți de progres au efectele specifice, cu verificarea resurselor, drumurilor (maxim 2 drumuri disponibile construite imediat conform regulilor de conectivitate) și a țintei monopolului.
 - Punctele de victorie sunt contabilizate în scorul real, chiar dacă nu sunt publice celorlalți jucători.
 
 ## 3.7 Cele mai lungi drumuri și armata cea mai mare
@@ -252,7 +257,7 @@ Scorul, inclusiv punctele ascunse, va fi separat de informația publică afișat
 
 ## 3.8 Condiția de victorie
 
-În presetul standard, victoria se declară când jucătorul activ ajunge la cel puțin 10 puncte în condițiile permise de regulile standard. numarul de puncte de victorie se stabileste de la inceput si poate fi 10,12 sau 14
+În presetul standard, victoria se declară când jucătorul activ ajunge la cel puțin 10 puncte în tura sa, în condițiile permise de regulile standard. Pragul de puncte de victorie se stabilește la configurarea partidei în lobby și poate fi **10, 12 sau 14 puncte**.
 
 Motorul va avea o singură funcție autoritară pentru calculul scorului și verificarea victoriei. Interfața și AI-ul nu vor calcula independent scoruri definitive.
 
@@ -260,16 +265,17 @@ Motorul va avea o singură funcție autoritară pentru calculul scorului și ver
 
 Presetul standard va fi imuabil în sens funcțional: o modificare a regulilor nu va schimba comportamentul partidelor standard deja create.
 
-Preseturile suplimentare vor putea configura explicit:
+Opțiunile configurabile la crearea partidei (Lobby / Preset):
 
-- Numărul de participanți.
-- Pragul de victorie.
-- Regulile speciale pentru 1–2 participanți.
-- Configurația tablei.
-- Opțiuni permise pentru comerț.
-- Alte variante viitoare, documentate.
+- **Numărul și tipul participanților**: 1–4 participanți (Om / AI / Boți pasivi pentru 1–2 jucători).
+- **Pragul de victorie**: 10, 12 sau 14 puncte.
+- **Resurse de start**: doar de la a doua așezare (standard) sau de la ambele așezări inițiale.
+- **Regula Cavalerului / Hoțului**: furt de la un singur adversar ales (standard) sau furt de la toți adversarii adiacenți hexagonului blocat.
+- **Limita cărților de dezvoltare pe tură**: maximum 1 carte pe tură (standard) sau maximum 1 carte de fiecare tip pe tură.
+- **Timpul limită pentru oferte de comerț**: ex. 30 secunde.
+- **Configurația tablei**: hartă standard fixă (pentru începători) sau generată aleatoriu echilibrat (fără 6 și 8 adiacente, opțional).
 
-Editorul de reguli va fi o etapă ulterioară, după ce motorul standard este stabil și testat.
+Editorul avansat de reguli va fi o etapă ulterioară, după ce motorul standard este stabil și testat.
 
 # 4. Arhitectura tehnică recomandată
 
@@ -282,56 +288,36 @@ interfata trebuie sa fie responsive si sa permita jucarea pe orice rezolutie.
 
 ## 4.1 Stack tehnologic
 
-| Componentă          | Recomandare                                   | Motiv                                                 |
-| ------------------- | --------------------------------------------- | ----------------------------------------------------- |
-| Limbaj              | TypeScript                                    | Tipuri explicite pentru reguli, acțiuni și stări      |
-| Interfață           | React                                         | Componente reutilizabile pentru tablă și lobby        |
-| Stilizare           | CSS și SVG                                    | Geometrie hexagonală, piese și interacțiuni precise   |
-| Server              | Node.js                                       | Același ecosistem cu motorul de joc                   |
-| API                 | REST pentru lobby și WebSocket pentru partide | Configurare, invitații și actualizări în timp real    |
-| Validare            | Zod sau o bibliotecă echivalentă              | Validarea mesajelor și configurațiilor                |
-| Bază de date online | PostgreSQL                                    | Utilizatori opționali, partide, invitații și metadate |
-| Persistență locală  | SQLite și fișiere de replay                   | Salvare și analiză fără internet                      |
-| Teste               | Vitest și Playwright                          | Teste de logică și teste de interfață                 |
-| Simulări            | Runner Node.js dedicat                        | Partide AI vs. AI la scară mare                       |
-| Integrare LLM       | Adaptor separat                               | API opțional, izolat de motorul principal             |
+| Componentă         | Recomandare                                   | Motiv                                                                          |
+| ------------------ | --------------------------------------------- | ------------------------------------------------------------------------------ |
+| Limbaj             | TypeScript                                    | Tipuri explicite pentru reguli, acțiuni și stări                               |
+| Interfață          | React + Vite                                  | Componente reutilizabile pentru tablă, lobby și replay                         |
+| Stilizare          | CSS și SVG (cu suport Zoom & Pan)             | Geometrie hexagonală, asset-uri din `poze/`, responsive (desktop/tablet/mobil) |
+| Server             | Node.js                                       | Același ecosistem cu motorul de joc                                            |
+| API                | REST pentru lobby și WebSocket pentru partide | Configurare, invitații și actualizări în timp real                             |
+| Validare           | Zod                                           | Validarea mesajelor și configurațiilor                                         |
+| Persistență        | SQLite + fișiere JSON de replay               | Bază de date unificată pentru LAN și online (fără dependență de Postgres)      |
+| Teste              | Vitest și Playwright                          | Teste de logică și teste de interfață                                          |
+| Simulări           | Runner CLI Node.js                            | Partide AI vs. AI la scară mare                                                |
+| Integrare LLM      | Adaptor separat                               | API opțional, izolat de motorul principal                                      |
 
 Versiunile exacte ale bibliotecilor vor fi fixate la începutul implementării și actualizate controlat.
 
-## 4.2 Structura proiectului
+## 4.2 Structura proiectului (Monorepo Consolidat)
 
-Aș folosi un monorepo, cu pachete separate:
+Vom folosi un monorepo suplu (npm workspaces), consolidat pentru a evita duplicarea codului grafic și overhead-ul inutil de pachete:
 
 ```
-
 catan-project/
   apps/
-    web/                 # Interfața browser
-    server/              # Server LAN și online
-    simulator/           # Partide automate AI vs. AI
-    replay-viewer/        # Vizualizare și analiză replay
+    web/                 # Interfața React (Lobby, Joc activ, Replay Viewer & Analiză, Reguli, i18n RO/EN)
+    server/              # Server LAN & Online (REST + WebSocket + SQLite + CLI Simulator AI)
   packages/
-    game-engine/          # Reguli și tranziții de stare
-    game-model/           # Tipuri, identificatori și modele
-    game-ai/              # Algoritmi, strategii și dificultăți
-    game-protocol/        # Mesaje client-server
-    game-replay/          # Înregistrare și reproducere
-    game-analysis/        # Metrici și evaluarea deciziilor
-    game-config/          # Preseturi și configurații
-    game-i18n/            # Română, engleză și traduceri viitoare
-    game-test-fixtures/   # Table și scenarii de test
-  tests/
-    rules/
-    integration/
-    network/
-    replay/
-    ai-benchmarks/
-  docs/
-    rules/
-    architecture/
-    decisions/
-    test-plans/
-
+    core/                # game-model, game-config, game-engine (reguli pure) și game-replay (snapshot & event log)
+    ai/                  # game-ai (4 dificultăți, 6 stiluri, bot pasiv, adaptor LLM) și game-analysis (metrici)
+    protocol/            # game-protocol (scheme Zod și mesaje client-server)
+  poze/                  # Asset-uri grafice originale (SVG-uri construcții, texturi hexagoane, porturi, cărți)
+  tests/                 # Suite de teste unitare, proprietăți/invarianți, integrare, replay și benchmark AI
 ```
 
 ### 4.3 Separarea responsabilităților
@@ -537,7 +523,21 @@ AI-ul va fi un sistem de decizie local, cu un API comun pentru toate nivelurile 
 
 ## 6.1 Arhitectura AI
 
-\#chatgpt-mermaid-\_r_qt\_{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;fill:rgb(237, 237, 237);}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#chatgpt-mermaid-\_r_qt\_ .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-\_r_qt\_ .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-\_r_qt\_ .error-icon{fill:rgb(48, 48, 48);}#chatgpt-mermaid-\_r_qt\_ .error-text{fill:rgb(237, 237, 237);stroke:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_qt\_ .edge-thickness-normal{stroke-width:1px;}#chatgpt-mermaid-\_r_qt\_ .edge-thickness-thick{stroke-width:3.5px;}#chatgpt-mermaid-\_r_qt\_ .edge-pattern-solid{stroke-dasharray:0;}#chatgpt-mermaid-\_r_qt\_ .edge-thickness-invisible{stroke-width:0;fill:none;}#chatgpt-mermaid-\_r_qt\_ .edge-pattern-dashed{stroke-dasharray:3;}#chatgpt-mermaid-\_r_qt\_ .edge-pattern-dotted{stroke-dasharray:2;}#chatgpt-mermaid-\_r_qt\_ .marker{fill:rgb(175, 175, 175);stroke:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_qt\_ .marker.cross{stroke:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_qt\_ svg{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;}#chatgpt-mermaid-\_r_qt\_ p{margin:0;}#chatgpt-mermaid-\_r_qt\_ .label{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";color:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_qt\_ .cluster-label text{fill:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_qt\_ .cluster-label span{color:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_qt\_ .cluster-label span p{background-color:transparent;}#chatgpt-mermaid-\_r_qt\_ .label text,#chatgpt-mermaid-\_r_qt\_ span{fill:rgb(237, 237, 237);color:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_qt\_ .node rect,#chatgpt-mermaid-\_r_qt\_ .node circle,#chatgpt-mermaid-\_r_qt\_ .node ellipse,#chatgpt-mermaid-\_r_qt\_ .node polygon,#chatgpt-mermaid-\_r_qt\_ .node path{fill:rgb(9, 23, 44);stroke:rgb(31, 78, 148);stroke-width:1px;}#chatgpt-mermaid-\_r_qt\_ .rough-node .label text,#chatgpt-mermaid-\_r_qt\_ .node .label text,#chatgpt-mermaid-\_r_qt\_ .image-shape .label,#chatgpt-mermaid-\_r_qt\_ .icon-shape .label{text-anchor:middle;}#chatgpt-mermaid-\_r_qt\_ .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#chatgpt-mermaid-\_r_qt\_ .rough-node .label,#chatgpt-mermaid-\_r_qt\_ .node .label,#chatgpt-mermaid-\_r_qt\_ .image-shape .label,#chatgpt-mermaid-\_r_qt\_ .icon-shape .label{text-align:center;}#chatgpt-mermaid-\_r_qt\_ .node.clickable{cursor:pointer;}#chatgpt-mermaid-\_r_qt\_ .root .anchor path{fill:rgb(175, 175, 175)!important;stroke-width:0;stroke:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_qt\_ .arrowheadPath{fill:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_qt\_ .edgePath .path{stroke:rgb(175, 175, 175);stroke-width:1px;}#chatgpt-mermaid-\_r_qt\_ .flowchart-link{stroke:rgb(175, 175, 175);fill:none;}#chatgpt-mermaid-\_r_qt\_ .edgeLabel{background-color:rgb(0, 0, 0);text-align:center;}#chatgpt-mermaid-\_r_qt\_ .edgeLabel p{background-color:rgb(0, 0, 0);}#chatgpt-mermaid-\_r_qt\_ .edgeLabel rect{opacity:0.5;background-color:rgb(0, 0, 0);fill:rgb(0, 0, 0);}#chatgpt-mermaid-\_r_qt\_ .labelBkg{background-color:rgba(0, 0, 0, 0.5);}#chatgpt-mermaid-\_r_qt\_ .cluster rect{fill:rgb(48, 48, 48);stroke:rgba(255, 255, 255, 0.15);stroke-width:1px;}#chatgpt-mermaid-\_r_qt\_ .cluster text{fill:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_qt\_ .cluster span{color:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_qt\_ div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:12px;background:rgb(48, 48, 48);border:1px solid rgba(255, 255, 255, 0.15);border-radius:2px;pointer-events:none;z-index:100;}#chatgpt-mermaid-\_r_qt\_ .flowchartTitleText{text-anchor:middle;font-size:18px;fill:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_qt\_ rect.text{fill:none;stroke-width:0;}#chatgpt-mermaid-\_r_qt\_ .icon-shape,#chatgpt-mermaid-\_r_qt\_ .image-shape{background-color:rgb(0, 0, 0);text-align:center;}#chatgpt-mermaid-\_r_qt\_ .icon-shape p,#chatgpt-mermaid-\_r_qt\_ .image-shape p{background-color:rgb(0, 0, 0);padding:2px;}#chatgpt-mermaid-\_r_qt\_ .icon-shape .label rect,#chatgpt-mermaid-\_r_qt\_ .image-shape .label rect{opacity:0.5;background-color:rgb(0, 0, 0);fill:rgb(0, 0, 0);}#chatgpt-mermaid-\_r_qt\_ .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#chatgpt-mermaid-\_r_qt\_ .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#chatgpt-mermaid-\_r_qt\_ .node .neo-node{stroke:rgb(31, 78, 148);}#chatgpt-mermaid-\_r_qt\_ [data-look="neo"].node rect,#chatgpt-mermaid-\_r_qt\_ [data-look="neo"].cluster rect,#chatgpt-mermaid-\_r_qt\_ [data-look="neo"].node polygon{stroke:url(#chatgpt-mermaid-\_r_qt\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_qt\_ [data-look="neo"].swimlane.cluster rect{filter:none;}#chatgpt-mermaid-\_r_qt\_ [data-look="neo"].node path{stroke:url(#chatgpt-mermaid-\_r_qt\_-gradient);stroke-width:1px;}#chatgpt-mermaid-\_r_qt\_ [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_qt\_ [data-look="neo"].node .neo-line path{stroke:rgb(31, 78, 148);filter:none;}#chatgpt-mermaid-\_r_qt\_ [data-look="neo"].node circle{stroke:url(#chatgpt-mermaid-\_r_qt\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_qt\_ [data-look="neo"].node circle .state-start{fill:#000000;}#chatgpt-mermaid-\_r_qt\_ [data-look="neo"].icon-shape .icon{fill:url(#chatgpt-mermaid-\_r_qt\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_qt\_ [data-look="neo"].icon-shape .icon-neo path{stroke:url(#chatgpt-mermaid-\_r_qt\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_qt\_ .node text{font-size:14px;font-weight:600;letter-spacing:normal;fill:rgb(153, 206, 255);}#chatgpt-mermaid-\_r_qt\_ .edgeLabels text{font-size:13px;font-weight:600;letter-spacing:-0.08px;fill:rgb(153, 206, 255);}#chatgpt-mermaid-\_r_qt\_ .node tspan[font-weight="normal"],#chatgpt-mermaid-\_r_qt\_ .edgeLabels tspan[font-weight="normal"]{font-weight:600;}#chatgpt-mermaid-\_r_qt\_ .edgeLabel .label rect{opacity:1;rx:13px;ry:13px;fill:rgb(0, 14, 26);stroke:rgb(26, 62, 95);stroke-width:1px;}#chatgpt-mermaid-\_r_qt\_ .node rect,#chatgpt-mermaid-\_r_qt\_ .node circle,#chatgpt-mermaid-\_r_qt\_ .node ellipse,#chatgpt-mermaid-\_r_qt\_ .node polygon,#chatgpt-mermaid-\_r_qt\_ .node path{fill:rgb(0, 40, 77);stroke:rgba(255, 255, 255, 0.1);stroke-width:1px;}#chatgpt-mermaid-\_r_qt\_ .node rect{rx:16px;ry:16px;}#chatgpt-mermaid-\_r_qt\_ .node.mermaid-decision .label-container{fill:rgb(0, 14, 26);stroke:rgb(26, 62, 95);stroke-dasharray:2,2;}#chatgpt-mermaid-\_r_qt\_ .edgePaths .flowchart-link{stroke:rgb(175, 175, 175);stroke-width:1px;stroke-linecap:round;stroke-linejoin:round;}#chatgpt-mermaid-\_r_qt\_ .marker{fill:rgb(175, 175, 175);stroke:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_qt\_ :root{--mermaid-font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";}Starea observată de AIGenerarea acțiunilor legaleEvaluarea pozițieiPlanificarea strategicăNivel de dificultateHeuristici rapideEvaluare multifactoriCăutare și simulăriAlegerea mutăriiValidare de către motorÎnregistrare decizie și rezultat
+```mermaid
+flowchart TD
+    A[Starea observată de AI] --> B[Generarea acțiunilor legale]
+    B --> C[Evaluarea poziției]
+    C --> D[Planificarea strategică]
+    D --> E{Nivel de dificultate}
+    E --> F[Heuristici rapide]
+    E --> G[Evaluare multifactori]
+    E --> H[Căutare și simulări]
+    F --> I[Alegerea mutării]
+    G --> I
+    H --> I
+    I --> J[Validare de către motor]
+    J --> K[Înregistrare decizie și rezultat]
+```
 
 AI-ul nu va putea executa direct modificări în starea jocului. El propune acțiuni, iar motorul validează și aplică mutarea.
 
