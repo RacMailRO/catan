@@ -97,7 +97,7 @@ body,
   background: var(--bg-card);
   color: var(--text-main);
   border: 1px solid var(--border-color);
-  padding: 0.4rem 0.75rem;
+  padding: 0.42rem 0.75rem;
   border-radius: 6px;
   cursor: pointer;
   font-weight: 600;
@@ -241,17 +241,17 @@ select {
   font-size: 0.82rem;
 }
 
-/* Active Game Full-Window Zero-Scroll Layout */
+/* Active Game Full-Window Zero-Scroll Layout (Wider Left Sidebar = 345px) */
 .game-viewport {
   flex: 1;
   min-height: 0;
   width: 100%;
   height: calc(100dvh - 52px);
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 345px 1fr;
   grid-template-rows: 1fr auto;
-  gap: 0.6rem;
-  padding: 0.6rem;
+  gap: 0.65rem;
+  padding: 0.65rem;
   overflow: hidden;
 }
 
@@ -329,7 +329,7 @@ select {
   background: var(--bg-card);
   border: 2px solid var(--border-color);
   border-radius: 8px;
-  padding: 0.5rem 0.65rem;
+  padding: 0.55rem 0.7rem;
   transition: border-color 0.2s;
 }
 
@@ -349,9 +349,18 @@ select {
   background: #0d1a29;
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  padding: 0.16rem 0.42rem;
-  font-size: 0.75rem;
-  font-weight: 600;
+  padding: 0.22rem 0.32rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.bank-single-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.3rem;
+  margin-bottom: 0.55rem;
 }
 
 /* Sprite Cards from /cards.jpg */
@@ -567,7 +576,7 @@ select {
 
 @media (max-width: 960px) {
   .game-viewport {
-    grid-template-columns: 220px 1fr;
+    grid-template-columns: 260px 1fr;
   }
   .replay-viewport {
     grid-template-columns: 1fr 1fr;

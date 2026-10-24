@@ -1,8 +1,7 @@
 import {
-  STANDARD_NUMBER_TOKENS,
   STANDARD_TERRAIN_DISTRIBUTION
 } from './config';
-import { shuffleWithPrng } from './prng';
+import { nextPrngInt, shuffleWithPrng } from './prng';
 import {
   BoardState,
   Edge,
@@ -23,31 +22,74 @@ export interface AxialCoord {
 }
 
 export const STANDARD_HEX_COORDS: AxialCoord[] = [
-  // Row r = -2 (3 hexes)
+  // Row r = -2 (3 hexes: 0, 1, 2)
   { q: 0, r: -2 },
   { q: 1, r: -2 },
   { q: 2, r: -2 },
-  // Row r = -1 (4 hexes)
+  // Row r = -1 (4 hexes: 3, 4, 5, 6)
   { q: -1, r: -1 },
   { q: 0, r: -1 },
   { q: 1, r: -1 },
   { q: 2, r: -1 },
-  // Row r = 0 (5 hexes)
+  // Row r = 0 (5 hexes: 7, 8, 9, 10, 11)
   { q: -2, r: 0 },
   { q: -1, r: 0 },
   { q: 0, r: 0 },
   { q: 1, r: 0 },
   { q: 2, r: 0 },
-  // Row r = 1 (4 hexes)
+  // Row r = 1 (4 hexes: 12, 13, 14, 15)
   { q: -2, r: 1 },
   { q: -1, r: 1 },
   { q: 0, r: 1 },
   { q: 1, r: 1 },
-  // Row r = 2 (3 hexes)
+  // Row r = 2 (3 hexes: 16, 17, 18)
   { q: -2, r: 2 },
   { q: -1, r: 2 },
   { q: 0, r: 2 }
 ];
+
+/**
+ * Clockwise outer ring of 12 hex indices in STANDARD_HEX_COORDS.
+ * Even indices (0, 2, 4, 6, 8, 10) are the 6 outer corners of the island.
+ */
+const OUTER_RING_CW_INDICES = [0, 1, 2, 6, 11, 15, 18, 17, 16, 12, 7, 3];
+
+/**
+ * Clockwise inner ring of 6 hex indices in STANDARD_HEX_COORDS,
+ * aligned so INNER_RING_CW_INDICES[cornerIdx] steps directly inward after completing the outer ring.
+ */
+const INNER_RING_CW_INDICES = [4, 5, 10, 14, 13, 8];
+
+/**
+ * Center hex index (0, 0) in STANDARD_HEX_COORDS.
+ */
+const CENTER_HEX_INDEX = 9;
+
+/**
+ * Official Catan alphabetical token sequence A -> R:
+ * A=5, B=2, C=6, D=3, E=8, F=10, G=9, H=12, I=11,
+ * J=4, K=8, L=10, M=9, N=4, O=5, P=6, Q=3, R=11
+ */
+export const OFFICIAL_ALPHABETICAL_TOKENS: number[] = [
+  5, 2, 6, 3, 8, 10, 9, 12, 11, 4, 8, 10, 9, 4, 5, 6, 3, 11
+];
+
+/**
+ * Builds the 19-hex clockwise inward spiral order starting from one of the 6 outer corners (0..5).
+ */
+export function getClockwiseSpiralHexIndices(startCornerIndex: number): number[] {
+  const corner = ((startCornerIndex % 6) + 6) % 6;
+  const spiral: number[] = [];
+
+  for (let k = 0; k < 12; k++) {
+    spiral.push(OUTER_RING_CW_INDICES[(corner * 2 + k) % 12]!);
+  }
+  for (let k = 0; k < 6; k++) {
+    spiral.push(INNER_RING_CW_INDICES[(corner + k) % 6]!);
+  }
+  spiral.push(CENTER_HEX_INDEX);
+  return spiral;
+}
 
 export const STANDARD_HARBOR_TYPES: HarborType[] = [
   'generic',
@@ -79,81 +121,44 @@ export function areHexesAdjacent(a: AxialCoord, b: AxialCoord): boolean {
   );
 }
 
-const BEGINNER_FIXED_LAYOUT: Array<{ terrain: TerrainType; token: number | null }> = [
-  { terrain: 'mountains', token: 10 },
-  { terrain: 'pasture', token: 2 },
-  { terrain: 'forest', token: 9 },
-  { terrain: 'fields', token: 12 },
-  { terrain: 'hills', token: 6 },
-  { terrain: 'pasture', token: 4 },
-  { terrain: 'hills', token: 10 },
-  { terrain: 'fields', token: 9 },
-  { terrain: 'forest', token: 11 },
-  { terrain: 'desert', token: null },
-  { terrain: 'forest', token: 3 },
-  { terrain: 'mountains', token: 8 },
-  { terrain: 'forest', token: 8 },
-  { terrain: 'mountains', token: 3 },
-  { terrain: 'fields', token: 4 },
-  { terrain: 'pasture', token: 5 },
-  { terrain: 'hills', token: 5 },
-  { terrain: 'fields', token: 6 },
-  { terrain: 'pasture', token: 11 }
-];
-
-function hasAdjacentRedNumbers(
-  coords: AxialCoord[],
-  tokens: Array<number | null>
-): boolean {
-  const redIndices: number[] = [];
-  for (let i = 0; i < tokens.length; i++) {
-    if (tokens[i] === 6 || tokens[i] === 8) {
-      redIndices.push(i);
-    }
-  }
-  for (let i = 0; i < redIndices.length; i++) {
-    for (let j = i + 1; j < redIndices.length; j++) {
-      const c1 = coords[redIndices[i]!]!;
-      const c2 = coords[redIndices[j]!]!;
-      if (areHexesAdjacent(c1, c2)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
+/**
+ * Official Catan board generator:
+ * 1. Shuffles the 19 terrain hex cards.
+ * 2. Picks a starting corner on the outer ring (0..5) and places the 19 hexes in a clockwise inward spiral.
+ * 3. Starting from the exact same outer corner and walking clockwise along the same spiral,
+ *    places the 18 alphabetical number tokens (A -> R), skipping only the Desert hex.
+ */
 export function generateStandardBoard(
   prngState: number,
-  layoutMode: GameRulesConfig['boardLayout'] = 'random_balanced'
+  _layoutMode: GameRulesConfig['boardLayout'] = 'random_balanced'
 ): { board: BoardState; nextPrngState: number } {
   let state = prngState;
 
-  let terrains: TerrainType[];
-  let assignedTokens: Array<number | null> = [];
+  // 1. Shuffle terrain cards
+  const shufTerrains = shuffleWithPrng(STANDARD_TERRAIN_DISTRIBUTION, state);
+  const shuffledTerrains = shufTerrains.items;
+  state = shufTerrains.nextState;
 
-  if (layoutMode === 'beginner_fixed') {
-    terrains = BEGINNER_FIXED_LAYOUT.map((item) => item.terrain);
-    assignedTokens = BEGINNER_FIXED_LAYOUT.map((item) => item.token);
-  } else {
-    const shufTerrains = shuffleWithPrng(STANDARD_TERRAIN_DISTRIBUTION, state);
-    terrains = shufTerrains.items;
-    state = shufTerrains.nextState;
+  // 2. Choose starting corner on the outer edge (0..5) and build the clockwise inward spiral
+  const cornerPick = nextPrngInt(state, 0, 5);
+  state = cornerPick.nextState;
+  const spiralIndices = getClockwiseSpiralHexIndices(cornerPick.value);
 
-    // Assign tokens, retrying if random_balanced and 6/8 are adjacent
-    let attempts = 0;
-    const maxAttempts = layoutMode === 'random_balanced' ? 80 : 1;
-    do {
-      const shufTokens = shuffleWithPrng(STANDARD_NUMBER_TOKENS, state);
-      state = shufTokens.nextState;
-      const tokensQueue = [...shufTokens.items];
-      assignedTokens = terrains.map((t) => (t === 'desert' ? null : tokensQueue.shift() ?? null));
-      attempts++;
-    } while (
-      layoutMode === 'random_balanced' &&
-      attempts < maxAttempts &&
-      hasAdjacentRedNumbers(STANDARD_HEX_COORDS, assignedTokens)
-    );
+  // 3. Place terrains along the spiral and place A->R tokens in the same clockwise spiral order (skipping desert)
+  const terrains = new Array<TerrainType>(19);
+  const assignedTokens = new Array<number | null>(19).fill(null);
+  let tokenCursor = 0;
+
+  for (let step = 0; step < spiralIndices.length; step++) {
+    const hexIdx = spiralIndices[step]!;
+    const terrain = shuffledTerrains[step]!;
+    terrains[hexIdx] = terrain;
+    if (terrain === 'desert') {
+      assignedTokens[hexIdx] = null;
+    } else {
+      assignedTokens[hexIdx] = OFFICIAL_ALPHABETICAL_TOKENS[tokenCursor] ?? null;
+      tokenCursor++;
+    }
   }
 
   const hexes: Record<string, HexTile> = {};
@@ -313,21 +318,17 @@ export function generateStandardBoard(
     })
     .sort((a, b) => a.angle - b.angle);
 
-  // Place 9 harbors around the 30 coastal edges so no two harbors share a vertex
-  let harborTypes = [...STANDARD_HARBOR_TYPES];
-  if (layoutMode !== 'beginner_fixed') {
-    const shufHarbors = shuffleWithPrng(harborTypes, state);
-    harborTypes = shufHarbors.items;
-    state = shufHarbors.nextState;
-  }
+  // Shuffle the 9 harbors deterministically
+  const shufHarbors = shuffleWithPrng([...STANDARD_HARBOR_TYPES], state);
+  const harborTypes = shufHarbors.items;
+  state = shufHarbors.nextState;
 
   const harbors: Harbor[] = [];
   const usedHarborVertices = new Set<string>();
-  const step = coastalEdges.length / 9; // 30 / 9 = 3.333
+  const step = coastalEdges.length / 9;
 
   for (let i = 0; i < 9; i++) {
     let candidateIdx = Math.floor(i * step) % coastalEdges.length;
-    // Ensure we don't overlap a vertex already assigned to another harbor
     for (let offset = 0; offset < coastalEdges.length; offset++) {
       const probe = coastalEdges[(candidateIdx + offset) % coastalEdges.length]!;
       if (
@@ -343,12 +344,12 @@ export function generateStandardBoard(
     const hType = harborTypes[i]!;
     const hexId = chosen.edge.adjacentHexIds[0]!;
     const hex = hexes[hexId]!;
-    // Position harbor icon slightly outward from the edge midpoint away from the hex center
+    // Position harbor icon outward from the coastal edge midpoint away from the hex center
     const dx = chosen.mx - hex.x;
     const dy = chosen.my - hex.y;
     const len = Math.hypot(dx, dy) || 1;
-    const hx = Number((chosen.mx + (dx / len) * 38).toFixed(3));
-    const hy = Number((chosen.my + (dy / len) * 38).toFixed(3));
+    const hx = Number((chosen.mx + (dx / len) * 48).toFixed(3));
+    const hy = Number((chosen.my + (dy / len) * 48).toFixed(3));
 
     harbors.push({
       id: `P${i}`,
