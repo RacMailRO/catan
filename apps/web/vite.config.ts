@@ -1,0 +1,21 @@
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'node:path';
+
+export default defineConfig({
+  plugins: [react()],
+  publicDir: path.resolve(__dirname, '../../poze'),
+  resolve: {
+    alias: {
+      '@catan/core': path.resolve(__dirname, '../../packages/core/src/index.ts'),
+      '@catan/ai': path.resolve(__dirname, '../../packages/ai/src/index.ts'),
+      '@catan/protocol': path.resolve(__dirname, '../../packages/protocol/src/index.ts')
+    }
+  },
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': 'http://localhost:3001'
+    }
+  }
+});
