@@ -1,0 +1,20 @@
+{
+  "name": "@catan/server",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "dev": "node --experimental-strip-types src/cli-server.ts",
+    "simulate": "node --experimental-strip-types src/cli-simulate.ts"
+  },
+  "dependencies": {
+    "@catan/core": "1.0.0",
+    "@catan/ai": "1.0.0",
+    "@catan/protocol": "1.0.0",
+    "ws": "^8.18.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13"
+  }
+}
