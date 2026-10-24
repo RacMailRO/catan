@@ -1,0 +1,23 @@
+{
+  "name": "catan-v2",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Catan Strategy Game, AI Research Platform & Deterministic Replay System",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "npm run build --workspaces --if-present",
+    "dev:server": "npm --workspace=@catan/server run dev",
+    "dev:web": "npm --workspace=@catan/web run dev",
+    "simulate": "npm --workspace=@catan/server run simulate"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
