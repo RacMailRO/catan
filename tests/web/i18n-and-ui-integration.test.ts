@@ -11,8 +11,13 @@ import {
   TRANSLATIONS,
   formatActionDescription
 } from '../../apps/web/src/i18n';
+import {
+  DEV_CARD_SPRITE_POS,
+  RESOURCE_CARD_SPRITE_POS
+} from '../../apps/web/src/components/GameAssets';
+import { buildReplaySummary } from '../../apps/web/src/storage';
 
-describe('Web UI Localization & End-to-End Flow Integration', () => {
+describe('Web UI Localization, Assets & Replay Persistence Integration', () => {
   it('provides complete RO and EN translations for all phases, resources, and actions', () => {
     expect(TRANSLATIONS.ro.appTitle).toContain('Catan');
     expect(TRANSLATIONS.en.appTitle).toContain('Catan');
@@ -20,7 +25,15 @@ describe('Web UI Localization & End-to-End Flow Integration', () => {
     for (const r of ALL_RESOURCES) {
       expect(RESOURCE_LABELS.ro[r]).toBeTruthy();
       expect(RESOURCE_LABELS.en[r]).toBeTruthy();
+      expect(RESOURCE_CARD_SPRITE_POS[r]).toBeDefined();
     }
+
+    expect(DEV_CARD_SPRITE_POS.knight).toBeDefined();
+    expect(DEV_CARD_SPRITE_POS.road_building).toBeDefined();
+    expect(DEV_CARD_SPRITE_POS.year_of_plenty).toBeDefined();
+    expect(DEV_CARD_SPRITE_POS.monopoly).toBeDefined();
+    expect(DEV_CARD_SPRITE_POS.victory_point).toBeDefined();
+    expect(DEV_CARD_SPRITE_POS.back).toBeDefined();
 
     expect(Object.keys(PHASE_LABELS.ro)).toEqual(Object.keys(PHASE_LABELS.en));
 
@@ -32,7 +45,7 @@ describe('Web UI Localization & End-to-End Flow Integration', () => {
     ).toContain('V10');
   });
 
-  it('integrates ReplayRecorder with UI action formatting across setup and turn 1', () => {
+  it('integrates ReplayRecorder with UI action formatting and replay summary persistence', () => {
     const state = createGame({
       gameId: 'ui-flow-1',
       seed: 'ui-seed-1',
@@ -56,5 +69,10 @@ describe('Web UI Localization & End-to-End Flow Integration', () => {
 
     expect(recorder.getState().turn).toBe(1);
     expect(recorder.getEvents()).toHaveLength(12);
+
+    const summary = buildReplaySummary(recorder.toReplayFile());
+    expect(summary.gameId).toBe('ui-flow-1');
+    expect(summary.eventsCount).toBe(12);
+    expect(summary.participants).toHaveLength(3);
   });
 });
