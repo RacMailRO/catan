@@ -4,8 +4,8 @@
   "type": "module",
   "main": "./src/index.ts",
   "scripts": {
-    "dev": "node --experimental-strip-types src/cli-server.ts",
-    "simulate": "node --experimental-strip-types src/cli-simulate.ts"
+    "dev": "tsx src/cli-server.ts",
+    "simulate": "tsx src/cli-simulate.ts"
   },
   "dependencies": {
     "@catan/core": "1.0.0",

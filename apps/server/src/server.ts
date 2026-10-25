@@ -57,6 +57,21 @@ interface WsClientConnection {
   sessionToken: string;
 }
 
+// Matches localhost and private LAN addresses only (RFC 1918 + loopback) — this server is
+// meant for trusted local/LAN play, never for arbitrary public-internet origins.
+const PRIVATE_NETWORK_HOSTNAME_RE =
+  /^(localhost|127\.0\.0\.1|\[?::1\]?|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})$/;
+
+function resolveAllowedOrigin(originHeader: string | undefined): string | undefined {
+  if (!originHeader) return undefined;
+  try {
+    const hostname = new URL(originHeader).hostname;
+    return PRIVATE_NETWORK_HOSTNAME_RE.test(hostname) ? originHeader : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface CatanServerInstance {
   httpServer: http.Server;
   storage: CatanStorage;
@@ -215,10 +230,21 @@ export function createCatanServer(options?: {
     }
   }
 
+  const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024; // 2MB: generous for lobby/action/replay payloads, small enough to bound memory use
+
   async function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const chunks: Buffer[] = [];
-      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      let totalBytes = 0;
+      req.on('data', (chunk: Buffer) => {
+        totalBytes += chunk.length;
+        if (totalBytes > MAX_REQUEST_BODY_BYTES) {
+          req.destroy();
+          reject(new Error('Request body too large'));
+          return;
+        }
+        chunks.push(chunk);
+      });
       req.on('end', () => {
         try {
           const raw = Buffer.concat(chunks).toString('utf8');
@@ -234,7 +260,6 @@ export function createCatanServer(options?: {
   function sendJson(res: http.ServerResponse, status: number, payload: unknown): void {
     res.writeHead(status, {
       'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization'
     });
@@ -242,10 +267,14 @@ export function createCatanServer(options?: {
   }
 
   const httpServer = http.createServer(async (req, res) => {
+    const allowedOrigin = resolveAllowedOrigin(req.headers.origin);
+    if (allowedOrigin) {
+      res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+      res.setHeader('Vary', 'Origin');
+    }
     try {
       if (req.method === 'OPTIONS') {
         res.writeHead(204, {
-          'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization'
         });
@@ -272,8 +301,7 @@ export function createCatanServer(options?: {
             '.gif': 'image/gif'
           };
           res.writeHead(200, {
-            'Content-Type': mimeMap[ext] ?? 'application/octet-stream',
-            'Access-Control-Allow-Origin': '*'
+            'Content-Type': mimeMap[ext] ?? 'application/octet-stream'
           });
           fs.createReadStream(safePath).pipe(res);
           return;
@@ -833,11 +861,13 @@ export function createCatanServer(options?: {
 
       // Import a replay JSON file
       if (req.method === 'POST' && pathname === '/api/replays/import') {
-        const body = (await readJsonBody(req)) as { replayJson?: string; replay?: ReplayFile };
+        const body = (await readJsonBody(req)) as { replayJson?: string; replay?: ReplayFile } | ReplayFile;
         const rawJson =
-          typeof body.replayJson === 'string'
-            ? body.replayJson
-            : JSON.stringify(body.replay);
+          typeof (body as { replayJson?: string }).replayJson === 'string'
+            ? (body as { replayJson: string }).replayJson
+            // The client (storage.ts) posts the ReplayFile directly as the body, not wrapped —
+            // fall back to it, then to an explicit `{ replay }` wrapper for other callers.
+            : JSON.stringify((body as { replay?: ReplayFile }).replay ?? body);
         const imported = importReplayJson(rawJson);
         const finalState =
           imported.snapshots[imported.snapshots.length - 1]?.state ?? imported.initialState;
@@ -910,7 +940,19 @@ export function createCatanServer(options?: {
   });
 
   // WebSocket Server
-  const wss = new WebSocketServer({ server: httpServer });
+  // Reject only when an Origin header is present and untrusted (a malicious page's browser-issued
+  // WebSocket always sends Origin); non-browser clients that send none are still allowed through.
+  const wss = new WebSocketServer({
+    server: httpServer,
+    verifyClient: (info, callback) => {
+      const origin = info.req.headers.origin;
+      if (origin && !resolveAllowedOrigin(origin)) {
+        callback(false, 403, 'Forbidden origin');
+        return;
+      }
+      callback(true);
+    }
+  });
 
   wss.on('connection', (ws) => {
     let clientRecord: WsClientConnection | undefined;
