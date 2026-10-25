@@ -7,7 +7,7 @@ import {
   TerrainType,
   axialToPixel
 } from '@catan/core';
-import { Locale, RESOURCE_ICONS } from '../i18n';
+import { Locale } from '../i18n';
 
 export interface BoardSvgProps {
   board: BoardState;
@@ -39,14 +39,22 @@ const TERRAIN_SPRITE_COL: Record<TerrainType, number> = {
   fields: 6
 };
 
-const HARBOR_SPRITE_COL: Record<HarborType, number> = {
-  sheep: 0,
-  wheat: 1,
-  brick: 2,
-  wood: 3,
-  ore: 4,
-  generic: 5
+// Original hex-tile artwork, cropped from /porturi-2.jpg (2:1 harbors) and /porturi-3.jpg
+// (3:1 harbors + the blank open-sea tile) into one file per hex so each can be placed and
+// rotated independently.
+const PORT_HARBOR_IMAGE: Record<HarborType, string> = {
+  brick: '/harbor_brick.png',
+  wood: '/harbor_wood.png',
+  sheep: '/harbor_sheep.png',
+  wheat: '/harbor_wheat.png',
+  ore: '/harbor_ore.png',
+  generic: '/harbor_generic.png'
 };
+const SEA_TILE_IMAGE = '/sea_tile.png';
+// The baked-in dock/sand in the original tile art points toward this angle by default
+// (0° = east, 90° = south, screen-space degrees); each harbor hex is rotated from this
+// to the angle that points back toward the island so the pier faces the coast.
+const PORT_ART_DEFAULT_ANGLE_DEG = 62.5;
 
 const NUMBER_TOKEN_ORDER = [2, 3, 4, 5, 6, 8, 9, 10, 11, 12];
 
@@ -102,6 +110,13 @@ function generateOuterSeaRing(): OuterSeaHex[] {
   return ring;
 }
 
+// Angle from this outer sea hex back toward the island center (0,0) — the coast lies in
+// roughly this direction, so rotating a harbor tile's art to face this angle points its
+// dock at the island rather than out to open sea.
+function seaHexAngleToCenterDeg(sea: OuterSeaHex): number {
+  return (Math.atan2(-sea.y, -sea.x) * 180) / Math.PI;
+}
+
 export const BoardSvg: React.FC<BoardSvgProps> = ({
   board,
   playerColors,
@@ -142,6 +157,24 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
   });
 
   const outerSeaRing = useMemo(() => generateOuterSeaRing(), []);
+
+  // Each harbor sits on whichever outer sea hex is nearest to its dock position.
+  const harborBySeaHexId = useMemo(() => {
+    const map = new Map<string, (typeof board.harbors)[number]>();
+    for (const harbor of board.harbors) {
+      let nearest: OuterSeaHex | undefined;
+      let nearestDist = Infinity;
+      for (const sea of outerSeaRing) {
+        const dist = Math.hypot(sea.x - harbor.x, sea.y - harbor.y);
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearest = sea;
+        }
+      }
+      if (nearest) map.set(nearest.id, harbor);
+    }
+    return map;
+  }, [board.harbors, outerSeaRing]);
 
   // Native non-passive listeners for desktop mouse wheel AND mobile pinch-to-zoom + touch drag
   useEffect(() => {
@@ -269,9 +302,6 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
   // Bounding cell dimensions for pointy-top hex sprite from /terrains_hexes.png
   const hexCellW = Math.sqrt(3) * HEX_RADIUS * 1.04;
   const hexCellH = 2 * HEX_RADIUS * 1.04;
-  // Larger, high-visibility harbor badges (82x82 px)
-  const harborBadgeSize = 82;
-  const harborRadius = harborBadgeSize / 2;
   const tokenSize = 54;
   const tokenRadius = tokenSize / 2;
 
@@ -348,38 +378,60 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             </React.Fragment>
           ))}
 
-          {/* Clip paths for the 9 harbors */}
-          {board.harbors.map((harbor) => (
-            <clipPath key={`clip-harbor-${harbor.id}`} id={`clip-harbor-${harbor.id}`}>
-              <circle cx={harbor.x} cy={harbor.y} r={harborRadius} />
-            </clipPath>
-          ))}
         </defs>
 
         <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-          {/* 0A. Render 18 Outer Sea Hexes from /terrains_hexes.png (col 0, row 0) */}
-          {outerSeaRing.map((sea) => (
-            <g key={sea.id}>
-              <g clipPath={`url(#clip-${sea.id})`}>
-                <image
-                  href="/terrains_hexes.png"
-                  x={sea.x - hexCellW / 2}
-                  y={sea.y - hexCellH / 2}
-                  width={hexCellW * 7}
-                  height={hexCellH * 4}
-                  preserveAspectRatio="none"
-                  opacity={0.94}
+          {/* 0A. Render 18 Outer Sea Hexes using the original port-tile artwork: the 9 hexes
+              with a harbor get that harbor's 2:1/3:1 tile (cropped from /porturi-2.jpg or
+              /porturi-3.jpg), rotated to face the island; the rest get the plain open-sea
+              tile cropped from /porturi-3.jpg, for a consistent look across the sea ring. */}
+          {outerSeaRing.map((sea) => {
+            const harbor = harborBySeaHexId.get(sea.id);
+            const href = harbor ? PORT_HARBOR_IMAGE[harbor.type] : SEA_TILE_IMAGE;
+            const rotationDeg = harbor
+              ? seaHexAngleToCenterDeg(sea) - PORT_ART_DEFAULT_ANGLE_DEG
+              : 0;
+            // A rotated image must be oversized (a square at least as wide as the hex is
+            // tall) so its corners still cover the hex's own corners at every angle —
+            // the tightly-fit hexCellW x hexCellH box used for unrotated tiles would clip.
+            const imgSize = harbor ? hexCellH * 1.1 : 0;
+
+            return (
+              <g key={sea.id}>
+                <g
+                  clipPath={`url(#clip-${sea.id})`}
+                  transform={`rotate(${rotationDeg}, ${sea.x}, ${sea.y})`}
+                >
+                  {harbor ? (
+                    <image
+                      href={href}
+                      x={sea.x - imgSize / 2}
+                      y={sea.y - imgSize / 2}
+                      width={imgSize}
+                      height={imgSize}
+                      preserveAspectRatio="none"
+                    />
+                  ) : (
+                    <image
+                      href={href}
+                      x={sea.x - hexCellW / 2}
+                      y={sea.y - hexCellH / 2}
+                      width={hexCellW}
+                      height={hexCellH}
+                      preserveAspectRatio="none"
+                    />
+                  )}
+                </g>
+                <polygon
+                  points={getHexPolygonPoints(sea.x, sea.y, HEX_RADIUS - 0.5)}
+                  fill="none"
+                  stroke="#38bdf8"
+                  strokeWidth={1.2}
+                  strokeOpacity={0.22}
                 />
               </g>
-              <polygon
-                points={getHexPolygonPoints(sea.x, sea.y, HEX_RADIUS - 0.5)}
-                fill="none"
-                stroke="#38bdf8"
-                strokeWidth={1.2}
-                strokeOpacity={0.22}
-              />
-            </g>
-          ))}
+            );
+          })}
 
           {/* 0B. Sandy Shoreline Halo behind the 19 Island Hexes */}
           {Object.values(board.hexes).map((hex) => (
@@ -513,18 +565,17 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             );
           })}
 
-          {/* 2. Render 9 Harbors & Docks on top of Sea & Coastline */}
+          {/* 2. Wooden piers from each harbor's sea hex to its two coastal vertices — the
+              dock and trade-ratio label themselves are now baked into the sea hex's own
+              tile artwork (rendered above), so this just ties the art to the exact two
+              vertices that get the trade bonus. */}
           {board.harbors.map((harbor) => {
             const v1 = board.vertices[harbor.vertexIds[0]];
             const v2 = board.vertices[harbor.vertexIds[1]];
             if (!v1 || !v2) return null;
-            const spriteCol = HARBOR_SPRITE_COL[harbor.type] ?? 5;
-            const ratioText =
-              harbor.type === 'generic' ? '3:1' : `2:1 ${RESOURCE_ICONS[harbor.type]}`;
 
             return (
               <g key={harbor.id} style={{ pointerEvents: 'none' }}>
-                {/* Wooden Piers to coastal vertices */}
                 <line
                   x1={harbor.x}
                   y1={harbor.y}
@@ -563,48 +614,6 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                   strokeDasharray="6,4"
                   strokeLinecap="round"
                 />
-
-                {/* Large Harbor Ship Sprite from /harbors.png */}
-                <circle
-                  cx={harbor.x}
-                  cy={harbor.y}
-                  r={harborRadius + 3}
-                  fill="#fef3c7"
-                  stroke="#b45309"
-                  strokeWidth={3.5}
-                />
-                <g clipPath={`url(#clip-harbor-${harbor.id})`}>
-                  <image
-                    href="/harbors.png"
-                    x={harbor.x - harborRadius - spriteCol * harborBadgeSize}
-                    y={harbor.y - harborRadius}
-                    width={harborBadgeSize * 7}
-                    height={harborBadgeSize}
-                    preserveAspectRatio="none"
-                  />
-                </g>
-
-                {/* Crisp Trade Ratio Pill Badge */}
-                <rect
-                  x={harbor.x - 28}
-                  y={harbor.y + harborRadius - 12}
-                  width={56}
-                  height={20}
-                  rx={6}
-                  fill="#0f172a"
-                  stroke="#f59e0b"
-                  strokeWidth={1.8}
-                />
-                <text
-                  x={harbor.x}
-                  y={harbor.y + harborRadius + 2}
-                  textAnchor="middle"
-                  fill="#fef3c7"
-                  fontSize="11.5"
-                  fontWeight="800"
-                >
-                  {ratioText}
-                </text>
               </g>
             );
           })}

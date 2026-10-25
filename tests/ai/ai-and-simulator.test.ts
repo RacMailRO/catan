@@ -154,6 +154,10 @@ describe('Catan AI Opponents, Strategic Analysis, LLM Fallback & Simulator', () 
     const bench = runBenchmarkSuite({
       baseSeed: 'bench-suite-1',
       gamesCount: 4,
+      // Above the simulator's 150-turn default: AI-vs-AI games occasionally run long
+      // (observed ~108 turns on average here), and this suite asserts every game reaches
+      // a winner, so give it enough headroom to not be flaky.
+      maxTurns: 300,
       participants: [
         { id: 'p1', name: 'Adv Competitiv', type: 'ai', aiDifficulty: 'advanced', aiStyle: 'competitive' },
         { id: 'p2', name: 'Med Echilibrat', type: 'ai', aiDifficulty: 'medium', aiStyle: 'balanced' },

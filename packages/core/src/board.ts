@@ -91,15 +91,21 @@ export function getClockwiseSpiralHexIndices(startCornerIndex: number): number[]
   return spiral;
 }
 
+// Fixed official harbor frame, never reshuffled: the real Catan board's harbor pieces sit
+// in one unchanging arrangement every game (only the terrain/number tiles inside are
+// randomized). Index 2 here lands on the coastal-edge slot nearest the top of the board
+// (see the `step`-based slot selection below), so going clockwise from there this reads
+// ore, generic(3:1), wood, generic(3:1), generic(3:1), brick, generic(3:1), sheep, wheat —
+// matching the standard board with the ore 2:1 harbor anchored at the top.
 export const STANDARD_HARBOR_TYPES: HarborType[] = [
-  'generic',
-  'wood',
-  'brick',
-  'generic',
   'sheep',
-  'generic',
   'wheat',
   'ore',
+  'generic',
+  'wood',
+  'generic',
+  'generic',
+  'brick',
   'generic'
 ];
 
@@ -322,10 +328,9 @@ export function generateStandardBoard(
     })
     .sort((a, b) => a.angle - b.angle);
 
-  // Shuffle the 9 harbors deterministically
-  const shufHarbors = shuffleWithPrng([...STANDARD_HARBOR_TYPES], state);
-  const harborTypes = shufHarbors.items;
-  state = shufHarbors.nextState;
+  // The harbor frame is fixed (see STANDARD_HARBOR_TYPES) — never shuffled, unlike the
+  // terrain/number tiles above.
+  const harborTypes = STANDARD_HARBOR_TYPES;
 
   const harbors: Harbor[] = [];
   const usedHarborVertices = new Set<string>();
