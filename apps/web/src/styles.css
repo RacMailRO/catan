@@ -748,3 +748,57 @@ select {
     flex: 1 1 auto;
   }
 }
+
+
+/* Status pill directly in the header */
+.header-turn-status {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(11, 22, 35, 0.85);
+  border: 1px solid var(--accent-gold);
+  border-radius: 6px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.8rem;
+  color: var(--text-main);
+  max-width: 480px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-turn-status .turn-label {
+  color: var(--accent-gold);
+  font-weight: 700;
+}
+
+.header-turn-status .phase-label {
+  color: #f1f5f9;
+}
+
+.header-turn-status .build-indicator {
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.dock-cards-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  max-width: 360px;
+  width: 100%;
+  margin: 0 auto;
+  align-items: center;
+  justify-items: center;
+  overflow: hidden;
+}
+
+.dock-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  overflow: hidden;
+}
