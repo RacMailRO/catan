@@ -802,3 +802,63 @@ select {
   width: 100%;
   overflow: hidden;
 }
+
+
+/* Join Game Box */
+.join-game-box {
+  background: rgba(13, 26, 41, 0.95);
+  border: 1.5px solid var(--accent-gold);
+  border-radius: 8px;
+  padding: 0.6rem;
+  margin-bottom: 0.65rem;
+}
+
+.join-form-row {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.invite-banner {
+  background: rgba(15, 31, 50, 0.95);
+  border: 1.5px solid var(--accent-gold);
+  border-radius: 8px;
+  padding: 0.45rem 0.65rem;
+  margin-top: 0.35rem;
+}
+
+.btn-start-match {
+  width: 100%;
+  min-height: 42px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.btn-quick-sim {
+  width: 100%;
+  justify-content: center;
+}
+
+.seat-row-main {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+.seat-row-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+  width: 100%;
+  margin-top: 0.3rem;
+}
+
+.seat-row-ai {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+  width: 100%;
+  margin-top: 0.3rem;
+}

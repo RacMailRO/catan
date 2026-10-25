@@ -85,6 +85,16 @@ export class CatanStorage {
     return JSON.parse(row.data_json) as LobbyState;
   }
 
+  public getLobbyByInviteCode(inviteCode: string): LobbyState | undefined {
+    const clean = inviteCode.trim().toLowerCase();
+    const stmt = this.db.prepare(
+      'SELECT data_json FROM lobbies WHERE LOWER(invite_code) = ? OR LOWER(lobby_id) = ?'
+    );
+    const row = stmt.get(clean, clean) as { data_json: string } | undefined;
+    if (!row) return undefined;
+    return JSON.parse(row.data_json);
+  }
+
   public listLobbies(): LobbyState[] {
     const stmt = this.db.prepare(
       `SELECT data_json FROM lobbies ORDER BY created_at_ms DESC LIMIT 50`

@@ -1,5 +1,5 @@
 // Catan v2 Service Worker for PWA Offline Shell & Caching
-const CACHE_NAME = 'catan-v2-cache-v1';
+const CACHE_NAME = 'catan-v2-cache-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -48,11 +48,14 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Only intercept GET requests with http or https protocol
   if (event.request.method !== 'GET') return;
+  if (!event.request.url.startsWith('http://') && !event.request.url.startsWith('https://')) return;
+
   const url = new URL(event.request.url);
 
-  // Skip API requests from service worker caching
-  if (url.pathname.startsWith('/api')) return;
+  // Skip API and websocket requests
+  if (url.pathname.startsWith('/api') || url.pathname.startsWith('/ws')) return;
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
@@ -60,7 +63,7 @@ self.addEventListener('fetch', (event) => {
         // Fetch in background to update cache
         fetch(event.request)
           .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
+            if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
               caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
             }
           })
@@ -73,10 +76,10 @@ self.addEventListener('fetch', (event) => {
         }
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
+          cache.put(event.request, responseToCache).catch(() => {});
         });
         return networkResponse;
-      });
+      }).catch(() => cachedResponse);
     })
   );
 });
