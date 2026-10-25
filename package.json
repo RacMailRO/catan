@@ -8,11 +8,12 @@
     "apps/*"
   ],
   "scripts": {
+    "dev": "npm --workspace=@catan/web run dev",
+    "dev:server": "npm --workspace=@catan/server run dev",
+    "dev:web": "npm --workspace=@catan/web run dev",
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "npm run build --workspaces --if-present",
-    "dev:server": "npm --workspace=@catan/server run dev",
-    "dev:web": "npm --workspace=@catan/web run dev",
     "simulate": "npm --workspace=@catan/server run simulate"
   },
   "devDependencies": {
