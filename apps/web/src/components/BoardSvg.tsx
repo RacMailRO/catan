@@ -110,12 +110,18 @@ interface OuterSeaHex {
   y: number;
 }
 
+// Rings 4-6 beyond the island's immediate ring-3 sea border exist so a portrait phone has
+// real sea tiles to show instead of empty background when the viewBox below stretches
+// taller to fit the screen — not just decoration.
+const OUTER_SEA_MAX_RING = 6;
+
 function generateOuterSeaRing(): OuterSeaHex[] {
   const ring: OuterSeaHex[] = [];
-  for (let q = -3; q <= 3; q++) {
-    for (let r = -3; r <= 3; r++) {
+  for (let q = -OUTER_SEA_MAX_RING; q <= OUTER_SEA_MAX_RING; q++) {
+    for (let r = -OUTER_SEA_MAX_RING; r <= OUTER_SEA_MAX_RING; r++) {
       const s = -q - r;
-      if (Math.max(Math.abs(q), Math.abs(r), Math.abs(s)) === 3) {
+      const dist = Math.max(Math.abs(q), Math.abs(r), Math.abs(s));
+      if (dist >= 3 && dist <= OUTER_SEA_MAX_RING) {
         const { x, y } = axialToPixel(q, r, HEX_RADIUS);
         ring.push({ id: `sea_${q}_${r}`, x, y });
       }
@@ -154,6 +160,58 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
   const [zoom, setZoom] = useState<number>(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState<boolean>(false);
+
+  // The island + its immediate ring-3 sea border needs at least this much space (half-extents)
+  // to render fully — this is the board's natural, landscape-ish footprint (aspect ~1.1).
+  // On a narrower/taller container (a phone in portrait), fitting that fixed footprint by
+  // width used to leave most of the height as empty background. Rings 4-6 (see
+  // generateOuterSeaRing) exist so there's real sea to show when we stretch the viewBox
+  // taller to use more of a portrait screen — capped at MIN_ASPECT so we never stretch past
+  // what that extra sea ring can actually cover with tiles.
+  const BOARD_HALF_W = 640;
+  const BOARD_HALF_H = 580;
+  const BOARD_MAX_HALF_W = 1120;
+  const BOARD_MAX_HALF_H = 995;
+  const BOARD_MIN_ASPECT = 0.65;
+  const [viewBoxHalfExtent, setViewBoxHalfExtent] = useState({ w: BOARD_HALF_W, h: BOARD_HALF_H });
+
+  useEffect(() => {
+    const svgEl = svgRef.current;
+    if (!svgEl) return;
+    const container = svgEl.parentElement;
+    if (!container) return;
+
+    const applySize = (width: number, height: number) => {
+      if (width <= 0 || height <= 0) return;
+      const containerAspect = width / height;
+      const contentAspect = BOARD_HALF_W / BOARD_HALF_H;
+      if (containerAspect >= contentAspect) {
+        // Wide/landscape container: stretch width to match, height stays at its natural size.
+        setViewBoxHalfExtent({
+          w: Math.min(BOARD_MAX_HALF_W, BOARD_HALF_H * containerAspect),
+          h: BOARD_HALF_H
+        });
+      } else {
+        // Portrait container: stretch height, but never past MIN_ASPECT (beyond that, the
+        // extra sea ring runs out and we'd just be showing empty background instead of tiles).
+        const targetAspect = Math.max(containerAspect, BOARD_MIN_ASPECT);
+        setViewBoxHalfExtent({
+          w: BOARD_HALF_W,
+          h: Math.min(BOARD_MAX_HALF_H, BOARD_HALF_W / targetAspect)
+        });
+      }
+    };
+
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      applySize(entry.contentRect.width, entry.contentRect.height);
+    });
+    ro.observe(container);
+    applySize(container.clientWidth, container.clientHeight);
+
+    return () => ro.disconnect();
+  }, []);
   const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number }>({
     x: 0,
     y: 0,
@@ -365,7 +423,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
 
       <svg
         ref={svgRef}
-        viewBox="-640 -580 1280 1160"
+        viewBox={`${-viewBoxHalfExtent.w} ${-viewBoxHalfExtent.h} ${viewBoxHalfExtent.w * 2} ${viewBoxHalfExtent.h * 2}`}
         style={{
           position: 'absolute',
           inset: 0,
