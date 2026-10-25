@@ -288,6 +288,58 @@ export function createCatanServer(options?: {
         return;
       }
 
+      
+      // Join lobby by invite code or lobby ID directly
+      if (req.method === 'POST' && pathname === '/api/lobbies/join-by-code') {
+        const body = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
+        const inviteCode = typeof body.inviteCode === 'string' ? body.inviteCode.trim() : '';
+        const playerName = typeof body.playerName === 'string' && body.playerName.trim() ? body.playerName.trim() : 'Jucător Oaspete';
+
+        if (!inviteCode) {
+          sendJson(res, 400, { error: 'Codul de invitație este obligatoriu' });
+          return;
+        }
+
+        const lobby = storage.getLobbyByInviteCode(inviteCode);
+        if (!lobby) {
+          sendJson(res, 404, { error: 'Partida nu a fost găsită. Verifică codul de invitație.' });
+          return;
+        }
+
+        // Find next open or unclaimed human seat
+        const targetSeat = lobby.seats.find(
+          (s) => s.type === 'open' || (s.type === 'human' && !s.claimedByPlayerName)
+        ) ?? lobby.seats.find((s) => s.type === 'human' && s.playerId !== lobby.hostPlayerId);
+
+        if (!targetSeat) {
+          sendJson(res, 400, { error: 'Nu mai sunt locuri libere în această partidă.' });
+          return;
+        }
+
+        targetSeat.type = 'human';
+        targetSeat.name = playerName;
+        targetSeat.claimedByPlayerName = playerName;
+        targetSeat.connected = true;
+
+        const sessionToken = `sess_${crypto.randomBytes(12).toString('hex')}`;
+        storage.saveLobby(lobby);
+        storage.saveSession({
+          sessionToken,
+          lobbyId: lobby.lobbyId,
+          playerId: targetSeat.playerId,
+          playerName: targetSeat.name,
+          createdAtMs: Date.now()
+        });
+
+        sendJson(res, 200, {
+          lobby,
+          sessionToken,
+          playerId: targetSeat.playerId,
+          gameId: lobby.gameId
+        });
+        return;
+      }
+
       // List lobbies
       if (req.method === 'GET' && pathname === '/api/lobbies') {
         const lobbies = storage.listLobbies().filter((l) => !l.isPrivate);

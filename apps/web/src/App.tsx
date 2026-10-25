@@ -114,6 +114,80 @@ export const App: React.FC = () => {
     }
   };
   const [diceRollAnimKey, setDiceRollAnimKey] = useState<string>('init');
+  const [createdInviteCode, setCreatedInviteCode] = useState<string | null>(null);
+  const [joinCodeInput, setJoinCodeInput] = useState<string>('');
+  const [joinPlayerName, setJoinPlayerName] = useState<string>('Jucător 2');
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [joinLoading, setJoinLoading] = useState<boolean>(false);
+
+  // Automatically detect ?join=XYZ or ?code=XYZ from URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('join') || params.get('code');
+    if (code) {
+      setJoinCodeInput(code.toUpperCase().trim());
+      setActiveTab('lobby');
+    }
+  }, []);
+
+  const handleShareInvite = async (codeToShare: string) => {
+    const shareUrl = `${window.location.origin}/?join=${encodeURIComponent(codeToShare)}`;
+    const shareData = {
+      title: 'Hai la Catan v2!',
+      text: `Te invit la o partidă de Catan v2! Codul partidei: ${codeToShare}`,
+      url: shareUrl
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch {
+        // Fallback to clipboard
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setServerStatusMsg(`Linkul partidei a fost copiat în clipboard! (${shareUrl})`);
+    } catch {
+      setServerStatusMsg(`Codul tău de invitație este: ${codeToShare} · Link: ${shareUrl}`);
+    }
+  };
+
+  const handleJoinWithCode = async () => {
+    if (!joinCodeInput.trim()) {
+      setJoinError('Te rugăm să introduci codul de invitație.');
+      return;
+    }
+    setJoinLoading(true);
+    setJoinError(null);
+    try {
+      const res = await fetch('/api/lobbies/join-by-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inviteCode: joinCodeInput.trim(),
+          playerName: joinPlayerName.trim() || 'Jucător 2'
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setJoinError(data.error || 'Nu s-a putut realiza conectarea la partidă.');
+        setJoinLoading(false);
+        return;
+      }
+
+      setCreatedInviteCode(joinCodeInput.trim());
+      setServerStatusMsg(`Te-ai alăturat cu succes ca ${data.playerId}!`);
+      // Start/sync local state
+      handleStartGame(true);
+    } catch {
+      setJoinError('Nu s-a putut contacta serverul. Verifică dacă este pornit.');
+    } finally {
+      setJoinLoading(false);
+    }
+  };
   const lastSavedGameIdRef = useRef<string | null>(null);
 
   // Dev card & trade sub-modals state
@@ -564,13 +638,57 @@ export const App: React.FC = () => {
         </div>
       </header>
 
-      {/* TAB 1: LOBBY & GAME CONFIGURATION (Fits inside locked viewport) */}
+      {/* TAB 1: LOBBY & GAME CONFIGURATION (Fully Responsive, Vertical Scroll on Mobile) */}
       {activeTab === 'lobby' && (
         <main className="lobby-container">
-          {/* Left Panel: 1-4 Configurable Participants */}
+          {/* Left Panel: 1-4 Configurable Participants & Join by Code */}
           <section className="panel">
+            {/* Join by Code / Link Card */}
+            <div className="join-game-box">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontWeight: 700, color: 'var(--accent-gold)', fontSize: '0.86rem' }}>
+                  🎮 Intră într-o partidă cu Cod de Invitație
+                </span>
+                {joinCodeInput && (
+                  <span style={{ fontSize: '0.72rem', color: 'var(--accent-blue)', fontWeight: 600 }}>
+                    Cod preluat din link!
+                  </span>
+                )}
+              </div>
+              <div className="join-form-row">
+                <input
+                  type="text"
+                  placeholder="Cod (ex: CATAN-1234)"
+                  value={joinCodeInput}
+                  onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
+                  style={{ flex: 1, minWidth: 130, textTransform: 'uppercase', fontWeight: 700 }}
+                />
+                <input
+                  type="text"
+                  placeholder="Numele tău"
+                  value={joinPlayerName}
+                  onChange={(e) => setJoinPlayerName(e.target.value)}
+                  style={{ flex: 1, minWidth: 120 }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleJoinWithCode}
+                  disabled={joinLoading || !joinCodeInput.trim()}
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  {joinLoading ? 'Se conectează...' : '🎮 Intră în Joc'}
+                </button>
+              </div>
+              {joinError && (
+                <div style={{ color: '#f87171', fontSize: '0.78rem', marginTop: 4 }}>
+                  ⚠️ {joinError}
+                </div>
+              )}
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexShrink: 0 }}>
-              <h2 style={{ margin: 0, border: 'none', padding: 0 }}>👥 {t.participantsTitle}</h2>
+              <h2 style={{ margin: 0, border: 'none', padding: 0 }}>👥 {t.participantsTitle} (1–4 Locuri)</h2>
               {participants.length < 4 && (
                 <button
                   type="button"
@@ -621,7 +739,8 @@ export const App: React.FC = () => {
             <div className="panel-scroll">
               {participants.map((p, idx) => (
                 <div key={p.id} className="seat-card">
-                  <div className="seat-row">
+                  {/* Row 1: Color dot + Name + Delete button */}
+                  <div className="seat-row-main">
                     <span className="color-dot" style={{ backgroundColor: p.color ?? PLAYER_COLORS[idx] }} />
                     <input
                       type="text"
@@ -631,8 +750,22 @@ export const App: React.FC = () => {
                         next[idx] = { ...p, name: e.target.value };
                         setParticipants(next);
                       }}
-                      style={{ flex: 1, minWidth: 120 }}
+                      style={{ flex: 1, minWidth: 110 }}
                     />
+                    {participants.length > 1 && (
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        style={{ padding: '0.3rem 0.6rem' }}
+                        onClick={() => setParticipants(participants.filter((_, i) => i !== idx))}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Row 2: Type (Human/AI) + Color Selection */}
+                  <div className="seat-row-options">
                     <select
                       value={p.type}
                       onChange={(e) => {
@@ -668,21 +801,12 @@ export const App: React.FC = () => {
                         </option>
                       ))}
                     </select>
-
-                    {participants.length > 1 && (
-                      <button
-                        type="button"
-                        className="btn btn-danger"
-                        onClick={() => setParticipants(participants.filter((_, i) => i !== idx))}
-                      >
-                        ✕
-                      </button>
-                    )}
                   </div>
 
+                  {/* Row 3 (if AI): Difficulty & Strategy Style */}
                   {(p.type === 'ai' || p.type === 'llm') && (
-                    <div className="seat-row" style={{ paddingLeft: 20 }}>
-                      <div className="form-field" style={{ flex: 1 }}>
+                    <div className="seat-row-ai">
+                      <div className="form-field">
                         <label>{locale === 'ro' ? 'Dificultate AI' : 'AI Difficulty'}</label>
                         <select
                           value={p.aiDifficulty ?? 'medium'}
@@ -701,7 +825,7 @@ export const App: React.FC = () => {
                           )}
                         </select>
                       </div>
-                      <div className="form-field" style={{ flex: 1 }}>
+                      <div className="form-field">
                         <label>{locale === 'ro' ? 'Stil Strategic AI' : 'AI Strategy Style'}</label>
                         <select
                           value={p.aiStyle ?? 'balanced'}
@@ -733,35 +857,48 @@ export const App: React.FC = () => {
               ))}
             </div>
 
-            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.65rem', flexWrap: 'wrap', flexShrink: 0 }}>
+            {/* Unified Start Buttons & Share Banner */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.65rem', flexShrink: 0 }}>
               <button
                 type="button"
-                className="btn btn-primary"
-                onClick={() => handleStartGame(false)}
-              >
-                🚀 {t.startGame} (Local)
-              </button>
-              <button
-                type="button"
-                className="btn"
+                className="btn btn-primary btn-start-match"
                 onClick={() => handleStartGame(true)}
               >
-                🌐 {t.startGame} (LAN / Online)
+                🚀 {t.startGame}
               </button>
+
               <button
                 type="button"
-                className="btn"
+                className="btn btn-quick-sim"
                 onClick={handleQuick4AiSimulation}
               >
                 ⚡ {t.quickAiMatch} & Analiză
               </button>
-            </div>
 
-            {serverStatusMsg && (
-              <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--accent-blue)', flexShrink: 0 }}>
-                {serverStatusMsg}
-              </div>
-            )}
+              {createdInviteCode && (
+                <div className="invite-banner">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+                    <span>
+                      Cod Partidă: <strong style={{ color: 'var(--accent-gold)', fontSize: '0.95rem' }}>{createdInviteCode}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ padding: '0.3rem 0.6rem', fontSize: '0.78rem' }}
+                      onClick={() => handleShareInvite(createdInviteCode)}
+                    >
+                      📲 Trimite Link / Invită Prieteni
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {serverStatusMsg && (
+                <div style={{ fontSize: '0.78rem', color: 'var(--accent-blue)', marginTop: 2 }}>
+                  {serverStatusMsg}
+                </div>
+              )}
+            </div>
           </section>
 
           {/* Right Panel: Rules & Visual Card Preview */}
@@ -863,13 +1000,13 @@ export const App: React.FC = () => {
                 <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.45rem', color: 'var(--accent-gold)' }}>
                   Cărți de Resurse & Dezvoltare (Asset-uri grafice din <code>poze/cards.jpg</code>):
                 </div>
-                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center' }}>
                   {ALL_RESOURCES.map((r) => (
-                    <ResourceCardSprite key={r} resource={r} count={4} locale={locale} size="sm" />
+                    <ResourceCardSprite key={r} resource={r} count={4} locale={locale} size="xs" />
                   ))}
-                  <DevCardSprite type="knight" locale={locale} size="sm" />
-                  <DevCardSprite type="road_building" locale={locale} size="sm" />
-                  <DevCardSprite type="monopoly" locale={locale} size="sm" />
+                  <DevCardSprite type="knight" locale={locale} size="xs" />
+                  <DevCardSprite type="road_building" locale={locale} size="xs" />
+                  <DevCardSprite type="monopoly" locale={locale} size="xs" />
                 </div>
               </div>
             </div>
