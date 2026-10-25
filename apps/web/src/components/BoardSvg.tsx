@@ -462,6 +462,24 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                         preserveAspectRatio="none"
                       />
                     </g>
+
+                    {/* Official Spiral Letter Badge (A..R) */}
+                    {hex.tokenLetter && (
+                      <g transform={`translate(${hex.x + 16}, ${hex.y - 12})`}>
+                        <circle cx={0} cy={0} r={8.5} fill="#78350f" stroke="#fde68a" strokeWidth={1.5} />
+                        <text
+                          x={0}
+                          y={3}
+                          textAnchor="middle"
+                          fill="#fef3c7"
+                          fontSize="9.5"
+                          fontWeight="bold"
+                          fontFamily="Arial, sans-serif"
+                        >
+                          {hex.tokenLetter}
+                        </text>
+                      </g>
+                    )}
                   </g>
                 )}
 

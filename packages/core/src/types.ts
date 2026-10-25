@@ -60,6 +60,7 @@ export interface HexTile {
   y: number;
   terrain: TerrainType;
   numberToken: number | null;
+  tokenLetter?: string | null;
 }
 
 export interface Vertex {

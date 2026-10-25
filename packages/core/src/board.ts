@@ -147,6 +147,7 @@ export function generateStandardBoard(
   // 3. Place terrains along the spiral and place A->R tokens in the same clockwise spiral order (skipping desert)
   const terrains = new Array<TerrainType>(19);
   const assignedTokens = new Array<number | null>(19).fill(null);
+  const assignedLetters = new Array<string | null>(19).fill(null);
   let tokenCursor = 0;
 
   for (let step = 0; step < spiralIndices.length; step++) {
@@ -155,8 +156,10 @@ export function generateStandardBoard(
     terrains[hexIdx] = terrain;
     if (terrain === 'desert') {
       assignedTokens[hexIdx] = null;
+      assignedLetters[hexIdx] = null;
     } else {
       assignedTokens[hexIdx] = OFFICIAL_ALPHABETICAL_TOKENS[tokenCursor] ?? null;
+      assignedLetters[hexIdx] = String.fromCharCode(65 + tokenCursor); // A, B, C ... R
       tokenCursor++;
     }
   }
@@ -194,7 +197,8 @@ export function generateStandardBoard(
       x: cx,
       y: cy,
       terrain,
-      numberToken
+      numberToken,
+      tokenLetter: assignedLetters[index] ?? null
     };
 
     const cornerKeys: string[] = [];
