@@ -581,7 +581,7 @@ export const App: React.FC = () => {
             className={`nav-btn ${activeTab === 'lobby' ? 'active' : ''}`}
             onClick={() => setActiveTab('lobby')}
           >
-            ⚙️ {t.navLobby}
+            ⚙️ <span className="desktop-only">{t.navLobby}</span><span className="mobile-only">Lobby</span>
           </button>
           <button
             type="button"
@@ -594,7 +594,7 @@ export const App: React.FC = () => {
               }
             }}
           >
-            🎲 {t.navGame}
+            🎲 <span className="desktop-only">{t.navGame}</span><span className="mobile-only">Joc</span>
           </button>
           <button
             type="button"
@@ -608,14 +608,14 @@ export const App: React.FC = () => {
               setActiveTab('replay');
             }}
           >
-            🎬 {t.navReplay}
+            🎬 <span className="desktop-only">{t.navReplay}</span><span className="mobile-only">Replay</span>
           </button>
           <button
             type="button"
             className={`nav-btn ${activeTab === 'benchmark' ? 'active' : ''}`}
             onClick={() => setActiveTab('benchmark')}
           >
-            📈 {t.navBenchmark}
+            📈 <span className="desktop-only">{t.navBenchmark}</span><span className="mobile-only">Teste</span>
           </button>
         </nav>
 
@@ -661,21 +661,21 @@ export const App: React.FC = () => {
                   placeholder="Cod (ex: CATAN-1234)"
                   value={joinCodeInput}
                   onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
-                  style={{ flex: 1, minWidth: 130, textTransform: 'uppercase', fontWeight: 700 }}
+                  style={{ flex: 1, minWidth: 0, width: '100%', textTransform: 'uppercase', fontWeight: 700 }}
                 />
                 <input
                   type="text"
                   placeholder="Numele tău"
                   value={joinPlayerName}
                   onChange={(e) => setJoinPlayerName(e.target.value)}
-                  style={{ flex: 1, minWidth: 120 }}
+                  style={{ flex: 1, minWidth: 0, width: '100%' }}
                 />
                 <button
                   type="button"
                   className="btn btn-primary"
                   onClick={handleJoinWithCode}
                   disabled={joinLoading || !joinCodeInput.trim()}
-                  style={{ whiteSpace: 'nowrap' }}
+                  style={{ minWidth: 0, width: '100%', justifyContent: 'center' }}
                 >
                   {joinLoading ? 'Se conectează...' : '🎮 Intră în Joc'}
                 </button>
@@ -688,7 +688,7 @@ export const App: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexShrink: 0 }}>
-              <h2 style={{ margin: 0, border: 'none', padding: 0 }}>👥 {t.participantsTitle} (1–4 Locuri)</h2>
+              <h2 style={{ margin: 0, border: 'none', padding: 0 }}>👥 {t.participantsTitle}</h2>
               {participants.length < 4 && (
                 <button
                   type="button"
@@ -750,7 +750,7 @@ export const App: React.FC = () => {
                         next[idx] = { ...p, name: e.target.value };
                         setParticipants(next);
                       }}
-                      style={{ flex: 1, minWidth: 110 }}
+                      style={{ flex: 1, minWidth: 0, width: '100%' }}
                     />
                     {participants.length > 1 && (
                       <button
