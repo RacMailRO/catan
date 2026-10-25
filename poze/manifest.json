@@ -1,0 +1,20 @@
+{
+  "name": "Catan v2 — Joc Strategic & AI",
+  "short_name": "Catan v2",
+  "description": "Joc Catan cu boți tactici AI, replay determinist și analiză strategică",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b1623",
+  "theme_color": "#0f1f32",
+  "orientation": "any",
+  "categories": ["games", "strategy"],
+  "icons": [
+    {
+      "src": "/settlement_red.22949197b57f9cfd968b.svg",
+      "sizes": "128x128 192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

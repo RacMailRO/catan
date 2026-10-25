@@ -102,6 +102,17 @@ export const App: React.FC = () => {
   const [activeModal, setActiveModal] = useState<GameModalType>('none');
   const [autoPlayAi, setAutoPlayAi] = useState<boolean>(true);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [mobileHudOpen, setMobileHudOpen] = useState<boolean>(false);
+  const [mobileDockCollapsed, setMobileDockCollapsed] = useState<boolean>(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    }
+  };
   const [diceRollAnimKey, setDiceRollAnimKey] = useState<string>('init');
   const lastSavedGameIdRef = useRef<string | null>(null);
 
@@ -520,6 +531,14 @@ export const App: React.FC = () => {
           >
             🌐 {t.langToggle}
           </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={toggleFullscreen}
+            title={isFullscreen ? 'Ieșire Ecran Complet' : 'Ecran Complet'}
+          >
+            {isFullscreen ? '🗗' : '⛶'}
+          </button>
         </div>
       </header>
 
@@ -840,7 +859,28 @@ export const App: React.FC = () => {
       {activeTab === 'game' && gameState && playerView && (
         <main className="game-viewport">
           {/* Left HUD Column (345px wide): Compact Players, Single-Row Bank Stock & Modal Triggers */}
-          <aside className="game-left-hud">
+          {/* Backdrop for Mobile Slide-in Drawer */}
+          {mobileHudOpen && (
+            <div
+              className="hud-backdrop mobile-only"
+              onClick={() => setMobileHudOpen(false)}
+            />
+          )}
+
+          {/* Left HUD Column: Slide-in Drawer on mobile, static 345px on desktop */}
+          <aside className={`game-left-hud ${mobileHudOpen ? 'mobile-open' : ''}`}>
+            <div className="mobile-hud-header mobile-only">
+              <span style={{ fontWeight: 700, color: 'var(--accent-gold)' }}>
+                👥 {locale === 'ro' ? 'Participanți & Bancă' : 'Players & Bank'}
+              </span>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => setMobileHudOpen(false)}
+              >
+                ✕ {locale === 'ro' ? 'Închide' : 'Close'}
+              </button>
+            </div>
             <div className="panel" style={{ flex: 1, minHeight: 0 }}>
               <h2>
                 🏆 {locale === 'ro' ? 'Participanți' : 'Players'} (Țintă: {gameState.rules.victoryPointsToWin} VP)
@@ -955,6 +995,14 @@ export const App: React.FC = () => {
           {/* Center Interactive Map Stage */}
           <section className="board-stage">
             <div className="board-top-banner">
+              <button
+                type="button"
+                className="btn btn-primary mobile-only"
+                onClick={() => setMobileHudOpen(true)}
+                style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                👥 {locale === 'ro' ? 'Scor & Bancă' : 'Scores & Bank'}
+              </button>
               <div className="phase-pill">
                 <span style={{ color: 'var(--accent-gold)', marginRight: 8 }}>
                   Tura {gameState.turn} ({activePlayerObj?.name})
@@ -1016,7 +1064,15 @@ export const App: React.FC = () => {
           </section>
 
           {/* Bottom Dock: Visual Resource Hand + Dev Cards + Quick Action & Modal Triggers */}
-          <footer className="game-bottom-dock">
+          <footer className={`game-bottom-dock ${mobileDockCollapsed ? 'dock-collapsed' : ''}`}>
+            <div
+              className="dock-collapse-bar mobile-only"
+              onClick={() => setMobileDockCollapsed((c) => !c)}
+            >
+              {mobileDockCollapsed
+                ? '▲ Afișează Resurse & Acțiuni'
+                : '▼ Ascunde Resurse & Acțiuni'}
+            </div>
             {/* Active / Human Player's Visual Cards Hand */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflowX: 'auto' }}>
               <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginRight: 2 }}>

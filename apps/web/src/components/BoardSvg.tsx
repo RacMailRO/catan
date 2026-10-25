@@ -30,11 +30,6 @@ const TERRAIN_FALLBACK_FILL: Record<TerrainType, string> = {
   desert: '#d6bc8b'
 };
 
-/**
- * Column mapping in /terrains_hexes.png (7 columns x 4 rows):
- * col 0 = water/sea, col 1 = desert, col 2 = forest, col 3 = hills,
- * col 4 = pasture, col 5 = mountains, col 6 = fields
- */
 const TERRAIN_SPRITE_COL: Record<TerrainType, number> = {
   desert: 1,
   forest: 2,
@@ -44,11 +39,6 @@ const TERRAIN_SPRITE_COL: Record<TerrainType, number> = {
   fields: 6
 };
 
-/**
- * Column mapping in /harbors.png (7 columns x 1 row):
- * col 0 = 2:1 sheep, col 1 = 2:1 wheat, col 2 = 2:1 brick,
- * col 3 = 2:1 wood, col 4 = 2:1 ore, col 5 = 3:1 generic
- */
 const HARBOR_SPRITE_COL: Record<HarborType, number> = {
   sheep: 0,
   wheat: 1,
@@ -58,10 +48,6 @@ const HARBOR_SPRITE_COL: Record<HarborType, number> = {
   generic: 5
 };
 
-/**
- * Column mapping in /numbers.png (10 columns x 1 row):
- * [2, 3, 4, 5, 6, 8, 9, 10, 11, 12]
- */
 const NUMBER_TOKEN_ORDER = [2, 3, 4, 5, 6, 8, 9, 10, 11, 12];
 
 const PLAYER_COLOR_HEX: Record<PlayerColor, string> = {
@@ -137,9 +123,27 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
     panY: 0
   });
 
+  const touchStateRef = useRef<{
+    mode: 'none' | 'drag' | 'pinch';
+    startX: number;
+    startY: number;
+    startPanX: number;
+    startPanY: number;
+    startDist: number;
+    startZoom: number;
+  }>({
+    mode: 'none',
+    startX: 0,
+    startY: 0,
+    startPanX: 0,
+    startPanY: 0,
+    startDist: 0,
+    startZoom: 1
+  });
+
   const outerSeaRing = useMemo(() => generateOuterSeaRing(), []);
 
-  // Non-passive wheel listener to strictly prevent page scrolling while zooming the SVG board
+  // Native non-passive listeners for desktop mouse wheel AND mobile pinch-to-zoom + touch drag
   useEffect(() => {
     const svgEl = svgRef.current;
     if (!svgEl) return;
@@ -148,16 +152,90 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
       e.preventDefault();
       e.stopPropagation();
       const factor = e.deltaY < 0 ? 1.12 : 0.89;
-      setZoom((prev) => Math.min(2.8, Math.max(0.55, Number((prev * factor).toFixed(2)))));
+      setZoom((prev) => Math.min(3.2, Math.max(0.45, Number((prev * factor).toFixed(2)))));
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && target.dataset && target.dataset.interactive === 'true') {
+        return;
+      }
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const t1 = e.touches[0]!;
+        const t2 = e.touches[1]!;
+        const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        touchStateRef.current = {
+          mode: 'pinch',
+          startX: (t1.clientX + t2.clientX) / 2,
+          startY: (t1.clientY + t2.clientY) / 2,
+          startPanX: pan.x,
+          startPanY: pan.y,
+          startDist: dist,
+          startZoom: zoom
+        };
+      } else if (e.touches.length === 1) {
+        const t = e.touches[0]!;
+        touchStateRef.current = {
+          mode: 'drag',
+          startX: t.clientX,
+          startY: t.clientY,
+          startPanX: pan.x,
+          startPanY: pan.y,
+          startDist: 0,
+          startZoom: zoom
+        };
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (touchStateRef.current.mode === 'pinch' && e.touches.length === 2) {
+        e.preventDefault();
+        const t1 = e.touches[0]!;
+        const t2 = e.touches[1]!;
+        const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        if (touchStateRef.current.startDist > 0) {
+          const scale = dist / touchStateRef.current.startDist;
+          const nextZoom = Math.min(
+            3.2,
+            Math.max(0.45, Number((touchStateRef.current.startZoom * scale).toFixed(2)))
+          );
+          setZoom(nextZoom);
+        }
+      } else if (touchStateRef.current.mode === 'drag' && e.touches.length === 1) {
+        e.preventDefault();
+        const t = e.touches[0]!;
+        const dx = t.clientX - touchStateRef.current.startX;
+        const dy = t.clientY - touchStateRef.current.startY;
+        setPan({
+          x: touchStateRef.current.startPanX + dx,
+          y: touchStateRef.current.startPanY + dy
+        });
+      }
+    };
+
+    const handleTouchEnd = () => {
+      touchStateRef.current.mode = 'none';
     };
 
     svgEl.addEventListener('wheel', handleNativeWheel, { passive: false });
+    svgEl.addEventListener('touchstart', handleTouchStart, { passive: false });
+    svgEl.addEventListener('touchmove', handleTouchMove, { passive: false });
+    svgEl.addEventListener('touchend', handleTouchEnd);
+    svgEl.addEventListener('touchcancel', handleTouchEnd);
+
     return () => {
       svgEl.removeEventListener('wheel', handleNativeWheel);
+      svgEl.removeEventListener('touchstart', handleTouchStart);
+      svgEl.removeEventListener('touchmove', handleTouchMove);
+      svgEl.removeEventListener('touchend', handleTouchEnd);
+      svgEl.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, []);
+  }, [pan.x, pan.y, zoom]);
 
+  // Desktop Mouse Drag Fallback
   const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (e.pointerType === 'touch') return;
     const target = e.target as HTMLElement;
     if (target.dataset.interactive === 'true') return;
     setIsDragging(true);
@@ -170,7 +248,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
   };
 
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (!isDragging) return;
+    if (e.pointerType === 'touch' || !isDragging) return;
     const dx = e.clientX - dragStartRef.current.x;
     const dy = e.clientY - dragStartRef.current.y;
     setPan({
@@ -199,11 +277,11 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', flex: 1, display: 'flex', overflow: 'hidden' }}>
-      <div className="zoom-controls" style={{ position: 'absolute', bottom: 12, right: 12, zIndex: 12 }}>
+      <div className="zoom-controls">
         <button
           type="button"
           className="btn"
-          onClick={() => setZoom((z) => Math.min(2.8, Number((z + 0.2).toFixed(2))))}
+          onClick={() => setZoom((z) => Math.min(3.2, Number((z + 0.2).toFixed(2))))}
           title="Zoom In"
         >
           ＋
@@ -214,7 +292,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
         <button
           type="button"
           className="btn"
-          onClick={() => setZoom((z) => Math.max(0.55, Number((z - 0.2).toFixed(2))))}
+          onClick={() => setZoom((z) => Math.max(0.45, Number((z - 0.2).toFixed(2))))}
           title="Zoom Out"
         >
           －
@@ -393,10 +471,10 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                     data-interactive="true"
                     cx={hex.x}
                     cy={hex.y + 2}
-                    r={38}
-                    fill="rgba(56, 189, 248, 0.25)"
+                    r={42}
+                    fill="rgba(56, 189, 248, 0.3)"
                     stroke="#38bdf8"
-                    strokeWidth={3.5}
+                    strokeWidth={4}
                     strokeDasharray="6,3"
                   />
                 )}
@@ -404,7 +482,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             );
           })}
 
-          {/* 2. Render 9 Harbors & Docks on top of Sea & Coastline so they are large and clearly visible */}
+          {/* 2. Render 9 Harbors & Docks on top of Sea & Coastline */}
           {board.harbors.map((harbor) => {
             const v1 = board.vertices[harbor.vertexIds[0]];
             const v2 = board.vertices[harbor.vertexIds[1]];
@@ -475,7 +553,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                   />
                 </g>
 
-                {/* Crisp Trade Ratio Pill Badge on the bottom rim of the Harbor */}
+                {/* Crisp Trade Ratio Pill Badge */}
                 <rect
                   x={harbor.x - 28}
                   y={harbor.y + harborRadius - 12}
@@ -500,7 +578,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             );
           })}
 
-          {/* 3. Render Edges (Built Roads & Highlighted Legal Road Edges) */}
+          {/* 3. Render Edges (Built Roads & Highlighted Legal Road Edges with Large Touch Hit Targets) */}
           {Object.values(board.edges).map((edge) => {
             const builtRoad = board.roads[edge.id];
             const isHighlighted = highlightedEdges?.has(edge.id) ?? false;
@@ -545,6 +623,17 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
 
                 {isHighlighted && (
                   <g>
+                    {/* Generous invisible touch target line (width 32) */}
+                    <line
+                      data-interactive="true"
+                      x1={edge.x1}
+                      y1={edge.y1}
+                      x2={edge.x2}
+                      y2={edge.y2}
+                      stroke="transparent"
+                      strokeWidth={32}
+                      strokeLinecap="round"
+                    />
                     <line
                       data-interactive="true"
                       x1={edge.x1}
@@ -552,18 +641,18 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                       x2={edge.x2}
                       y2={edge.y2}
                       stroke="#38bdf8"
-                      strokeWidth={15}
-                      strokeOpacity={0.8}
+                      strokeWidth={16}
+                      strokeOpacity={0.85}
                       strokeLinecap="round"
                     />
                     <circle
                       data-interactive="true"
                       cx={(edge.x1 + edge.x2) / 2}
                       cy={(edge.y1 + edge.y2) / 2}
-                      r={11}
+                      r={14}
                       fill="#38bdf8"
                       stroke="#0f172a"
-                      strokeWidth={2}
+                      strokeWidth={2.5}
                     />
                   </g>
                 )}
@@ -571,7 +660,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             );
           })}
 
-          {/* 4. Render Vertices (Built Settlements, Cities WITHOUT circles, larger & colored per player) */}
+          {/* 4. Render Vertices (Settlements, Cities, and Highlighted Legal Vertices with Large Touch Hit Targets) */}
           {Object.values(board.vertices).map((vertex) => {
             const building = board.buildings[vertex.id];
             const isHighlighted = highlightedVertices?.has(vertex.id) ?? false;
@@ -621,15 +710,25 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 )}
 
                 {isHighlighted && (
-                  <circle
-                    data-interactive="true"
-                    cx={0}
-                    cy={0}
-                    r={building ? 26 : 16}
-                    fill="rgba(56, 189, 248, 0.5)"
-                    stroke="#38bdf8"
-                    strokeWidth={3.5}
-                  />
+                  <g>
+                    {/* Generous touch hit circle */}
+                    <circle
+                      data-interactive="true"
+                      cx={0}
+                      cy={0}
+                      r={24}
+                      fill="transparent"
+                    />
+                    <circle
+                      data-interactive="true"
+                      cx={0}
+                      cy={0}
+                      r={building ? 28 : 18}
+                      fill="rgba(56, 189, 248, 0.55)"
+                      stroke="#38bdf8"
+                      strokeWidth={3.5}
+                    />
+                  </g>
                 )}
               </g>
             );
