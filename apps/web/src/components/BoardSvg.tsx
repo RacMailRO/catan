@@ -276,7 +276,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
   const tokenRadius = tokenSize / 2;
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', flex: 1, display: 'flex', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
       {/* Desktop Zoom Controls (bottom-right on desktop) */}
       <div className="zoom-controls desktop-only">
         <button
@@ -314,6 +314,8 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
         ref={svgRef}
         viewBox="-640 -580 1280 1160"
         style={{
+          position: 'absolute',
+          inset: 0,
           width: '100%',
           height: '100%',
           cursor: isDragging ? 'grabbing' : 'grab',

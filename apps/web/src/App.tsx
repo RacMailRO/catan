@@ -476,8 +476,30 @@ export const App: React.FC = () => {
       <header className="app-header">
         <div className="brand-title">
           <span>🏝️</span>
-          <span>{t.appTitle}</span>
+          <span className="desktop-only">{t.appTitle}</span>
+          <span className="mobile-only">Catan</span>
         </div>
+
+        {/* Live Turn & Phase Status placed neatly in the top header */}
+        {activeTab === 'game' && gameState && (
+          <div className="header-turn-status">
+            <span
+              className="color-dot"
+              style={{ backgroundColor: activePlayerObj?.color, width: 10, height: 10, flexShrink: 0 }}
+            />
+            <span className="turn-label">
+              T{gameState.turn} ({activePlayerObj?.name}):
+            </span>
+            <span className="phase-label">
+              {PHASE_LABELS[locale][gameState.phase]}
+            </span>
+            {buildMode !== 'none' && (
+              <span className="build-indicator">
+                👉 {buildMode.toUpperCase()}
+              </span>
+            )}
+          </div>
+        )}
 
         <nav className="nav-tabs">
           <button
@@ -997,23 +1019,12 @@ export const App: React.FC = () => {
             <div className="board-top-banner">
               <button
                 type="button"
-                className="btn btn-primary mobile-only"
-                onClick={() => setMobileHudOpen(true)}
+                className="btn btn-primary"
+                onClick={() => setActiveModal('score_bank')}
                 style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}
               >
                 👥 {locale === 'ro' ? 'Scor & Bancă' : 'Scores & Bank'}
               </button>
-              <div className="phase-pill">
-                <span style={{ color: 'var(--accent-gold)', marginRight: 8 }}>
-                  Tura {gameState.turn} ({activePlayerObj?.name})
-                </span>
-                {PHASE_LABELS[locale][gameState.phase]}
-                {buildMode !== 'none' && (
-                  <span style={{ marginLeft: 8, color: '#38bdf8' }}>
-                    👉 Selectează pe hartă: {buildMode.toUpperCase()}
-                  </span>
-                )}
-              </div>
 
               {/* Animated Dice Roll Widget in Top-Right of the Board */}
               <AnimatedDiceWidget
