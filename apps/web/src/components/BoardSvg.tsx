@@ -7,7 +7,7 @@ import {
   TerrainType,
   axialToPixel
 } from '@catan/core';
-import { Locale } from '../i18n';
+import { Locale, RESOURCE_ICONS } from '../i18n';
 
 export interface BoardSvgProps {
   board: BoardState;
@@ -30,13 +30,17 @@ const TERRAIN_FALLBACK_FILL: Record<TerrainType, string> = {
   desert: '#d6bc8b'
 };
 
-const TERRAIN_SPRITE_COL: Record<TerrainType, number> = {
-  desert: 1,
-  forest: 2,
-  hills: 3,
-  pasture: 4,
-  mountains: 5,
-  fields: 6
+// Per-terrain hex art variants (for visual variety across same-terrain hexes), cropped from
+// the higher-resolution original tile sheets: lemn-oaie.jpg (forest/pasture),
+// oaie-spic.jpg (pasture/fields) and caramida_piatra.jpg (hills/mountains). Desert has no
+// higher-res source, so it keeps its single tile cropped from the original terrains_hexes.png.
+const TERRAIN_IMAGES: Record<TerrainType, string[]> = {
+  forest: ['/terrain_forest_1.png', '/terrain_forest_2.png', '/terrain_forest_3.png', '/terrain_forest_4.png'],
+  pasture: ['/terrain_pasture_1.png', '/terrain_pasture_2.png', '/terrain_pasture_3.png', '/terrain_pasture_4.png'],
+  fields: ['/terrain_fields_1.png', '/terrain_fields_2.png', '/terrain_fields_3.png', '/terrain_fields_4.png'],
+  hills: ['/terrain_hills_1.png', '/terrain_hills_2.png', '/terrain_hills_3.png'],
+  mountains: ['/terrain_mountains_1.png', '/terrain_mountains_2.png', '/terrain_mountains_3.png'],
+  desert: ['/terrain_desert_1.png']
 };
 
 // Original hex-tile artwork, cropped from /porturi-2.jpg (2:1 harbors) and /porturi-3.jpg
@@ -51,6 +55,16 @@ const PORT_HARBOR_IMAGE: Record<HarborType, string> = {
   generic: '/harbor_generic.png'
 };
 const SEA_TILE_IMAGE = '/sea_tile.png';
+// Marker color for each harbor type's 2 trade-bonus vertices — matches the resource's
+// usual palette elsewhere in the UI; generic (3:1) gets a neutral gold.
+const HARBOR_VERTEX_COLOR: Record<HarborType, string> = {
+  brick: '#b45309',
+  wood: '#166534',
+  sheep: '#65a30d',
+  wheat: '#ca8a04',
+  ore: '#64748b',
+  generic: '#eab308'
+};
 // The baked-in dock/sand in the original tile art points toward this angle by default
 // (0° = east, 90° = south, screen-space degrees); each harbor hex is rotated from this
 // to the angle that points back toward the island so the pier faces the coast.
@@ -110,11 +124,20 @@ function generateOuterSeaRing(): OuterSeaHex[] {
   return ring;
 }
 
-// Angle from this outer sea hex back toward the island center (0,0) — the coast lies in
-// roughly this direction, so rotating a harbor tile's art to face this angle points its
-// dock at the island rather than out to open sea.
-function seaHexAngleToCenterDeg(sea: OuterSeaHex): number {
-  return (Math.atan2(-sea.y, -sea.x) * 180) / Math.PI;
+// Angle from this outer sea hex to the midpoint of its harbor's two coastal vertices —
+// the exact direction the dock needs to face. (The island center is NOT a safe stand-in:
+// a harbor's coastal edge is often tangentially offset from the pure hex-to-center
+// radial, which visibly misaimed the dock art.)
+function harborFacingAngleDeg(
+  sea: OuterSeaHex,
+  harbor: BoardState['harbors'][number],
+  vertices: BoardState['vertices']
+): number {
+  const v1 = vertices[harbor.vertexIds[0]];
+  const v2 = vertices[harbor.vertexIds[1]];
+  const tx = v1 && v2 ? (v1.x + v2.x) / 2 : sea.x;
+  const ty = v1 && v2 ? (v1.y + v2.y) / 2 : sea.y;
+  return (Math.atan2(ty - sea.y, tx - sea.x) * 180) / Math.PI;
 }
 
 export const BoardSvg: React.FC<BoardSvgProps> = ({
@@ -299,7 +322,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
     setPan({ x: 0, y: 0 });
   };
 
-  // Bounding cell dimensions for pointy-top hex sprite from /terrains_hexes.png
+  // Display size each hex tile image (terrain, sea, harbor) is stretched to fill
   const hexCellW = Math.sqrt(3) * HEX_RADIUS * 1.04;
   const hexCellH = 2 * HEX_RADIUS * 1.04;
   const tokenSize = 54;
@@ -389,7 +412,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             const harbor = harborBySeaHexId.get(sea.id);
             const href = harbor ? PORT_HARBOR_IMAGE[harbor.type] : SEA_TILE_IMAGE;
             const rotationDeg = harbor
-              ? seaHexAngleToCenterDeg(sea) - PORT_ART_DEFAULT_ANGLE_DEG
+              ? harborFacingAngleDeg(sea, harbor, board.vertices) - PORT_ART_DEFAULT_ANGLE_DEG
               : 0;
             // A rotated image must be oversized (a square at least as wide as the hex is
             // tall) so its corners still cover the hex's own corners at every angle —
@@ -445,12 +468,12 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             />
           ))}
 
-          {/* 1. Render 19 Island Hex Tiles using /terrains_hexes.png & /numbers.png */}
+          {/* 1. Render 19 Island Hex Tiles using the per-terrain tile art & /numbers.png */}
           {Object.values(board.hexes).map((hex, hexIdx) => {
             const isHighlighted = highlightedHexes?.has(hex.id) ?? false;
             const hasRobber = board.robberHexId === hex.id;
-            const spriteCol = TERRAIN_SPRITE_COL[hex.terrain];
-            const spriteRow = hex.terrain === 'desert' ? 0 : hexIdx % 4;
+            const terrainVariants = TERRAIN_IMAGES[hex.terrain];
+            const terrainHref = terrainVariants[hexIdx % terrainVariants.length]!;
             const tokenCol =
               hex.numberToken !== null ? NUMBER_TOKEN_ORDER.indexOf(hex.numberToken) : -1;
 
@@ -471,14 +494,14 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                   fill={TERRAIN_FALLBACK_FILL[hex.terrain]}
                 />
 
-                {/* Clipped Terrain Artwork from /terrains_hexes.png */}
+                {/* Clipped Terrain Artwork */}
                 <g clipPath={`url(#clip-hex-${hex.id})`} style={{ pointerEvents: 'none' }}>
                   <image
-                    href="/terrains_hexes.png"
-                    x={hex.x - hexCellW / 2 - spriteCol * hexCellW}
-                    y={hex.y - hexCellH / 2 - spriteRow * hexCellH}
-                    width={hexCellW * 7}
-                    height={hexCellH * 4}
+                    href={terrainHref}
+                    x={hex.x - hexCellW / 2}
+                    y={hex.y - hexCellH / 2}
+                    width={hexCellW}
+                    height={hexCellH}
                     preserveAspectRatio="none"
                   />
                 </g>
@@ -565,55 +588,25 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             );
           })}
 
-          {/* 2. Wooden piers from each harbor's sea hex to its two coastal vertices — the
-              dock and trade-ratio label themselves are now baked into the sea hex's own
-              tile artwork (rendered above), so this just ties the art to the exact two
-              vertices that get the trade bonus. */}
+          {/* 2. Colored markers on each harbor's 2 trade-bonus vertices — a settlement on
+              either one gets that harbor's rate. The dock/ratio art itself is baked into
+              the sea hex's tile (rendered above); this just marks which 2 spots benefit. */}
           {board.harbors.map((harbor) => {
             const v1 = board.vertices[harbor.vertexIds[0]];
             const v2 = board.vertices[harbor.vertexIds[1]];
             if (!v1 || !v2) return null;
+            const color = HARBOR_VERTEX_COLOR[harbor.type];
 
             return (
               <g key={harbor.id} style={{ pointerEvents: 'none' }}>
-                <line
-                  x1={harbor.x}
-                  y1={harbor.y}
-                  x2={v1.x}
-                  y2={v1.y}
-                  stroke="#78350f"
-                  strokeWidth={9}
-                  strokeLinecap="round"
-                />
-                <line
-                  x1={harbor.x}
-                  y1={harbor.y}
-                  x2={v1.x}
-                  y2={v1.y}
-                  stroke="#fde68a"
-                  strokeWidth={4}
-                  strokeDasharray="6,4"
-                  strokeLinecap="round"
-                />
-                <line
-                  x1={harbor.x}
-                  y1={harbor.y}
-                  x2={v2.x}
-                  y2={v2.y}
-                  stroke="#78350f"
-                  strokeWidth={9}
-                  strokeLinecap="round"
-                />
-                <line
-                  x1={harbor.x}
-                  y1={harbor.y}
-                  x2={v2.x}
-                  y2={v2.y}
-                  stroke="#fde68a"
-                  strokeWidth={4}
-                  strokeDasharray="6,4"
-                  strokeLinecap="round"
-                />
+                {[v1, v2].map((v, idx) => (
+                  <g key={idx} transform={`translate(${v.x}, ${v.y})`}>
+                    <circle r={11} fill={color} fillOpacity={0.92} stroke="#fef3c7" strokeWidth={2} />
+                    <text textAnchor="middle" y={4} fontSize="11">
+                      {harbor.type === 'generic' ? '⚓' : RESOURCE_ICONS[harbor.type]}
+                    </text>
+                  </g>
+                ))}
               </g>
             );
           })}
