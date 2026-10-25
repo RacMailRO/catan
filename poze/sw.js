@@ -1,5 +1,5 @@
 // Catan v2 Service Worker for PWA Offline Shell & Caching
-const CACHE_NAME = 'catan-v2-cache-v2';
+const CACHE_NAME = 'catan-v2-cache-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -23,9 +23,7 @@ const STATIC_ASSETS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch(() => {
-        // Continue even if some individual asset fails
-      });
+      return cache.addAll(STATIC_ASSETS).catch(() => {});
     })
   );
   self.skipWaiting();
@@ -48,14 +46,23 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Only intercept GET requests with http or https protocol
   if (event.request.method !== 'GET') return;
   if (!event.request.url.startsWith('http://') && !event.request.url.startsWith('https://')) return;
 
   const url = new URL(event.request.url);
 
-  // Skip API and websocket requests
-  if (url.pathname.startsWith('/api') || url.pathname.startsWith('/ws')) return;
+  // NEVER intercept Vite dev server internal assets, HMR, APIs or websockets
+  if (
+    url.pathname.startsWith('/src') ||
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/node_modules') ||
+    url.pathname.startsWith('/api') ||
+    url.pathname.startsWith('/ws') ||
+    url.search.includes('token=') ||
+    url.search.includes('v=')
+  ) {
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
@@ -70,16 +77,25 @@ self.addEventListener('fetch', (event) => {
           .catch(() => {});
         return cachedResponse;
       }
-      return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+
+      return fetch(event.request)
+        .then((networkResponse) => {
+          if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+            return networkResponse;
+          }
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache).catch(() => {});
+          });
           return networkResponse;
-        }
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache).catch(() => {});
+        })
+        .catch(() => {
+          return cachedResponse || new Response('Offline resource unavailable', {
+            status: 503,
+            statusText: 'Service Unavailable',
+            headers: { 'Content-Type': 'text/plain' }
+          });
         });
-        return networkResponse;
-      }).catch(() => cachedResponse);
     })
   );
 });

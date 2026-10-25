@@ -1074,3 +1074,66 @@ select {
     flex-direction: row !important;
   }
 }
+
+.btn-dock-toggle {
+  background: var(--bg-card);
+  border: 1px solid var(--accent-gold);
+  color: var(--accent-gold);
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0.18rem 0.55rem;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+@media (max-width: 960px) {
+  .lobby-container {
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: 0.45rem !important;
+    gap: 0.65rem !important;
+  }
+
+  .panel {
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    padding: 0.6rem !important;
+    flex: none !important;
+  }
+
+  .panel-scroll {
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    flex: none !important;
+    gap: 0.45rem !important;
+    max-height: none !important;
+  }
+
+  .game-bottom-dock {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    background: rgba(15, 31, 50, 0.96);
+    backdrop-filter: blur(12px);
+    border-top: 1.5px solid var(--border-color);
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.7);
+    padding: 0.35rem 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+}
