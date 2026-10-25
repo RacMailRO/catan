@@ -92,7 +92,7 @@ export const App: React.FC = () => {
   ]);
 
   const [rules, setRules] = useState<GameRulesConfig>(() => createRulesConfig());
-  const [customSeed, setCustomSeed] = useState<string>('catan-2026');
+  const [customSeed, setCustomSeed] = useState<string>('');
   const [serverStatusMsg, setServerStatusMsg] = useState<string | null>(null);
 
   // Active Game & Replay Recorder State
@@ -349,7 +349,7 @@ export const App: React.FC = () => {
 
   // Start Game from Lobby
   const handleStartGame = async (syncWithServer = false) => {
-    const seed = customSeed.trim() || `catan-${Date.now()}`;
+    const seed = customSeed.trim() || `catan-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
     const initial = createGame({
       gameId: `game_${Date.now()}`,
       seed,
@@ -991,7 +991,7 @@ export const App: React.FC = () => {
                     type="text"
                     value={customSeed}
                     onChange={(e) => setCustomSeed(e.target.value)}
-                    placeholder="ex: catan-2026"
+                    placeholder="Aleatoriu (lasă liber sau introdu seed fix)"
                   />
                 </div>
               </div>
