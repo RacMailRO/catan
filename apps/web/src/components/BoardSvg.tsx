@@ -277,7 +277,8 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', flex: 1, display: 'flex', overflow: 'hidden' }}>
-      <div className="zoom-controls">
+      {/* Desktop Zoom Controls (bottom-right on desktop) */}
+      <div className="zoom-controls desktop-only">
         <button
           type="button"
           className="btn"
@@ -298,6 +299,16 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
           －
         </button>
       </div>
+
+      {/* Discrete Mobile Reset Button in bottom-right */}
+      <button
+        type="button"
+        className="btn mobile-only mobile-reset-zoom-btn"
+        onClick={resetView}
+        title="Recentrare Harta"
+      >
+        🎯 {Math.round(zoom * 100)}%
+      </button>
 
       <svg
         ref={svgRef}

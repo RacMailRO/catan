@@ -78,7 +78,7 @@ export interface DevCardSpriteProps {
   count?: number;
   isNew?: boolean;
   canPlay?: boolean;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   onPlay?: () => void;
   actionLabel?: string;
 }
@@ -95,8 +95,10 @@ export const DevCardSprite: React.FC<DevCardSpriteProps> = ({
 }) => {
   const pos = DEV_CARD_SPRITE_POS[type];
   const dimensions =
-    size === 'sm'
-      ? { width: 56, height: 84 }
+    size === 'xs'
+      ? { width: 38, height: 56 }
+      : size === 'sm'
+      ? { width: 50, height: 74 }
       : size === 'md'
       ? { width: 84, height: 126 }
       : { width: 108, height: 162 };

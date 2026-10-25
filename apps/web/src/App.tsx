@@ -55,7 +55,7 @@ import {
 
 type ActiveTab = 'lobby' | 'game' | 'replay' | 'benchmark';
 type BuildSelectionMode = 'none' | 'road' | 'settlement' | 'city' | 'knight';
-type GameModalType = 'none' | 'trade' | 'dev_cards' | 'event_log' | 'costs_help';
+type GameModalType = 'none' | 'trade' | 'dev_cards' | 'event_log' | 'costs_help' | 'score_bank';
 
 export const App: React.FC = () => {
   const [locale, setLocale] = useState<Locale>('ro');
@@ -1065,146 +1065,285 @@ export const App: React.FC = () => {
 
           {/* Bottom Dock: Visual Resource Hand + Dev Cards + Quick Action & Modal Triggers */}
           <footer className={`game-bottom-dock ${mobileDockCollapsed ? 'dock-collapsed' : ''}`}>
-            <div
-              className="dock-collapse-bar mobile-only"
-              onClick={() => setMobileDockCollapsed((c) => !c)}
-            >
-              {mobileDockCollapsed
-                ? '▲ Afișează Resurse & Acțiuni'
-                : '▼ Ascunde Resurse & Acțiuni'}
-            </div>
-            {/* Active / Human Player's Visual Cards Hand */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflowX: 'auto' }}>
-              <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginRight: 2 }}>
-                <div>Cărțile lui</div>
-                <strong style={{ color: 'var(--accent-gold)' }}>
-                  {(viewerPlayerObj ?? activePlayerObj)?.name}
-                </strong>
+            {/* Header row: player name, card count, and mobile collapse toggle */}
+            <div className="dock-title-bar">
+              <div className="dock-player-name">
+                <span>Cărțile lui</span> <strong>{(viewerPlayerObj ?? activePlayerObj)?.name}</strong>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 4 }}>
+                  ({totalResourceCount((viewerPlayerObj ?? activePlayerObj)?.resources ?? createEmptyResources())} resurse)
+                </span>
               </div>
+              <button
+                type="button"
+                className="btn mobile-only"
+                style={{ padding: '0.15rem 0.45rem', fontSize: '0.72rem' }}
+                onClick={() => setMobileDockCollapsed((c) => !c)}
+              >
+                {mobileDockCollapsed ? '▲ Arată' : '▼ Ascunde'}
+              </button>
+            </div>
 
+            {/* Cards Row: All 5 resources + dev card in ONE ROW, ZERO SCROLL */}
+            <div className="dock-cards-row">
               {ALL_RESOURCES.map((r) => (
                 <ResourceCardSprite
                   key={r}
                   resource={r}
                   count={(viewerPlayerObj ?? activePlayerObj)?.resources[r] ?? 0}
                   locale={locale}
-                  size="sm"
+                  size="xs"
                 />
               ))}
 
-              {/* Development Cards Trigger Card */}
               <div
                 onClick={() => setActiveModal('dev_cards')}
-                style={{ cursor: 'pointer', marginLeft: 4 }}
-                title="Deschide Cărțile de Dezvoltare"
+                style={{ cursor: 'pointer' }}
+                title={locale === 'ro' ? 'Deschide Cărțile de Dezvoltare' : 'Open Development Cards'}
               >
                 <DevCardSprite
                   type="back"
                   locale={locale}
                   count={unplayedDevCards.length}
                   canPlay={unplayedDevCards.length > 0}
-                  size="sm"
+                  size="xs"
                 />
               </div>
             </div>
 
-            {/* Action & Modal Buttons */}
-            {activePlayerObj && (
-              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end' }}>
-                {gameState.phase === 'turn_start' && isHumanTurn && (
+            {/* Actions Row: Underneath the cards, ZERO SCROLL */}
+            <div className="dock-actions-row">
+              {gameState.phase === 'turn_start' && isHumanTurn && activePlayerObj && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => executeAction(activePlayerObj.id, { type: 'roll_dice' })}
+                >
+                  🎲 {t.rollDice}
+                </button>
+              )}
+
+              {gameState.phase === 'main_actions' && isHumanTurn && activePlayerObj && (
+                <>
                   <button
                     type="button"
-                    className="btn btn-primary"
-                    onClick={() => executeAction(activePlayerObj.id, { type: 'roll_dice' })}
+                    className={`btn ${buildMode === 'road' ? 'btn-primary' : ''}`}
+                    disabled={
+                      !hasResources(activePlayerObj.resources, BUILDING_COSTS.road) ||
+                      activePlayerObj.remainingPieces.roads <= 0
+                    }
+                    onClick={() => setBuildMode((m) => (m === 'road' ? 'none' : 'road'))}
                   >
-                    🎲 {t.rollDice}
+                    🛣️ {t.buildRoad}
                   </button>
-                )}
 
-                {gameState.phase === 'main_actions' && isHumanTurn && (
-                  <>
-                    <button
-                      type="button"
-                      className={`btn ${buildMode === 'road' ? 'btn-primary' : ''}`}
-                      disabled={
-                        !hasResources(activePlayerObj.resources, BUILDING_COSTS.road) ||
-                        activePlayerObj.remainingPieces.roads <= 0
-                      }
-                      onClick={() => setBuildMode((m) => (m === 'road' ? 'none' : 'road'))}
+                  <button
+                    type="button"
+                    className={`btn ${buildMode === 'settlement' ? 'btn-primary' : ''}`}
+                    disabled={
+                      !hasResources(activePlayerObj.resources, BUILDING_COSTS.settlement) ||
+                      activePlayerObj.remainingPieces.settlements <= 0
+                    }
+                    onClick={() => setBuildMode((m) => (m === 'settlement' ? 'none' : 'settlement'))}
+                  >
+                    🏠 {t.buildSettlement}
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`btn ${buildMode === 'city' ? 'btn-primary' : ''}`}
+                    disabled={
+                      !hasResources(activePlayerObj.resources, BUILDING_COSTS.city) ||
+                      activePlayerObj.remainingPieces.cities <= 0
+                    }
+                    onClick={() => setBuildMode((m) => (m === 'city' ? 'none' : 'city'))}
+                  >
+                    🏰 {t.buildCity}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={
+                      !hasResources(activePlayerObj.resources, BUILDING_COSTS.dev_card) ||
+                      gameState.devCardDeck.length === 0
+                    }
+                    onClick={() => executeAction(activePlayerObj.id, { type: 'buy_dev_card' })}
+                  >
+                    🃏 +Dezvoltare
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => setActiveModal('trade')}
+                  >
+                    ⚓ Comerț
+                  </button>
+                </>
+              )}
+
+              {gameState.phase === 'main_actions' && isHumanTurn && activePlayerObj && (
+                <button
+                  type="button"
+                  className="btn btn-success"
+                  onClick={() => executeAction(activePlayerObj.id, { type: 'end_turn' })}
+                >
+                  ⏭️ {t.endTurn}
+                </button>
+              )}
+            </div>
+          </footer>
+
+          {/* MODAL: Responsive Score, Players & Bank Grid */}
+      {activeModal === 'score_bank' && gameState && playerView && (
+        <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
+          <div
+            className="modal-dialog"
+            style={{ maxWidth: 880 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3>
+                🏆 {locale === 'ro' ? 'Clasament, Participanți & Bancă' : 'Leaderboard, Players & Bank'} (Țintă: {gameState.rules.victoryPointsToWin} VP)
+              </h3>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => setActiveModal('none')}
+              >
+                ✕ {locale === 'ro' ? 'Închide' : 'Close'}
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              {/* Responsive Grid of Players */}
+              <div className="score-bank-grid">
+                {playerView.players.map((p) => {
+                  const isCurrent = playerView.activePlayerId === p.id;
+                  const hasLongestRoad = playerView.longestRoadOwnerId === p.id;
+                  const hasLargestArmy = playerView.largestArmyOwnerId === p.id;
+                  return (
+                    <div
+                      key={p.id}
+                      className={`player-grid-card ${isCurrent ? 'active-turn' : ''}`}
                     >
-                      🛣️ {t.buildRoad}
-                    </button>
+                      <div className="player-grid-header">
+                        <div className="player-grid-title">
+                          <span
+                            className="color-dot"
+                            style={{ backgroundColor: p.color, width: 12, height: 12 }}
+                          />
+                          <span>{p.name}</span>
+                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                            [{p.type.toUpperCase()}]
+                          </span>
+                        </div>
+                        <span className="player-grid-score">
+                          {p.totalScore !== undefined ? `${p.totalScore} VP` : `${p.publicScore} VP`}
+                        </span>
+                      </div>
 
-                    <button
-                      type="button"
-                      className={`btn ${buildMode === 'settlement' ? 'btn-primary' : ''}`}
-                      disabled={
-                        !hasResources(activePlayerObj.resources, BUILDING_COSTS.settlement) ||
-                        activePlayerObj.remainingPieces.settlements <= 0
-                      }
-                      onClick={() =>
-                        setBuildMode((m) => (m === 'settlement' ? 'none' : 'settlement'))
-                      }
-                    >
-                      🏠 {t.buildSettlement}
-                    </button>
+                      {p.resources ? (
+                        <div style={{ display: 'flex', gap: 3, justifyContent: 'center', marginTop: 2 }}>
+                          {ALL_RESOURCES.map((r) => (
+                            <ResourceCardSprite
+                              key={r}
+                              resource={r}
+                              count={p.resources![r]}
+                              locale={locale}
+                              size="xs"
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.2rem 0' }}>
+                          🎴 {p.resourceCount} resurse · 🃏 {p.devCardCount} dezvoltare
+                        </div>
+                      )}
 
-                    <button
-                      type="button"
-                      className={`btn ${buildMode === 'city' ? 'btn-primary' : ''}`}
-                      disabled={
-                        !hasResources(activePlayerObj.resources, BUILDING_COSTS.city) ||
-                        activePlayerObj.remainingPieces.cities <= 0
-                      }
-                      onClick={() => setBuildMode((m) => (m === 'city' ? 'none' : 'city'))}
-                    >
-                      🏰 {t.buildCity}
-                    </button>
+                      <div className="player-grid-stats">
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>🛣️ Drum: {p.longestRoadLength}</span>
+                          <span>⚔️ Cavaleri: {p.knightsPlayed}</span>
+                        </div>
+                        <div className="player-grid-badges">
+                          {hasLongestRoad && (
+                            <span style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>
+                              🏅 +2 Drum
+                            </span>
+                          )}
+                          {hasLargestArmy && (
+                            <span style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>
+                              🛡️ +2 Armată
+                            </span>
+                          )}
+                          {isCurrent && (
+                            <span style={{ color: '#38bdf8', fontWeight: 700 }}>
+                              ⚡ La rând
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
 
-                    <button
-                      type="button"
-                      className="btn"
-                      disabled={
-                        !hasResources(activePlayerObj.resources, BUILDING_COSTS.dev_card) ||
-                        gameState.devCardDeck.length === 0
-                      }
-                      onClick={() => executeAction(activePlayerObj.id, { type: 'buy_dev_card' })}
-                    >
-                      🃏 +Dezvoltare
-                    </button>
+              {/* Bank Stock */}
+              <div style={{ background: '#0d1a29', padding: '0.5rem', borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '0.3rem' }}>
+                  🏦 Stoc Bancă & Pachet Cărți
+                </div>
+                <div className="bank-single-row" style={{ margin: 0 }}>
+                  {ALL_RESOURCES.map((r) => (
+                    <span key={r} className="res-badge" title={RESOURCE_LABELS[locale][r]}>
+                      {RESOURCE_ICONS[r]} {playerView.bank[r]}
+                    </span>
+                  ))}
+                  <span className="res-badge" title="Cărți de dezvoltare în pachet">
+                    🃏 {playerView.devCardDeckCount}
+                  </span>
+                </div>
+              </div>
 
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => setActiveModal('trade')}
-                    >
-                      ⚓ Comerț
-                    </button>
-                  </>
-                )}
-
+              {/* Match Controls */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem' }}>
                 <button
                   type="button"
                   className="btn"
-                  onClick={() => setActiveModal('dev_cards')}
+                  onClick={executeOneAiStep}
+                  disabled={gameState.phase === 'game_over' || isHumanTurn}
                 >
-                  🃏 Dezvoltare ({unplayedDevCards.length})
+                  ⏭ {t.stepAi}
                 </button>
-
-                {gameState.phase === 'main_actions' && isHumanTurn && (
-                  <button
-                    type="button"
-                    className="btn btn-success"
-                    onClick={() => executeAction(activePlayerObj.id, { type: 'end_turn' })}
-                  >
-                    ⏭ {t.endTurn}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className={`btn ${autoPlayAi ? 'btn-primary' : ''}`}
+                  onClick={() => setAutoPlayAi((a) => !a)}
+                >
+                  {autoPlayAi ? `⏸ ${t.pauseAi}` : `▶ ${t.autoPlayAi}`}
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setActiveModal('event_log')}
+                >
+                  📜 Jurnal ({recorder?.getEvents().length ?? 0})
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setActiveModal('costs_help')}
+                >
+                  📋 Tabel Costuri
+                </button>
               </div>
-            )}
-          </footer>
+            </div>
+          </div>
+        </div>
+      )}
 
-          {/* MODAL A: DEVELOPMENT CARDS HAND & PLAY ACTIONS */}
+      {/* MODAL A: DEVELOPMENT CARDS HAND & PLAY ACTIONS */}
           {activeModal === 'dev_cards' && activePlayerObj && (
             <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
               <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
