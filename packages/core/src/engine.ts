@@ -1505,10 +1505,10 @@ export function applyAction(
       const takenByPlayer: Record<string, number> = {};
       for (const other of nextState.players) {
         if (other.id === playerId) continue;
-        const amt = other.resources[res];
+        const amt = other.resources[res] ?? 0;
         if (amt > 0) {
           other.resources[res] = 0;
-          player.resources[res] += amt;
+          player.resources[res] = (player.resources[res] ?? 0) + amt;
           totalTaken += amt;
           takenByPlayer[other.id] = amt;
         }

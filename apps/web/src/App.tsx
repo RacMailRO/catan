@@ -97,6 +97,8 @@ type GameModalType =
   | 'none'
   | 'trade'
   | 'dev_cards'
+  | 'play_monopoly'
+  | 'play_year_of_plenty'
   | 'event_log'
   | 'costs_help'
   | 'score_bank'
@@ -832,6 +834,36 @@ export const App: React.FC = () => {
             showActionFeedback(`🥷 ${thief?.name ?? actingPlayerId} ți-a furat 1 ${resText}!`);
           }
         }
+      } else if (action.type === 'play_monopoly') {
+        const lastEv = data.recentEvents?.[data.recentEvents.length - 1];
+        const res = action.resource;
+        const resText = `${RESOURCE_ICONS[res]} ${RESOURCE_LABELS[locale][res]}`;
+        const totalTaken = Number(lastEv?.details?.totalTaken ?? 0);
+        const takenByPlayer = (lastEv?.details?.takenByPlayer ?? {}) as Record<string, number>;
+        const actingPlayer = newView.players.find((p) => p.id === actingPlayerId);
+
+        if (actingPlayerId === myId) {
+          if (totalTaken > 0) {
+            const breakdown = Object.entries(takenByPlayer)
+              .map(([vId, amt]) => `${amt} de la ${newView.players.find((p) => p.id === vId)?.name ?? vId}`)
+              .join(', ');
+            showActionFeedback(`👑 MONOPOL! Ai confiscat ${totalTaken}x ${resText} de la adversari (${breakdown})!`);
+          } else {
+            showActionFeedback(`👑 MONOPOL pe ${resText}: Niciun adversar nu avea această resursă în mână (0 cărți colectate).`);
+          }
+        } else {
+          const myLoss = takenByPlayer[myId ?? ''] ?? 0;
+          if (myLoss > 0) {
+            showActionFeedback(`👑 ${actingPlayer?.name ?? actingPlayerId} a declarat Monopol pe ${resText} și ți-a confiscat ${myLoss} cărți!`);
+          } else {
+            showActionFeedback(`👑 ${actingPlayer?.name ?? actingPlayerId} a declarat Monopol pe ${resText} (${totalTaken} cărți colectate).`);
+          }
+        }
+      } else if (action.type === 'play_year_of_plenty') {
+        const r1 = action.resources[0];
+        const r2 = action.resources[1];
+        const actingPlayer = newView.players.find((p) => p.id === actingPlayerId);
+        showActionFeedback(`🎁 ${actingPlayer?.name ?? actingPlayerId} a jucat Anul Abundenței (+1 ${RESOURCE_ICONS[r1]} ${RESOURCE_LABELS[locale][r1]}, +1 ${RESOURCE_ICONS[r2]} ${RESOURCE_LABELS[locale][r2]})`);
       } else if (action.type === 'buy_dev_card') {
         const lastEv = data.recentEvents?.[data.recentEvents.length - 1];
         const drawnType = lastEv?.details?.drawnType as DevCardType | undefined;
@@ -974,6 +1006,26 @@ export const App: React.FC = () => {
         } else {
           showActionFeedback(`🥷 ${victim?.name ?? action.targetPlayerId} nu avea nicio carte de furat.`);
         }
+      } else if (action.type === 'play_monopoly') {
+        const events = recorder.getEvents();
+        const lastEv = events[events.length - 1];
+        const res = action.resource;
+        const resText = `${RESOURCE_ICONS[res]} ${RESOURCE_LABELS[locale][res]}`;
+        const totalTaken = Number(lastEv?.details?.totalTaken ?? 0);
+        const takenByPlayer = (lastEv?.details?.takenByPlayer ?? {}) as Record<string, number>;
+        const actingPlayer = getPlayerById(newState, playerId);
+        if (totalTaken > 0) {
+          const breakdown = Object.entries(takenByPlayer)
+            .map(([vId, amt]) => `${amt} de la ${getPlayerById(newState, vId)?.name ?? vId}`)
+            .join(', ');
+          showActionFeedback(`👑 MONOPOL! ${actingPlayer?.name ?? playerId} a confiscat ${totalTaken}x ${resText} (${breakdown})!`);
+        } else {
+          showActionFeedback(`👑 MONOPOL pe ${resText}: Niciun adversar nu avea această resursă în mână (0 cărți colectate).`);
+        }
+      } else if (action.type === 'play_year_of_plenty') {
+        const r1 = action.resources[0];
+        const r2 = action.resources[1];
+        showActionFeedback(`🎁 Anul Abundenței: Ai primit 1x ${RESOURCE_ICONS[r1]} ${RESOURCE_LABELS[locale][r1]} și 1x ${RESOURCE_ICONS[r2]} ${RESOURCE_LABELS[locale][r2]} direct din bancă!`);
       } else if (action.type === 'buy_dev_card') {
         const events = recorder.getEvents();
         const lastEv = events[events.length - 1];
@@ -2462,6 +2514,10 @@ export const App: React.FC = () => {
                                   ? '⚔️ Activează Cavaler'
                                   : dt === 'road_building'
                                   ? '🛣️ Joacă 2 Drumuri'
+                                  : dt === 'monopoly'
+                                  ? '👑 Joacă Monopol'
+                                  : dt === 'year_of_plenty'
+                                  ? '🎁 Joacă Anul Abundenței'
                                   : undefined
                               }
                               onPlay={
@@ -2477,6 +2533,14 @@ export const App: React.FC = () => {
                                       });
                                       setActiveModal('none');
                                     }
+                                  : dt === 'monopoly'
+                                  ? () => {
+                                      setActiveModal('play_monopoly');
+                                    }
+                                  : dt === 'year_of_plenty'
+                                  ? () => {
+                                      setActiveModal('play_year_of_plenty');
+                                    }
                                   : undefined
                               }
                             />
@@ -2485,81 +2549,182 @@ export const App: React.FC = () => {
                     </div>
                   )}
 
-                  {isHumanTurn && canPlayDevCardType(gameState, activePlayerObj, 'year_of_plenty') && (
-                    <div className="candidate-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <strong>🎁 Anul Abundenței (alege 2 resurse din bancă):</strong>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <select
-                          value={yopResources[0]}
-                          onChange={(e) =>
-                            setYopResources([e.target.value as ResourceType, yopResources[1]])
-                          }
-                        >
-                          {ALL_RESOURCES.map((r) => (
-                            <option key={r} value={r}>
-                              {RESOURCE_LABELS[locale][r]}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          value={yopResources[1]}
-                          onChange={(e) =>
-                            setYopResources([yopResources[0], e.target.value as ResourceType])
-                          }
-                        >
-                          {ALL_RESOURCES.map((r) => (
-                            <option key={r} value={r}>
-                              {RESOURCE_LABELS[locale][r]}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          onClick={() => {
-                            executeAction(activePlayerObj.id, {
-                              type: 'play_year_of_plenty',
-                              resources: yopResources
-                            });
-                            setActiveModal('none');
-                          }}
-                        >
-                          Joacă Anul Abundenței
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  {/* Scurtături rapide pentru acțiuni de cărți de dezvoltare */}
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                    {isHumanTurn && canPlayDevCardType(gameState, activePlayerObj, 'monopoly') && (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        onClick={() => setActiveModal('play_monopoly')}
+                      >
+                        👑 Joacă Monopol (Selectează Resursa)
+                      </button>
+                    )}
+                    {isHumanTurn && canPlayDevCardType(gameState, activePlayerObj, 'year_of_plenty') && (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        onClick={() => setActiveModal('play_year_of_plenty')}
+                      >
+                        🎁 Joacă Anul Abundenței (Alege 2 Resurse)
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
-                  {isHumanTurn && canPlayDevCardType(gameState, activePlayerObj, 'monopoly') && (
-                    <div className="candidate-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <strong>👑 Monopol (alege resursa confiscată de la toți adversarii):</strong>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <select
-                          value={monopolyResource}
-                          onChange={(e) => setMonopolyResource(e.target.value as ResourceType)}
-                        >
-                          {ALL_RESOURCES.map((r) => (
-                            <option key={r} value={r}>
-                              {RESOURCE_LABELS[locale][r]}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          onClick={() => {
-                            executeAction(activePlayerObj.id, {
-                              type: 'play_monopoly',
-                              resource: monopolyResource
-                            });
-                            setActiveModal('none');
+          {/* MODAL SPECIAL: PLAY MONOPOLY - SELECT RESOURCE INTERACTIVELY */}
+          {activeModal === 'play_monopoly' && activePlayerObj && (
+            <div className="modal-backdrop" onClick={() => setActiveModal('dev_cards')}>
+              <div className="modal-dialog" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--accent-gold)' }}>
+                    👑 Declară Monopol
+                  </h3>
+                  <button type="button" className="btn" onClick={() => setActiveModal('dev_cards')}>
+                    ✕ Înapoi
+                  </button>
+                </div>
+                <div className="modal-body">
+                  <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', marginTop: 0, marginBottom: '0.85rem' }}>
+                    {locale === 'ro'
+                      ? 'Alege resursa pe care dorești să o confunzi/confiști de la toți ceilalți jucători. Toți adversarii vor fi obligați să-ți cedeze toate cărțile de acest tip pe care le au în mână!'
+                      : 'Choose the resource to monopolize. All opponents will be forced to yield all cards of this resource in their hand!'}
+                  </p>
+
+                  <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: '1.1rem' }}>
+                    {ALL_RESOURCES.map((r) => {
+                      const isSelected = monopolyResource === r;
+                      return (
+                        <div
+                          key={r}
+                          onClick={() => setMonopolyResource(r)}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            cursor: 'pointer',
+                            padding: '6px 8px',
+                            borderRadius: 8,
+                            border: isSelected ? '2px solid var(--accent-gold)' : '2px solid rgba(255,255,255,0.12)',
+                            background: isSelected ? 'rgba(234, 179, 8, 0.2)' : 'rgba(255,255,255,0.04)',
+                            transform: isSelected ? 'scale(1.06)' : 'scale(1)',
+                            transition: 'all 0.15s ease'
                           }}
                         >
-                          Joacă Monopol
-                        </button>
-                      </div>
+                          <ResourceCardSprite
+                            resource={r}
+                            count={activePlayerObj.resources[r] ?? 0}
+                            locale={locale}
+                            size="sm"
+                            selected={isSelected}
+                          />
+                          <span
+                            style={{
+                              fontSize: '0.76rem',
+                              fontWeight: 700,
+                              marginTop: 5,
+                              color: isSelected ? 'var(--accent-gold)' : 'inherit'
+                            }}
+                          >
+                            {RESOURCE_LABELS[locale][r]} {isSelected ? '✓' : ''}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ width: '100%', padding: '0.65rem', fontSize: '0.92rem', fontWeight: 700 }}
+                    onClick={() => {
+                      executeAction(activePlayerObj.id, {
+                        type: 'play_monopoly',
+                        resource: monopolyResource
+                      });
+                      setActiveModal('none');
+                    }}
+                  >
+                    👑 Confiscă tot: {RESOURCE_LABELS[locale][monopolyResource].toUpperCase()}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL SPECIAL: PLAY YEAR OF PLENTY - SELECT 2 RESOURCES */}
+          {activeModal === 'play_year_of_plenty' && activePlayerObj && (
+            <div className="modal-backdrop" onClick={() => setActiveModal('dev_cards')}>
+              <div className="modal-dialog" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--accent-gold)' }}>
+                    🎁 Joacă: Anul Abundenței
+                  </h3>
+                  <button type="button" className="btn" onClick={() => setActiveModal('dev_cards')}>
+                    ✕ Înapoi
+                  </button>
+                </div>
+                <div className="modal-body">
+                  <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', marginTop: 0, marginBottom: '0.85rem' }}>
+                    {locale === 'ro'
+                      ? 'Alege 2 resurse gratuite pe care le iei direct din bancă:'
+                      : 'Choose 2 free resources to take directly from the bank:'}
+                  </p>
+
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                        {locale === 'ro' ? 'Prima resursă:' : 'First resource:'}
+                      </span>
+                      <select
+                        value={yopResources[0]}
+                        onChange={(e) => setYopResources([e.target.value as ResourceType, yopResources[1]])}
+                        style={{ fontSize: '0.86rem', padding: '0.3rem 0.6rem' }}
+                      >
+                        {ALL_RESOURCES.map((r) => (
+                          <option key={r} value={r}>
+                            {RESOURCE_ICONS[r]} {RESOURCE_LABELS[locale][r]} ({gameState.bank[r]} în bancă)
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  )}
+                    <div style={{ textAlign: 'center' }}>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                        {locale === 'ro' ? 'A doua resursă:' : 'Second resource:'}
+                      </span>
+                      <select
+                        value={yopResources[1]}
+                        onChange={(e) => setYopResources([yopResources[0], e.target.value as ResourceType])}
+                        style={{ fontSize: '0.86rem', padding: '0.3rem 0.6rem' }}
+                      >
+                        {ALL_RESOURCES.map((r) => (
+                          <option key={r} value={r}>
+                            {RESOURCE_ICONS[r]} {RESOURCE_LABELS[locale][r]} ({gameState.bank[r]} în bancă)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ width: '100%', padding: '0.6rem', fontWeight: 700 }}
+                    onClick={() => {
+                      executeAction(activePlayerObj.id, {
+                        type: 'play_year_of_plenty',
+                        resources: yopResources
+                      });
+                      setActiveModal('none');
+                    }}
+                  >
+                    🎁 Ia {RESOURCE_LABELS[locale][yopResources[0]]} + {RESOURCE_LABELS[locale][yopResources[1]]}
+                  </button>
                 </div>
               </div>
             </div>

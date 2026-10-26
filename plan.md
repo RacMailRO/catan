@@ -1100,6 +1100,10 @@ Această secțiune documentează cerințele practice apărute în cursul utiliz�
 5. **Denumiri compacte pentru butoanele de construcție pe mobil**:
    - Butoanele de acțiuni din dock-ul de jos folosesc etichete scurte fără costuri atașate în text (`Drum`, `Așezare`, `Oraș`, `Dezvoltare`), garantând că butoanele nu se suprapun și pot fi atinse fără dificultate pe orice ecran mobil.
 
+8. **Interacțiune vizuală și feedback complet pentru cartea Monopol**:
+   - Jucarea cărții de dezvoltare Monopol deschide un dialog dedicat cu cele 5 cărți de resurse reprezentate grafic, permițând utilizatorului să selecteze explicit și fără ambiguitate resursa confiscată de la toți ceilalți jucători.
+   - După executare, un banner de notificare detaliat confirmă numărul exact de cărți confiscate și defalcarea pe adversari (sau anunță clar dacă niciun adversar nu deținea acea resursă în mână la momentul respectiv).
+
 ## 15.4 Replay și Reziliență la Sincronizare în Modul Online
 
 ### 15.4.1 Cerințe funcționale

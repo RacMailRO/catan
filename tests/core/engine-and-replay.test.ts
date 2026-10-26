@@ -408,14 +408,24 @@ describe('Catan Core Engine & Replay System', () => {
       resources: ['brick', 'sheep']
     }).state;
 
+    // Give opponents some wheat to verify monopoly collects all of it
+    getPlayerById(state, 'p2')!.resources.wheat = 3;
+    getPlayerById(state, 'p3')!.resources.wheat = 2;
+    const p1WheatBefore = getPlayerById(state, 'p1')!.resources.wheat;
+
     // Can play monopoly in same turn because devCardsPerTurnRule === 'one_per_type'
     expect(
       validateAction(state, 'p1', { type: 'play_monopoly', resource: 'wheat' }).valid
     ).toBe(true);
-    state = applyAction(state, 'p1', {
+    const monopolyResult = applyAction(state, 'p1', {
       type: 'play_monopoly',
       resource: 'wheat'
-    }).state;
+    });
+    state = monopolyResult.state;
+    expect(getPlayerById(state, 'p2')!.resources.wheat).toBe(0);
+    expect(getPlayerById(state, 'p3')!.resources.wheat).toBe(0);
+    expect(getPlayerById(state, 'p1')!.resources.wheat).toBe(p1WheatBefore + 5);
+    expect(monopolyResult.event.details?.totalTaken).toBe(5);
 
     // Cannot play a SECOND monopoly in the same turn
     expect(
