@@ -89,6 +89,19 @@ export function runSimulatedGame(options: SimulationOptions): SimulationResult {
       if (pendingIds.length > 0) {
         actorId = pendingIds[0]!;
       }
+    } else if (curState.phase === 'main_actions') {
+      const openOffer = curState.activeTradeOffers.find((o) => o.status === 'open');
+      if (openOffer) {
+        const responder = curState.players.find(
+          (p) =>
+            p.id !== openOffer.fromPlayerId &&
+            (!openOffer.toPlayerId || openOffer.toPlayerId === p.id) &&
+            !openOffer.rejectedByPlayerIds.includes(p.id)
+        );
+        if (responder) {
+          actorId = responder.id;
+        }
+      }
     }
 
     // Guard against infinite trading/action loops in a single turn

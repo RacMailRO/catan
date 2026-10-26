@@ -330,14 +330,75 @@ export const App: React.FC = () => {
   const [joinPlayerName, setJoinPlayerName] = useState<string>('Jucător 2');
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joinLoading, setJoinLoading] = useState<boolean>(false);
+  const [waitingRoomNewName, setWaitingRoomNewName] = useState<string>('');
+  const [isRenamingInWaitingRoom, setIsRenamingInWaitingRoom] = useState<boolean>(false);
+
+  const handleRenameWaitingRoomSeat = async (targetSeatIndex: number, newName: string) => {
+    if (!onlineSession || !onlineLobby) return;
+    const clean = newName.trim();
+    if (!clean) return;
+    try {
+      const res = await fetch(`/api/lobbies/${onlineLobby.lobbyId}/rename`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken: onlineSession.sessionToken, newName: clean })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.lobby) {
+          setOnlineLobby(data.lobby);
+          setIsRenamingInWaitingRoom(false);
+          showActionFeedback(locale === 'ro' ? `Nume actualizat: ${clean}` : `Name updated: ${clean}`);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to rename lobby seat:', err);
+    }
+  };
+
+  const handlePromptRenameInGame = async (currentName: string) => {
+    const promptMsg = locale === 'ro' ? 'Introdu noul tău nume de jucător:' : 'Enter your new player name:';
+    const entered = window.prompt(promptMsg, currentName);
+    if (!entered || !entered.trim() || entered.trim() === currentName) return;
+    const clean = entered.trim();
+
+    if (onlineSession?.gameId) {
+      try {
+        const res = await fetch(`/api/games/${onlineSession.gameId}/rename`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionToken: onlineSession.sessionToken, newName: clean })
+        });
+        if (res.ok) {
+          showActionFeedback(locale === 'ro' ? `Numele a fost schimbat în: ${clean}` : `Name changed to: ${clean}`);
+          const d = await fetchGameState(onlineSession.gameId, onlineSession.sessionToken); setOnlinePlayerView(d.playerView);
+        }
+      } catch (err) {
+        console.error('Error renaming player in game:', err);
+      }
+    } else if (recorder) {
+      // Local / hotseat game: update player directly in state
+      const st = recorder.getState();
+      const p = st.players.find((pl) => pl.id === viewerId);
+      if (p) {
+        p.name = clean;
+        setGameVersionTick((v) => v + 1);
+        showActionFeedback(locale === 'ro' ? `Numele a fost schimbat în: ${clean}` : `Name changed to: ${clean}`);
+      }
+    }
+  };
 
   // Automatically detect ?join=XYZ or ?code=XYZ from URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('join') || params.get('code');
+    const name = params.get('name');
     if (code) {
       setJoinCodeInput(code.toUpperCase().trim());
       setActiveTab('lobby');
+    }
+    if (name) {
+      setJoinPlayerName(name.trim());
     }
   }, []);
 
@@ -1005,10 +1066,21 @@ export const App: React.FC = () => {
           (p) =>
             p.id !== openOffer.fromPlayerId &&
             p.type !== 'human' &&
+            (!openOffer.toPlayerId || openOffer.toPlayerId === p.id) &&
             !openOffer.rejectedByPlayerIds.includes(p.id)
         );
         if (botResponder) {
           actorId = botResponder.id;
+        } else {
+          // Stop bot actions if a human player is currently reviewing this offer
+          const pendingHuman = st.players.find(
+            (p) =>
+              p.id !== openOffer.fromPlayerId &&
+              p.type === 'human' &&
+              (!openOffer.toPlayerId || openOffer.toPlayerId === p.id) &&
+              !openOffer.rejectedByPlayerIds.includes(p.id)
+          );
+          if (pendingHuman) return;
         }
       }
     }
@@ -1258,7 +1330,12 @@ export const App: React.FC = () => {
 
       {/* Top Navigation Header (Fixed 52px height) */}
       <header className="app-header">
-        <div className="brand-title">
+        <div
+          className="brand-title"
+          onClick={() => setActiveTab('lobby')}
+          style={{ cursor: 'pointer', userSelect: 'none' }}
+          title={locale === 'ro' ? '🏠 Mergi la Pagina Principală / Lobby' : '🏠 Go to Home / Lobby'}
+        >
           <span>🏝️</span>
           <span className="desktop-only">{t.appTitle}</span>
           <span className="mobile-only">Catan</span>
@@ -1266,7 +1343,10 @@ export const App: React.FC = () => {
             <button
               type="button"
               className="version-badge"
-              onClick={() => setShowReleaseNotes(true)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowReleaseNotes(true);
+              }}
               title="Vezi notele de lansare"
             >
               {versionInfo.version}
@@ -1831,6 +1911,17 @@ export const App: React.FC = () => {
                             style={{ backgroundColor: p.color, marginRight: 5, verticalAlign: 'middle' }}
                           />
                           <strong>{p.name}</strong>
+                          {p.id === viewerId && (
+                            <button
+                              type="button"
+                              className="btn"
+                              style={{ padding: '0 4px', fontSize: '0.68rem', marginLeft: 4, height: 18, lineHeight: '16px' }}
+                              title={locale === 'ro' ? 'Schimbă numele tău' : 'Change your name'}
+                              onClick={() => handlePromptRenameInGame(p.name)}
+                            >
+                              ✏️
+                            </button>
+                          )}
                           <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginLeft: 4 }}>
                             [{p.type.toUpperCase()}]
                           </span>
@@ -3553,7 +3644,58 @@ export const App: React.FC = () => {
                     }}
                   >
                     <span className="color-dot" style={{ backgroundColor: seat.color, width: 11, height: 11 }} />
-                    <strong style={{ flex: 1 }}>{seat.name}</strong>
+                    {onlineSession && seat.playerId === onlineSession.playerId ? (
+                      isRenamingInWaitingRoom ? (
+                        <div style={{ display: 'flex', gap: 6, flex: 1, alignItems: 'center' }}>
+                          <input
+                            type="text"
+                            value={waitingRoomNewName}
+                            onChange={(e) => setWaitingRoomNewName(e.target.value)}
+                            placeholder="Numele tău"
+                            style={{ padding: '0.2rem 0.45rem', fontSize: '0.82rem', flex: 1 }}
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleRenameWaitingRoomSeat(seat.seatIndex, waitingRoomNewName);
+                              else if (e.key === 'Escape') setIsRenamingInWaitingRoom(false);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+                            onClick={() => handleRenameWaitingRoomSeat(seat.seatIndex, waitingRoomNewName)}
+                          >
+                            💾 Salvează
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem' }}
+                            onClick={() => setIsRenamingInWaitingRoom(false)}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+                          <strong style={{ color: 'var(--accent-gold)' }}>{seat.name} (Tu)</strong>
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{ padding: '0.15rem 0.4rem', fontSize: '0.72rem' }}
+                            title="Schimbă numele tău"
+                            onClick={() => {
+                              setWaitingRoomNewName(seat.name);
+                              setIsRenamingInWaitingRoom(true);
+                            }}
+                          >
+                            ✏️ Schimbă Nume
+                          </button>
+                        </div>
+                      )
+                    ) : (
+                      <strong style={{ flex: 1 }}>{seat.name}</strong>
+                    )}
                     {seat.type === 'open' ? (
                       <span style={{ color: 'var(--accent-red, #f87171)', fontSize: '0.78rem' }}>
                         ⏳ Așteaptă jucător...

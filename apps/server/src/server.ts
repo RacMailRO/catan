@@ -326,6 +326,19 @@ export function createCatanServer(options?: {
             );
             if (responderBot) {
               nextActorId = responderBot.id;
+            } else {
+              // An open trade offer exists and no bots are left to respond.
+              // If any human player has not yet responded, stop AI stepping and wait for human input!
+              const pendingHuman = runtime.state.players.find(
+                (p) =>
+                  p.id !== openOffer.fromPlayerId &&
+                  p.type === 'human' &&
+                  (!openOffer.toPlayerId || openOffer.toPlayerId === p.id) &&
+                  !openOffer.rejectedByPlayerIds.includes(p.id)
+              );
+              if (pendingHuman) {
+                break;
+              }
             }
           }
         }
@@ -762,6 +775,84 @@ export function createCatanServer(options?: {
           sessionToken,
           playerId: targetSeat.playerId
         });
+        return;
+      }
+
+      // Rename seat in lobby
+      const renameMatch = pathname.match(/^\/api\/lobbies\/([^/]+)\/rename$/);
+      if (req.method === 'POST' && renameMatch) {
+        const lobby = storage.getLobby(renameMatch[1]!);
+        if (!lobby) {
+          sendJson(res, 404, { error: 'Lobby not found' });
+          return;
+        }
+        const body = (await readJsonBody(req)) as { sessionToken?: string; newName?: string };
+        const newName = body.newName?.trim();
+        if (!newName || newName.length > 40) {
+          sendJson(res, 400, { error: 'Invalid name. Name must be between 1 and 40 characters.' });
+          return;
+        }
+        const session = body.sessionToken ? storage.getSession(body.sessionToken) : null;
+        if (!session || session.lobbyId !== lobby.lobbyId) {
+          sendJson(res, 403, { error: 'Invalid or missing session' });
+          return;
+        }
+        const seat = lobby.seats.find((s) => s.playerId === session.playerId);
+        if (seat) {
+          seat.name = newName;
+          seat.claimedByPlayerName = newName;
+        }
+        session.playerName = newName;
+        storage.saveSession(session);
+        storage.saveLobby(lobby);
+
+        if (lobby.gameId) {
+          const runtime = loadOrGetGameRuntime(lobby.gameId);
+          if (runtime) {
+            const player = runtime.state.players.find((p) => p.id === session.playerId);
+            if (player) {
+              player.name = newName;
+              persistRuntime(runtime);
+              broadcastGameSync(runtime);
+            }
+          }
+        }
+
+        sendJson(res, 200, { lobby });
+        return;
+      }
+
+      // Rename player in active game
+      const gameRenameMatch = pathname.match(/^\/api\/games\/([^/]+)\/rename$/);
+      if (req.method === 'POST' && gameRenameMatch) {
+        const gameId = gameRenameMatch[1]!;
+        const runtime = loadOrGetGameRuntime(gameId);
+        if (!runtime) {
+          sendJson(res, 404, { error: 'Game not found' });
+          return;
+        }
+        const body = (await readJsonBody(req)) as { sessionToken?: string; newName?: string };
+        const newName = body.newName?.trim();
+        if (!newName || newName.length > 40) {
+          sendJson(res, 400, { error: 'Invalid name. Must be 1-40 characters.' });
+          return;
+        }
+        const session = body.sessionToken ? storage.getSession(body.sessionToken) : null;
+        if (!session) {
+          sendJson(res, 403, { error: 'Invalid session token' });
+          return;
+        }
+        const player = runtime.state.players.find((p) => p.id === session.playerId);
+        if (!player) {
+          sendJson(res, 404, { error: 'Player not in this game' });
+          return;
+        }
+        player.name = newName;
+        session.playerName = newName;
+        storage.saveSession(session);
+        persistRuntime(runtime);
+        broadcastGameSync(runtime);
+        sendJson(res, 200, { success: true, newName });
         return;
       }
 

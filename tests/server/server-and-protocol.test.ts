@@ -79,6 +79,17 @@ describe('Authoritative LAN/Online Server, Protocol Validation & WebSocket Sync'
     };
     expect(guestJoined.playerId).toBe('p2');
 
+    // 3b. Guest renames herself in the waiting room
+    const renameRes = await fetch(`${baseUrl}/api/lobbies/${lobbyId}/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionToken: guestJoined.sessionToken, newName: 'Elena-VIP' })
+    });
+    expect(renameRes.status).toBe(200);
+    const renamedData = (await renameRes.json()) as { lobby: { seats: Array<{ playerId: string; name: string }> } };
+    const p2Seat = renamedData.lobby.seats.find((s) => s.playerId === 'p2');
+    expect(p2Seat?.name).toBe('Elena-VIP');
+
     // 4. Start the game
     const startRes = await fetch(`${baseUrl}/api/lobbies/${lobbyId}/start`, {
       method: 'POST'

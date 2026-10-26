@@ -495,12 +495,51 @@ export function evaluateCandidateAction(
       };
     }
 
+    case 'propose_trade': {
+      let gainScore = 0;
+      let lossScore = 0;
+      for (const r of ALL_RESOURCES) {
+        const req = action.requesting[r] ?? 0;
+        const off = action.offering[r] ?? 0;
+        if (req > 0) {
+          gainScore += evaluateResourceNeed(inv, r, style) * req;
+        }
+        if (off > 0) {
+          lossScore += evaluateResourceNeed(inv, r, style) * off;
+        }
+      }
+      // AI proposes trade if it strongly needs the requested resource more than what it offers
+      const netGain = gainScore * 1.4 - lossScore * 1.0;
+      const score = Number((netGain + 2.5).toFixed(3));
+      return {
+        action,
+        score,
+        factors: {
+          gain: Number(gainScore.toFixed(2)),
+          cost: Number((-lossScore).toFixed(2)),
+          tradeUtility: Number(netGain.toFixed(2))
+        },
+        explanation: 'Propune schimb de resurse cu ceilalți jucători'
+      };
+    }
+
+    case 'cancel_trade': {
+      const offer = view.activeTradeOffers.find((o) => o.id === action.offerId);
+      const isRejected = !offer || offer.status === 'rejected';
+      return {
+        action,
+        score: isRejected ? 4.2 : -10.0,
+        factors: { cleanup: isRejected ? 4.2 : -10.0 },
+        explanation: isRejected ? 'Anulează oferta de schimb refuzată' : 'Așteaptă răspunsul la ofertă'
+      };
+    }
+
     case 'respond_trade': {
       if (action.response === 'reject') {
         return {
           action,
-          score: 2.0,
-          factors: { caution: 2.0 },
+          score: 0.0,
+          factors: { caution: 0.0 },
           explanation: 'Refuză oferta de schimb neavantajoasă'
         };
       }
@@ -519,15 +558,19 @@ export function evaluateCandidateAction(
         }
       }
       const proposer = view.players.find((p) => p.id === offer.fromPlayerId);
-      const leaderPenalty =
-        proposer && proposer.publicScore >= view.rules.victoryPointsToWin - 2 ? 8.0 : 1.0;
-      const total = Number((gainScore * 1.5 - lossScore * 1.6 - leaderPenalty).toFixed(3));
+      const isLeaderNearWin = Boolean(proposer && proposer.publicScore >= view.rules.victoryPointsToWin - 2);
+      const leaderPenalty = isLeaderNearWin ? 8.0 : 0.0;
+      const countOffered = totalResourceCount(offer.offering);
+      const countRequested = totalResourceCount(offer.requesting);
+      const ratioBonus = (countOffered - countRequested) * 2.5;
+      const total = Number((gainScore * 1.3 - lossScore * 1.0 + ratioBonus - leaderPenalty).toFixed(3));
       return {
         action,
         score: total,
         factors: {
           gain: Number(gainScore.toFixed(2)),
           cost: Number((-lossScore).toFixed(2)),
+          ratioBonus: Number(ratioBonus.toFixed(2)),
           leaderPenalty: Number((-leaderPenalty).toFixed(2))
         },
         explanation: `Acceptă schimbul propus de ${proposer?.name ?? offer.fromPlayerId}`
@@ -557,7 +600,7 @@ export function evaluateCandidateAction(
         action,
         score: 0,
         factors: {},
-        explanation: action.type
+        explanation: (action as { type?: string }).type ?? 'action'
       };
   }
 }
