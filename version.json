@@ -1,9 +1,14 @@
 {
-  "version": "v1.87",
-  "commitCount": 87,
-  "shortHash": "a76315e",
-  "buildDate": "2026-10-26T20:48:26.010Z",
+  "version": "v1.88",
+  "commitCount": 88,
+  "shortHash": "3f436cc",
+  "buildDate": "2026-10-26T20:48:32.554Z",
   "releaseNotes": [
+    {
+      "hash": "3f436cc",
+      "date": "2026-10-26",
+      "message": "chore(release): bump version to v1.87"
+    },
     {
       "hash": "a76315e",
       "date": "2026-10-26",
@@ -248,11 +253,6 @@
       "hash": "f842198",
       "date": "2026-10-26",
       "message": "feat: per-turn countdown, action feedback banner, resource-gain flash, trade hand visibility"
-    },
-    {
-      "hash": "deedc31",
-      "date": "2026-10-26",
-      "message": "fix: settlement size, road marker placement/stacking, token font, card badge, coastline"
     }
   ]
 }
