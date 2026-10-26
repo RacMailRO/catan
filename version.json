@@ -1,9 +1,19 @@
 {
-  "version": "v1.82",
-  "commitCount": 82,
-  "shortHash": "93068b9",
-  "buildDate": "2026-10-26T20:31:09.147Z",
+  "version": "v1.84",
+  "commitCount": 84,
+  "shortHash": "7637858",
+  "buildDate": "2026-10-26T20:46:03.321Z",
   "releaseNotes": [
+    {
+      "hash": "7637858",
+      "date": "2026-10-26",
+      "message": "feat(dev-card): dedicated interactive selection modal and toast feedback for Monopoly card"
+    },
+    {
+      "hash": "41ce2d6",
+      "date": "2026-10-26",
+      "message": "chore(release): v1.82 metadata"
+    },
     {
       "hash": "93068b9",
       "date": "2026-10-26",
@@ -243,16 +253,6 @@
       "hash": "9d38c23",
       "date": "2026-10-25",
       "message": "feat: nautical chart-table visual redesign + fix mobile board dead space"
-    },
-    {
-      "hash": "d917f40",
-      "date": "2026-10-25",
-      "message": "fix: harbor rotation, swap pier lines for vertex markers, upgrade terrain art"
-    },
-    {
-      "hash": "2a2b8dc",
-      "date": "2026-10-25",
-      "message": "feat: real hex-tile port art and fixed (non-random) harbor layout"
     }
   ]
 }
