@@ -68,6 +68,26 @@ import {
 } from './i18n';
 
 type ActiveTab = 'lobby' | 'game' | 'replay' | 'benchmark';
+
+const NAV_TAB_ICON: Record<ActiveTab, string> = {
+  lobby: '⚙️',
+  game: '🎲',
+  replay: '🎬',
+  benchmark: '📈'
+};
+
+const NAV_TAB_LABEL = (t: {
+  navLobby: string;
+  navGame: string;
+  navReplay: string;
+  navBenchmark: string;
+}): Record<ActiveTab, string> => ({
+  lobby: t.navLobby,
+  game: t.navGame,
+  replay: t.navReplay,
+  benchmark: t.navBenchmark
+});
+
 type BuildSelectionMode = 'none' | 'road' | 'settlement' | 'city' | 'knight';
 type GameModalType =
   | 'none'
@@ -173,6 +193,7 @@ export const App: React.FC = () => {
   const [mobileHudOpen, setMobileHudOpen] = useState<boolean>(false);
   const [mobileDockCollapsed, setMobileDockCollapsed] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [navMenuOpen, setNavMenuOpen] = useState<boolean>(false);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -1040,47 +1061,71 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        <nav className="nav-tabs">
+        {/* Section nav collapses into a hamburger dropdown — four always-visible tab buttons
+            didn't belong inline in a 52px header, and crowded it on every screen size. */}
+        <div className="nav-menu-wrapper">
           <button
             type="button"
-            className={`nav-btn ${activeTab === 'lobby' ? 'active' : ''}`}
-            onClick={() => setActiveTab('lobby')}
+            className="btn nav-menu-trigger"
+            onClick={() => setNavMenuOpen((o) => !o)}
           >
-            ⚙️ <span className="desktop-only">{t.navLobby}</span><span className="mobile-only">Lobby</span>
+            ☰ {NAV_TAB_ICON[activeTab]} <span className="desktop-only">{NAV_TAB_LABEL(t)[activeTab]}</span>
           </button>
-          <button
-            type="button"
-            className={`nav-btn ${activeTab === 'game' ? 'active' : ''}`}
-            onClick={() => {
-              // No game to jump into yet — send them to the lobby to create/join an online
-              // game instead of silently starting a local one.
-              setActiveTab(recorder || onlineSession ? 'game' : 'lobby');
-            }}
-          >
-            🎲 <span className="desktop-only">{t.navGame}</span><span className="mobile-only">Joc</span>
-          </button>
-          <button
-            type="button"
-            className={`nav-btn ${activeTab === 'replay' ? 'active' : ''}`}
-            onClick={() => {
-              if (recorder) {
-                const rep = recorder.toReplayFile();
-                saveReplayToHistory(rep, false);
-                setActiveReplay(rep);
-              }
-              setActiveTab('replay');
-            }}
-          >
-            🎬 <span className="desktop-only">{t.navReplay}</span><span className="mobile-only">Replay</span>
-          </button>
-          <button
-            type="button"
-            className={`nav-btn ${activeTab === 'benchmark' ? 'active' : ''}`}
-            onClick={() => setActiveTab('benchmark')}
-          >
-            📈 <span className="desktop-only">{t.navBenchmark}</span><span className="mobile-only">Teste</span>
-          </button>
-        </nav>
+          {navMenuOpen && (
+            <>
+              <div className="nav-menu-backdrop" onClick={() => setNavMenuOpen(false)} />
+              <div className="nav-menu-dropdown">
+                <button
+                  type="button"
+                  className={`nav-btn ${activeTab === 'lobby' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('lobby');
+                    setNavMenuOpen(false);
+                  }}
+                >
+                  ⚙️ {t.navLobby}
+                </button>
+                <button
+                  type="button"
+                  className={`nav-btn ${activeTab === 'game' ? 'active' : ''}`}
+                  onClick={() => {
+                    // No game to jump into yet — send them to the lobby to create/join an
+                    // online game instead of silently starting a local one.
+                    setActiveTab(recorder || onlineSession ? 'game' : 'lobby');
+                    setNavMenuOpen(false);
+                  }}
+                >
+                  🎲 {t.navGame}
+                </button>
+                <button
+                  type="button"
+                  className={`nav-btn ${activeTab === 'replay' ? 'active' : ''}`}
+                  onClick={() => {
+                    if (recorder) {
+                      const rep = recorder.toReplayFile();
+                      saveReplayToHistory(rep, false);
+                      setActiveReplay(rep);
+                    }
+                    setActiveTab('replay');
+                    setNavMenuOpen(false);
+                  }}
+                >
+                  🎬 {t.navReplay}
+                </button>
+                <button
+                  type="button"
+                  className={`nav-btn ${activeTab === 'benchmark' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('benchmark');
+                    setNavMenuOpen(false);
+                  }}
+                >
+                  📈 {t.navBenchmark}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
 
         <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
           <button
