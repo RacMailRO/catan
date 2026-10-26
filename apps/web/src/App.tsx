@@ -8,6 +8,7 @@ import {
   GameAction,
   GameRulesConfig,
   GameState,
+  INITIAL_PLAYER_PIECES,
   PLAYER_COLORS,
   ParticipantConfig,
   ParticipantType,
@@ -2448,8 +2449,33 @@ export const App: React.FC = () => {
                       )}
 
                       <div className="player-grid-stats">
+                        {/* Pieces placed vs the fixed physical supply (5 settlements / 4
+                            cities / 15 roads) — so "why can't I build a settlement" has an
+                            answer right here: 5/5 means none left, not a resource problem. */}
+                        <div className="player-grid-pieces">
+                          {(
+                            [
+                              ['settlements', '🏠', locale === 'ro' ? 'Așezări' : 'Settlements'],
+                              ['cities', '🏰', locale === 'ro' ? 'Orașe' : 'Cities'],
+                              ['roads', '🛣️', locale === 'ro' ? 'Drumuri' : 'Roads']
+                            ] as const
+                          ).map(([key, icon, title]) => {
+                            const total = INITIAL_PLAYER_PIECES[key];
+                            const used = total - p.remainingPieces[key];
+                            const exhausted = used >= total;
+                            return (
+                              <span
+                                key={key}
+                                className={`piece-count-pill ${exhausted ? 'exhausted' : ''}`}
+                                title={`${title}: ${used}/${total}`}
+                              >
+                                {icon} {used}/{total}
+                              </span>
+                            );
+                          })}
+                        </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span>🛣️ Drum: {p.longestRoadLength}</span>
+                          <span>🏆 Drum Lung: {p.longestRoadLength}</span>
                           <span>⚔️ Cavaleri: {p.knightsPlayed}</span>
                         </div>
                         {(hasLongestRoad || hasLargestArmy) && (

@@ -878,6 +878,31 @@ select:focus,
   white-space: nowrap;
 }
 
+.player-grid-pieces {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.piece-count-pill {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color-soft);
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+/* All pieces of that type are on the board — this, not a resource shortage, is why that
+   build option is greyed out. */
+.piece-count-pill.exhausted {
+  color: var(--accent-red);
+  background: rgba(181, 67, 47, 0.14);
+  border-color: rgba(181, 67, 47, 0.45);
+}
+
 /* Mobile & Tablet Responsive Layout (< 960px) */
 @media (max-width: 960px) {
   .mobile-only {
