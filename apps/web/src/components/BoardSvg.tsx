@@ -68,16 +68,10 @@ const HARBOR_VERTEX_COLOR: Record<HarborType, string> = {
 // The baked-in dock/sand in the original tile art points toward this angle by default
 // (0° = east, 90° = south, screen-space degrees); each harbor hex is rotated from this
 // to the angle that points back toward the island so the pier faces the coast.
-const PORT_ART_DEFAULT_ANGLE_DEG = 62.5;
-
-const NUMBER_TOKEN_ORDER = [2, 3, 4, 5, 6, 8, 9, 10, 11, 12];
-
-const PLAYER_COLOR_HEX: Record<PlayerColor, string> = {
-  red: '#ef4444',
-  blue: '#3b82f6',
-  orange: '#f97316',
-  green: '#22c55e'
-};
+// Measured directly off the pier/dock structure's own pixels in each of the 6 cropped tiles
+// (58.6-61.3°, averaging 60.2°) rather than the broader sand-colored area, which was a looser
+// proxy and left a small but visible aiming error.
+const PORT_ART_DEFAULT_ANGLE_DEG = 60.2;
 
 const SETTLEMENT_SVG_BY_COLOR: Record<PlayerColor, string> = {
   red: '/settlement_red.22949197b57f9cfd968b.svg',
@@ -91,6 +85,29 @@ const CITY_SVG_BY_COLOR: Record<PlayerColor, string> = {
   blue: '/city_blue.svg',
   orange: '/city_orange.svg',
   green: '/city_green.svg'
+};
+
+const ROAD_SVG_BY_COLOR: Record<PlayerColor, string> = {
+  red: '/road_red.41c6cbd9278108542715.svg',
+  blue: '/road_blue.3301e2eed15cae5a6a05.svg',
+  orange: '/road_orange.07bb26b8c1e63dd438c7.svg',
+  green: '/road_green.d206aed3747b3687bc40.svg'
+};
+// Native proportions of the road SVG art (a vertical plank, long axis = road length).
+const ROAD_ART_WIDTH = 40;
+const ROAD_ART_HEIGHT = 194;
+
+const NUMBER_TOKEN_PIPS: Record<number, number> = {
+  2: 1,
+  3: 2,
+  4: 3,
+  5: 4,
+  6: 5,
+  8: 5,
+  9: 4,
+  10: 3,
+  11: 2,
+  12: 1
 };
 
 function getHexPolygonPoints(cx: number, cy: number, radius = HEX_RADIUS): string {
@@ -447,18 +464,19 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             </clipPath>
           ))}
 
-          {/* Clip paths for the 19 island terrain hexes and their number tokens */}
+          {/* Clip paths for the 19 island terrain hexes */}
           {Object.values(board.hexes).map((hex) => (
-            <React.Fragment key={`defs-${hex.id}`}>
-              <clipPath id={`clip-hex-${hex.id}`}>
-                <polygon points={getHexPolygonPoints(hex.x, hex.y, HEX_RADIUS - 1.5)} />
-              </clipPath>
-              <clipPath id={`clip-token-${hex.id}`}>
-                <circle cx={hex.x} cy={hex.y + 2} r={tokenRadius} />
-              </clipPath>
-            </React.Fragment>
+            <clipPath key={`defs-${hex.id}`} id={`clip-hex-${hex.id}`}>
+              <polygon points={getHexPolygonPoints(hex.x, hex.y, HEX_RADIUS - 1.5)} />
+            </clipPath>
           ))}
 
+          {/* Beveled ivory face for number tokens */}
+          <radialGradient id="tokenFaceGrad" cx="35%" cy="30%" r="75%">
+            <stop offset="0%" stopColor="#fffdf5" />
+            <stop offset="65%" stopColor="#f5e7c4" />
+            <stop offset="100%" stopColor="#dcc294" />
+          </radialGradient>
         </defs>
 
         <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
@@ -532,8 +550,6 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             const hasRobber = board.robberHexId === hex.id;
             const terrainVariants = TERRAIN_IMAGES[hex.terrain];
             const terrainHref = terrainVariants[hexIdx % terrainVariants.length]!;
-            const tokenCol =
-              hex.numberToken !== null ? NUMBER_TOKEN_ORDER.indexOf(hex.numberToken) : -1;
 
             return (
               <g
@@ -574,45 +590,61 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                   strokeOpacity={isHighlighted ? 1 : 0.82}
                 />
 
-                {/* Number Token from /numbers.png */}
-                {hex.numberToken !== null && tokenCol >= 0 && (
-                  <g style={{ pointerEvents: 'none' }}>
+                {/* Number Token — vector disc with a beveled 3D face, drawn directly rather
+                    than sliced from a sprite sheet */}
+                {hex.numberToken !== null && (
+                  <g
+                    transform={`translate(${hex.x}, ${hex.y + 2})`}
+                    style={{ pointerEvents: 'none', filter: 'drop-shadow(0 3px 3px rgba(0,0,0,0.55))' }}
+                  >
+                    <circle r={tokenRadius + 2} fill={`url(#tokenFaceGrad)`} stroke="#6b4a26" strokeWidth={1.5} />
                     <circle
-                      cx={hex.x}
-                      cy={hex.y + 2}
                       r={tokenRadius + 2}
-                      fill="#fef3c7"
-                      stroke="#78350f"
-                      strokeWidth={2.5}
+                      fill="none"
+                      stroke="#fffaf0"
+                      strokeWidth={1}
+                      strokeOpacity={0.55}
+                      transform="translate(-0.8, -0.8)"
                     />
-                    <g clipPath={`url(#clip-token-${hex.id})`}>
-                      <image
-                        href="/numbers.png"
-                        x={hex.x - tokenRadius - tokenCol * tokenSize}
-                        y={hex.y + 2 - tokenRadius}
-                        width={tokenSize * 10}
-                        height={tokenSize}
-                        preserveAspectRatio="none"
-                      />
-                    </g>
-
-                    {/* Official Spiral Letter Badge (A..R) */}
                     {hex.tokenLetter && (
-                      <g transform={`translate(${hex.x + 16}, ${hex.y - 12})`}>
-                        <circle cx={0} cy={0} r={8.5} fill="#78350f" stroke="#fde68a" strokeWidth={1.5} />
-                        <text
-                          x={0}
-                          y={3}
-                          textAnchor="middle"
-                          fill="#fef3c7"
-                          fontSize="9.5"
-                          fontWeight="bold"
-                          fontFamily="Arial, sans-serif"
-                        >
-                          {hex.tokenLetter}
-                        </text>
-                      </g>
+                      <text
+                        y={-tokenRadius * 0.42}
+                        textAnchor="middle"
+                        fontSize={tokenRadius * 0.34}
+                        fontWeight="700"
+                        fill="#5a3f22"
+                        fontFamily="var(--font-display, Georgia, serif)"
+                      >
+                        {hex.tokenLetter}
+                      </text>
                     )}
+                    <text
+                      y={tokenRadius * 0.24}
+                      textAnchor="middle"
+                      fontSize={tokenRadius * 0.92}
+                      fontWeight="800"
+                      fill={hex.numberToken === 6 || hex.numberToken === 8 ? '#b5432f' : '#241a0c'}
+                      fontFamily="var(--font-display, Georgia, serif)"
+                    >
+                      {hex.numberToken}
+                    </text>
+                    {(() => {
+                      const pipCount = NUMBER_TOKEN_PIPS[hex.numberToken] ?? 0;
+                      const pipColor = hex.numberToken === 6 || hex.numberToken === 8 ? '#b5432f' : '#241a0c';
+                      const spacing = tokenRadius * 0.17;
+                      return (
+                        <g fill={pipColor}>
+                          {Array.from({ length: pipCount }).map((_, i) => (
+                            <circle
+                              key={i}
+                              cx={(i - (pipCount - 1) / 2) * spacing}
+                              cy={tokenRadius * 0.56}
+                              r={tokenRadius * 0.065}
+                            />
+                          ))}
+                        </g>
+                      );
+                    })()}
                   </g>
                 )}
 
@@ -675,9 +707,24 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             const isHighlighted = highlightedEdges?.has(edge.id) ?? false;
             if (!builtRoad && !isHighlighted) return null;
 
-            const ownerColor = builtRoad
-              ? PLAYER_COLOR_HEX[playerColors[builtRoad.ownerId] ?? 'red']
-              : '#38bdf8';
+            const ownerPColor: PlayerColor = builtRoad
+              ? playerColors[builtRoad.ownerId] ?? 'red'
+              : 'red';
+
+            let roadTransform = '';
+            let roadDisplayWidth = 0;
+            let roadDisplayHeight = 0;
+            if (builtRoad) {
+              const dx = edge.x2 - edge.x1;
+              const dy = edge.y2 - edge.y1;
+              const length = Math.hypot(dx, dy);
+              const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI - 90;
+              const midX = (edge.x1 + edge.x2) / 2;
+              const midY = (edge.y1 + edge.y2) / 2;
+              roadDisplayHeight = length;
+              roadDisplayWidth = length * (ROAD_ART_WIDTH / ROAD_ART_HEIGHT);
+              roadTransform = `translate(${midX}, ${midY}) rotate(${angleDeg})`;
+            }
 
             return (
               <g
@@ -690,26 +737,17 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 style={{ cursor: isHighlighted ? 'pointer' : 'default' }}
               >
                 {builtRoad && (
-                  <>
-                    <line
-                      x1={edge.x1}
-                      y1={edge.y1}
-                      x2={edge.x2}
-                      y2={edge.y2}
-                      stroke="#0f172a"
-                      strokeWidth={15}
-                      strokeLinecap="round"
+                  <g transform={roadTransform} style={{ pointerEvents: 'none' }}>
+                    <image
+                      href={ROAD_SVG_BY_COLOR[ownerPColor]}
+                      x={-roadDisplayWidth / 2}
+                      y={-roadDisplayHeight / 2}
+                      width={roadDisplayWidth}
+                      height={roadDisplayHeight}
+                      preserveAspectRatio="none"
+                      style={{ filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.5))' }}
                     />
-                    <line
-                      x1={edge.x1}
-                      y1={edge.y1}
-                      x2={edge.x2}
-                      y2={edge.y2}
-                      stroke={ownerColor}
-                      strokeWidth={10}
-                      strokeLinecap="round"
-                    />
-                  </>
+                  </g>
                 )}
 
                 {isHighlighted && (
