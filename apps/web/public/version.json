@@ -1,0 +1,258 @@
+{
+  "version": "v1.57",
+  "commitCount": 57,
+  "shortHash": "155dfc5",
+  "buildDate": "2026-10-26T18:47:00.497Z",
+  "releaseNotes": [
+    {
+      "hash": "155dfc5",
+      "date": "2026-10-26",
+      "message": "merge: feat/city-resize-trade-negotiation-online-replay-and-409-fix into main"
+    },
+    {
+      "hash": "3a10e9c",
+      "date": "2026-10-26",
+      "message": "feat: resize city pieces, implement human trade offer & negotiation UI with rejection reasons, fix 409 sequence recovery, and enable online game replay viewer"
+    },
+    {
+      "hash": "0a2f1cb",
+      "date": "2026-10-26",
+      "message": "merge: feat/bundle-server-for-production into main"
+    },
+    {
+      "hash": "8d6ff23",
+      "date": "2026-10-26",
+      "message": "fix(server): pre-bundle server into standalone JS to eliminate runtime esbuild crashes on cPanel"
+    },
+    {
+      "hash": "a6d4a57",
+      "date": "2026-10-26",
+      "message": "merge: feat/enable-live-websocket-and-reconnect into main"
+    },
+    {
+      "hash": "662f6a1",
+      "date": "2026-10-26",
+      "message": "fix(server,web): enable live websocket for catan.d10.ro and same-origin, add auto-reconnect and status indicator"
+    },
+    {
+      "hash": "ec0c6bb",
+      "date": "2026-10-26",
+      "message": "fix: poll game state as a sync fallback when WebSocket is unreachable"
+    },
+    {
+      "hash": "c9f8424",
+      "date": "2026-10-26",
+      "message": "feat: keep the screen awake during an active game"
+    },
+    {
+      "hash": "5363566",
+      "date": "2026-10-26",
+      "message": "fix: don't hardcode WebSocket port 3001 behind a reverse proxy"
+    },
+    {
+      "hash": "8ee563d",
+      "date": "2026-10-26",
+      "message": "fix: move tsx to a real dependency so production installs include it"
+    },
+    {
+      "hash": "bf0cffe",
+      "date": "2026-10-26",
+      "message": "feat: collapse header nav into a hamburger dropdown, add a plain-node entry file"
+    },
+    {
+      "hash": "af81d8b",
+      "date": "2026-10-26",
+      "message": "feat: single-process deployment, online-only play, house-rule defaults"
+    },
+    {
+      "hash": "3b5b519",
+      "date": "2026-10-26",
+      "message": "feat: real cross-device multiplayer with a gated waiting room"
+    },
+    {
+      "hash": "0fd30f6",
+      "date": "2026-10-26",
+      "message": "feat: auto-incrementing version badge with release notes"
+    },
+    {
+      "hash": "9b91395",
+      "date": "2026-10-26",
+      "message": "fix: match plain sea tile color to harbor tiles, vary their rotation"
+    },
+    {
+      "hash": "9d2ce46",
+      "date": "2026-10-26",
+      "message": "fix: explicit steal feedback banner, correct mobile board pan speed"
+    },
+    {
+      "hash": "8a23b3d",
+      "date": "2026-10-26",
+      "message": "feat: dice roll decides starting player, trade-modal card preview, steal-target colors"
+    },
+    {
+      "hash": "e4ad831",
+      "date": "2026-10-26",
+      "message": "feat: animate resource cards flying from the producing hex to the receiving player"
+    },
+    {
+      "hash": "f842198",
+      "date": "2026-10-26",
+      "message": "feat: per-turn countdown, action feedback banner, resource-gain flash, trade hand visibility"
+    },
+    {
+      "hash": "deedc31",
+      "date": "2026-10-26",
+      "message": "fix: settlement size, road marker placement/stacking, token font, card badge, coastline"
+    },
+    {
+      "hash": "6ee17ee",
+      "date": "2026-10-26",
+      "message": "fix: double settlement and city icon size on the board"
+    },
+    {
+      "hash": "04cea61",
+      "date": "2026-10-26",
+      "message": "fix: harbor rotation precision, vector number tokens, per-player road art"
+    },
+    {
+      "hash": "9d38c23",
+      "date": "2026-10-25",
+      "message": "feat: nautical chart-table visual redesign + fix mobile board dead space"
+    },
+    {
+      "hash": "d917f40",
+      "date": "2026-10-25",
+      "message": "fix: harbor rotation, swap pier lines for vertex markers, upgrade terrain art"
+    },
+    {
+      "hash": "2a2b8dc",
+      "date": "2026-10-25",
+      "message": "feat: real hex-tile port art and fixed (non-random) harbor layout"
+    },
+    {
+      "hash": "602fd36",
+      "date": "2026-10-25",
+      "message": "merge: fix/startup-and-security-audit into main"
+    },
+    {
+      "hash": "1f72658",
+      "date": "2026-10-25",
+      "message": "fix: server startup, CORS/Origin lockdown, request size cap, replay import bug"
+    },
+    {
+      "hash": "deb318c",
+      "date": "2026-10-25",
+      "message": "merge: feat/randomized-board-spiral-letters-single-row-dock into main"
+    },
+    {
+      "hash": "a887858",
+      "date": "2026-10-25",
+      "message": "feat: randomize board per match, render official A-R spiral letter tokens, and force single-row dock title bar"
+    },
+    {
+      "hash": "4e6b82b",
+      "date": "2026-10-25",
+      "message": "merge: feat/fix-lobby-button-overlap-sw-and-dock-toggle into main"
+    },
+    {
+      "hash": "a4e9341",
+      "date": "2026-10-25",
+      "message": "fix(ui): eliminate lobby button overlap, fix service worker network errors, resolve vite hmr, and keep bottom dock toggle button in title bar"
+    },
+    {
+      "hash": "97c99f3",
+      "date": "2026-10-25",
+      "message": "merge: feat/fix-vite-hmr-and-mobile-lobby-responsiveness into main"
+    },
+    {
+      "hash": "9ceddf7",
+      "date": "2026-10-25",
+      "message": "fix(web): resolve vite hmr websocket network connection and eliminate horizontal overflow cutting off mobile lobby"
+    },
+    {
+      "hash": "e60c246",
+      "date": "2026-10-25",
+      "message": "merge: feat/lobby-mobile-optimization-invite-code-and-sw-fix into main"
+    },
+    {
+      "hash": "f926b0e",
+      "date": "2026-10-25",
+      "message": "feat(lobby): unify match start, add invite code & share link, optimize mobile lobby with vertical scroll, fix service worker extension scheme error"
+    },
+    {
+      "hash": "8741e21",
+      "date": "2026-10-25",
+      "message": "merge: feat/mobile-perfect-layout-header-status-grid-cards into main"
+    },
+    {
+      "hash": "b4598da",
+      "date": "2026-10-25",
+      "message": "feat(ui): eliminate left sidebar gap, move turn status to top header, and arrange cards in compact 6-column grid"
+    },
+    {
+      "hash": "ae76012",
+      "date": "2026-10-25",
+      "message": "merge: feat/local-launch-scripts into main"
+    },
+    {
+      "hash": "7e38345",
+      "date": "2026-10-25",
+      "message": "feat(scripts): add one-click start.bat and stop.bat scripts for local gaming"
+    },
+    {
+      "hash": "6fa3648",
+      "date": "2026-10-25",
+      "message": "merge: feat/mobile-ui-ux-grid-modal-no-scroll into main"
+    },
+    {
+      "hash": "7664327",
+      "date": "2026-10-25",
+      "message": "feat(ui): eliminate scrolling, replace left hud with responsive grid modal, center map and position zoom discrete button"
+    },
+    {
+      "hash": "76ef114",
+      "date": "2026-10-25",
+      "message": "merge: feat/mobile-pwa-and-responsive-board into main"
+    },
+    {
+      "hash": "00a2195",
+      "date": "2026-10-25",
+      "message": "feat(web): add mobile PWA support, pinch-to-zoom touch gestures, and responsive fullscreen board layout"
+    },
+    {
+      "hash": "95e3f15",
+      "date": "2026-10-24",
+      "message": "Merge branch 'feat/official-spiral-and-ui-refinements' into main"
+    },
+    {
+      "hash": "8fbe72b",
+      "date": "2026-10-24",
+      "message": "feat(core,web): implement official A-R clockwise spiral board generator, colored cities without circles, larger harbors, and wider single-row bank sidebar"
+    },
+    {
+      "hash": "5e983ee",
+      "date": "2026-10-24",
+      "message": "Merge branch 'feat/ui-assets-viewport-and-persistence' into main"
+    },
+    {
+      "hash": "3dd1664",
+      "date": "2026-10-24",
+      "message": "feat(web): add poze terrain/harbor/coastline/card sprites, animated dice, saved replays history, and zero-scroll modal viewport"
+    },
+    {
+      "hash": "f01a1ee",
+      "date": "2026-10-24",
+      "message": "Merge branch 'feat/web-ui-and-replay-viewer' into main"
+    },
+    {
+      "hash": "b463aaf",
+      "date": "2026-10-24",
+      "message": "feat(web): implement responsive React+SVG Catan board with Zoom/Pan, configurable lobby, i18n, and Replay+AI Inspector"
+    },
+    {
+      "hash": "ff220ca",
+      "date": "2026-10-24",
+      "message": "Merge branch 'feat/protocol-and-server' into main"
+    }
+  ]
+}
