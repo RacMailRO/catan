@@ -1,9 +1,14 @@
 {
-  "version": "v1.84",
-  "commitCount": 84,
-  "shortHash": "7637858",
-  "buildDate": "2026-10-26T20:46:03.321Z",
+  "version": "v1.85",
+  "commitCount": 85,
+  "shortHash": "d18cbfa",
+  "buildDate": "2026-10-26T20:46:11.903Z",
   "releaseNotes": [
+    {
+      "hash": "d18cbfa",
+      "date": "2026-10-26",
+      "message": "chore(release): bump version to v1.84"
+    },
     {
       "hash": "7637858",
       "date": "2026-10-26",
@@ -248,11 +253,6 @@
       "hash": "04cea61",
       "date": "2026-10-26",
       "message": "fix: harbor rotation precision, vector number tokens, per-player road art"
-    },
-    {
-      "hash": "9d38c23",
-      "date": "2026-10-25",
-      "message": "feat: nautical chart-table visual redesign + fix mobile board dead space"
     }
   ]
 }
