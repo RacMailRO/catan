@@ -68,6 +68,28 @@ type GameModalType =
 export const App: React.FC = () => {
   const [locale, setLocale] = useState<Locale>('ro');
   const [activeTab, setActiveTab] = useState<ActiveTab>('lobby');
+
+  // App version badge + release notes — read live from the server's /api/version endpoint
+  // (derived from git commit count/log), so it reflects whatever is currently checked out
+  // without needing a separate version-bump step.
+  const [versionInfo, setVersionInfo] = useState<{
+    version: string;
+    commitCount: number;
+    shortHash: string;
+    releaseNotes: { hash: string; date: string; message: string }[];
+  } | null>(null);
+  const [showReleaseNotes, setShowReleaseNotes] = useState<boolean>(false);
+
+  useEffect(() => {
+    fetch('/api/version')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) setVersionInfo(data);
+      })
+      .catch(() => {
+        // Server not running (pure static/offline preview) — just hide the badge.
+      });
+  }, []);
   const t = TRANSLATIONS[locale];
 
   // Lobby Configuration State
@@ -750,6 +772,16 @@ export const App: React.FC = () => {
           <span>🏝️</span>
           <span className="desktop-only">{t.appTitle}</span>
           <span className="mobile-only">Catan</span>
+          {versionInfo && (
+            <button
+              type="button"
+              className="version-badge"
+              onClick={() => setShowReleaseNotes(true)}
+              title="Vezi notele de lansare"
+            >
+              {versionInfo.version}
+            </button>
+          )}
         </div>
 
         {/* Live Turn & Phase Status placed neatly in the top header */}
@@ -2430,6 +2462,48 @@ export const App: React.FC = () => {
             </div>
           </section>
         </main>
+      )}
+
+      {/* Release Notes — commit log read live from the server, opened by clicking the version
+          badge in the header. Available from any tab, not just in-game. */}
+      {showReleaseNotes && versionInfo && (
+        <div className="modal-backdrop" onClick={() => setShowReleaseNotes(false)}>
+          <div
+            className="modal-dialog"
+            style={{ maxWidth: 520, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3>📋 Note de Lansare — {versionInfo.version}</h3>
+              <button type="button" className="btn" onClick={() => setShowReleaseNotes(false)}>
+                ✕ Închide
+              </button>
+            </div>
+            <div className="modal-body" style={{ overflowY: 'auto' }}>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: 0 }}>
+                {versionInfo.commitCount} commit-uri · HEAD <code>{versionInfo.shortHash}</code>
+              </p>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {versionInfo.releaseNotes.map((note) => (
+                  <li
+                    key={note.hash}
+                    style={{
+                      borderBottom: '1px solid var(--border-color)',
+                      paddingBottom: '0.5rem',
+                      fontSize: '0.84rem'
+                    }}
+                  >
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'baseline' }}>
+                      <code style={{ color: 'var(--accent-gold)', fontSize: '0.74rem' }}>{note.hash}</code>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>{note.date}</span>
+                    </div>
+                    <div>{note.message}</div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

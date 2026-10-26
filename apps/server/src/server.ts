@@ -2,6 +2,8 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
   AIDecisionRecord,
@@ -69,6 +71,54 @@ function resolveAllowedOrigin(originHeader: string | undefined): string | undefi
     return PRIVATE_NETWORK_HOSTNAME_RE.test(hostname) ? originHeader : undefined;
   } catch {
     return undefined;
+  }
+}
+
+// Repo root, resolved from this file's own location (apps/server/src/server.ts) rather than
+// process.cwd(), which varies depending on how the server is launched (npm workspace script
+// vs vitest vs cli-server.ts).
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+
+interface VersionInfo {
+  version: string;
+  commitCount: number;
+  shortHash: string;
+  releaseNotes: { hash: string; date: string; message: string }[];
+}
+
+// Version/release-notes are read live from git on every request (not baked in at build time)
+// so the number shown in the UI is always exactly the commit count as of the currently
+// checked-out HEAD — true "auto-incremented on every commit" with no separate bump step.
+function getVersionInfo(): VersionInfo {
+  try {
+    const commitCount = parseInt(
+      execFileSync('git', ['rev-list', '--count', 'HEAD'], { cwd: REPO_ROOT, encoding: 'utf-8' }).trim(),
+      10
+    );
+    const shortHash = execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
+      cwd: REPO_ROOT,
+      encoding: 'utf-8'
+    }).trim();
+    const logRaw = execFileSync(
+      'git',
+      ['log', '-30', '--pretty=format:%h%x1f%ad%x1f%s', '--date=short'],
+      { cwd: REPO_ROOT, encoding: 'utf-8' }
+    );
+    const releaseNotes = logRaw
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const [hash, date, message] = line.split('\x1f');
+        return { hash: hash ?? '', date: date ?? '', message: message ?? '' };
+      });
+    return {
+      version: `v1.${Number.isFinite(commitCount) ? commitCount : 0}`,
+      commitCount: Number.isFinite(commitCount) ? commitCount : 0,
+      shortHash,
+      releaseNotes
+    };
+  } catch {
+    return { version: 'v1.0-dev', commitCount: 0, shortHash: 'n/a', releaseNotes: [] };
   }
 }
 
@@ -316,7 +366,13 @@ export function createCatanServer(options?: {
         return;
       }
 
-      
+      // App version (commit count) + recent commit log, read live from git — see getVersionInfo
+      if (req.method === 'GET' && pathname === '/api/version') {
+        sendJson(res, 200, getVersionInfo());
+        return;
+      }
+
+
       // Join lobby by invite code or lobby ID directly
       if (req.method === 'POST' && pathname === '/api/lobbies/join-by-code') {
         const body = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;

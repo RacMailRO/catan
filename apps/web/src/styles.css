@@ -86,6 +86,24 @@ h1, h2, h3 {
   white-space: nowrap;
 }
 
+.version-badge {
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 4px);
+  padding: 0.1rem 0.4rem;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.version-badge:hover {
+  color: var(--accent-gold);
+  border-color: var(--accent-gold);
+}
+
 .nav-tabs {
   display: flex;
   gap: 0.3rem;
