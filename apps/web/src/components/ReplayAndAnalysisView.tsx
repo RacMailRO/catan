@@ -431,7 +431,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                 <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', fontSize: '0.82rem' }}>
                   <strong>
                     {stepComparison.playerName}:{' '}
-                    {formatActionDescription(stepComparison.actualAction, locale)}
+                    {formatActionDescription(stepComparison.actualAction, locale, replay?.events[currentSeq - 1]?.details)}
                   </strong>
                   <span
                     style={{
@@ -521,7 +521,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                   }}
                 >
                   <strong>#{ev.sequence}</strong> [T{ev.turn}] <strong>{pName}</strong>:{' '}
-                  {formatActionDescription(ev.action, locale)}
+                  {formatActionDescription(ev.action, locale, ev.details)}
                 </div>
               );
             })}
@@ -731,7 +731,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                       }}
                     >
                       <strong>#{ev.sequence}</strong> [T{ev.turn}] <strong>{pName}</strong>:{' '}
-                      {formatActionDescription(ev.action, locale)}
+                      {formatActionDescription(ev.action, locale, ev.details)}
                     </div>
                   );
                 })}

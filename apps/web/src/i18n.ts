@@ -148,6 +148,14 @@ export const TERRAIN_LABELS: Record<Locale, Record<TerrainType, string>> = {
   }
 };
 
+export const DEV_CARD_ICONS: Record<DevCardType, string> = {
+  knight: '⚔️',
+  road_building: '🛣️',
+  year_of_plenty: '🌾',
+  monopoly: '💰',
+  victory_point: '🏆'
+};
+
 export const DEV_CARD_LABELS: Record<Locale, Record<DevCardType, string>> = {
   ro: {
     knight: 'Cavaler (Soldat)',
@@ -243,7 +251,11 @@ export const AI_STYLE_LABELS: Record<Locale, Record<AIStrategyStyle, string>> = 
   }
 };
 
-export function formatActionDescription(action: GameAction, locale: Locale = 'ro'): string {
+export function formatActionDescription(
+  action: GameAction,
+  locale: Locale = 'ro',
+  details?: Record<string, unknown>
+): string {
   const rLabel = RESOURCE_LABELS[locale];
   switch (action.type) {
     case 'place_initial_settlement':
@@ -276,8 +288,17 @@ export function formatActionDescription(action: GameAction, locale: Locale = 'ro
       return locale === 'ro'
         ? `Modernizează la oraș pe ${action.vertexId}`
         : `Upgrade to city on ${action.vertexId}`;
-    case 'buy_dev_card':
+    case 'buy_dev_card': {
+      const drawn = details?.drawnType as DevCardType | undefined;
+      if (drawn && DEV_CARD_LABELS[locale]?.[drawn]) {
+        const icon = DEV_CARD_ICONS[drawn] ?? '🃏';
+        const cardName = DEV_CARD_LABELS[locale][drawn];
+        return locale === 'ro'
+          ? `Cumpără carte de dezvoltare (${icon} ${cardName})`
+          : `Buy development card (${icon} ${cardName})`;
+      }
       return locale === 'ro' ? 'Cumpără carte de dezvoltare' : 'Buy development card';
+    }
     case 'play_knight':
       return locale === 'ro'
         ? `Joacă Cavaler -> hoț pe ${action.hexId}`
