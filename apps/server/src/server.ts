@@ -222,15 +222,22 @@ export function createCatanServer(options?: {
   const wsClients = new Set<WsClientConnection>();
   const rateLimits = new Map<string, { count: number; windowStartMs: number }>();
   const autoStepAiMaxBatch = options?.autoStepAiMaxBatch ?? 80;
+  const currentDir = path.dirname(fileURLToPath(import.meta.url));
   const candidateWebDistDirs = [
     options?.webDistDir,
-    path.resolve(REPO_ROOT, 'apps/web/dist'),
+    path.resolve(currentDir, 'public'),
+    path.resolve(currentDir, '../public'),
     path.resolve(process.cwd(), 'apps/web/dist'),
+    path.resolve(REPO_ROOT, 'apps/web/dist'),
     path.resolve(process.cwd(), 'web/dist'),
+    path.resolve(process.cwd(), 'public_html'),
+    path.resolve(process.cwd(), 'public'),
+    path.resolve(process.cwd(), 'dist/public'),
     path.resolve(process.cwd(), 'dist'),
-    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/dist'),
-    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../web/dist')
-  ].filter((d): d is string => Boolean(d && fs.existsSync(d)));
+    path.resolve(currentDir, '../../web/dist'),
+    path.resolve(currentDir, '../web/dist'),
+    process.cwd()
+  ].filter((d): d is string => Boolean(d && fs.existsSync(path.join(d, 'index.html'))));
   const webDistDir = candidateWebDistDirs[0] ?? path.resolve(REPO_ROOT, 'apps/web/dist');
 
   function checkRateLimit(key: string, maxPerWindow = 120, windowMs = 5000): boolean {
@@ -1104,6 +1111,7 @@ export function createCatanServer(options?: {
         const STATIC_MIME: Record<string, string> = {
           '.html': 'text/html; charset=utf-8',
           '.js': 'text/javascript; charset=utf-8',
+          '.mjs': 'text/javascript; charset=utf-8',
           '.css': 'text/css; charset=utf-8',
           '.json': 'application/json; charset=utf-8',
           '.svg': 'image/svg+xml',
@@ -1113,19 +1121,49 @@ export function createCatanServer(options?: {
           '.webp': 'image/webp',
           '.gif': 'image/gif',
           '.ico': 'image/x-icon',
+          '.woff': 'font/woff',
           '.woff2': 'font/woff2',
+          '.ttf': 'font/ttf',
           '.webmanifest': 'application/manifest+json'
         };
-        const candidate = path.resolve(webDistDir, '.' + pathname);
+
+        const cleanPathname = pathname.split('?')[0]!;
+        const candidate = path.resolve(webDistDir, '.' + cleanPathname);
         const isInsideDist = candidate === webDistDir || candidate.startsWith(webDistDir + path.sep);
-        const filePath =
-          isInsideDist && fs.existsSync(candidate) && fs.statSync(candidate).isFile()
-            ? candidate
-            : path.join(webDistDir, 'index.html');
-        if (fs.existsSync(filePath)) {
-          const ext = path.extname(filePath).toLowerCase();
-          res.writeHead(200, { 'Content-Type': STATIC_MIME[ext] ?? 'application/octet-stream' });
-          fs.createReadStream(filePath).pipe(res);
+
+        // 1. If static file exists, serve with correct MIME and caching
+        if (isInsideDist && fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+          const ext = path.extname(candidate).toLowerCase();
+          const mime = STATIC_MIME[ext] ?? 'application/octet-stream';
+          res.writeHead(200, {
+            'Content-Type': mime,
+            'Cache-Control': cleanPathname.startsWith('/assets/')
+              ? 'public, max-age=31536000, immutable'
+              : 'no-cache'
+          });
+          fs.createReadStream(candidate).pipe(res);
+          return;
+        }
+
+        // 2. CRITICAL: NEVER serve index.html for static assets or files with an extension!
+        // Returning index.html (text/html) for a missing .js file causes browser "Strict MIME type checking" crash!
+        const ext = path.extname(cleanPathname);
+        if (cleanPathname.startsWith('/assets/') || (ext && ext !== '.html')) {
+          sendJson(res, 404, {
+            error: `Static asset not found: ${cleanPathname}`,
+            code: 'ASSET_NOT_FOUND'
+          });
+          return;
+        }
+
+        // 3. SPA Navigation fallback: Client-side routes (e.g. /, /?join=..., /replay) load index.html
+        const indexPath = path.join(webDistDir, 'index.html');
+        if (fs.existsSync(indexPath)) {
+          res.writeHead(200, {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-cache'
+          });
+          fs.createReadStream(indexPath).pipe(res);
           return;
         }
       }
