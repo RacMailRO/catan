@@ -27,7 +27,8 @@ import {
   getPlayerById,
   getPlayerView,
   hasResources,
-  totalResourceCount
+  totalResourceCount,
+  calculateScore
 } from '@catan/core';
 import {
   BenchmarkReport,
@@ -65,7 +66,9 @@ import {
   RESOURCE_ICONS,
   RESOURCE_LABELS,
   TRANSLATIONS,
-  formatActionDescription
+  formatActionDescription,
+  DEV_CARD_ICONS,
+  DEV_CARD_LABELS
 } from './i18n';
 
 type ActiveTab = 'lobby' | 'game' | 'replay' | 'benchmark';
@@ -767,6 +770,24 @@ export const App: React.FC = () => {
             showActionFeedback(`🥷 ${thief?.name ?? actingPlayerId} ți-a furat 1 ${resText}!`);
           }
         }
+      } else if (action.type === 'buy_dev_card') {
+        const lastEv = data.recentEvents?.[data.recentEvents.length - 1];
+        const drawnType = lastEv?.details?.drawnType as DevCardType | undefined;
+        const buyer = newView.players.find((p) => p.id === actingPlayerId);
+        const buyerName = buyer?.name ?? actingPlayerId;
+        if (drawnType) {
+          const cardName = DEV_CARD_LABELS[locale]?.[drawnType] ?? drawnType;
+          const icon = DEV_CARD_ICONS[drawnType] ?? '🃏';
+          if (actingPlayerId === myId) {
+            showActionFeedback(`🃏 Ai cumpărat o carte de dezvoltare: ${icon} ${cardName}!`);
+          } else {
+            if (drawnType === 'victory_point' && newView.phase === 'game_over') {
+              showActionFeedback(`🏆 ${buyerName} a cumpărat: ${icon} ${cardName} și a atins scorul de victorie!`);
+            } else {
+              showActionFeedback(`🃏 ${buyerName} a cumpărat o carte de dezvoltare.`);
+            }
+          }
+        }
       }
     }
 
@@ -890,6 +911,25 @@ export const App: React.FC = () => {
           }
         } else {
           showActionFeedback(`🥷 ${victim?.name ?? action.targetPlayerId} nu avea nicio carte de furat.`);
+        }
+      } else if (action.type === 'buy_dev_card') {
+        const events = recorder.getEvents();
+        const lastEv = events[events.length - 1];
+        const drawnType = lastEv?.details?.drawnType as DevCardType | undefined;
+        const buyer = getPlayerById(newState, playerId);
+        const buyerName = buyer?.name ?? playerId;
+        if (drawnType) {
+          const cardName = DEV_CARD_LABELS[locale]?.[drawnType] ?? drawnType;
+          const icon = DEV_CARD_ICONS[drawnType] ?? '🃏';
+          if (playerId === viewerId) {
+            showActionFeedback(`🃏 Ai cumpărat o carte de dezvoltare: ${icon} ${cardName}!`);
+          } else {
+            if (drawnType === 'victory_point' && newState.phase === 'game_over') {
+              showActionFeedback(`🏆 ${buyerName} a cumpărat: ${icon} ${cardName} și a atins scorul de victorie!`);
+            } else {
+              showActionFeedback(`🃏 ${buyerName} a cumpărat o carte de dezvoltare.`);
+            }
+          }
         }
       }
 
@@ -2761,7 +2801,7 @@ export const App: React.FC = () => {
                       return (
                         <div key={ev.sequence} className="event-item">
                           <strong>#{ev.sequence}</strong> [T{ev.turn}] <strong>{p?.name ?? ev.playerId}</strong>:{' '}
-                          {formatActionDescription(ev.action, locale)}
+                          {formatActionDescription(ev.action, locale, ev.details)}
                         </div>
                       );
                     })}
@@ -3136,40 +3176,88 @@ export const App: React.FC = () => {
           })()}
 
           {/* AUTOMATIC MODAL G: GAME OVER & SAVED FOR LATER ANALYSIS */}
-          {gameState.winnerId && (
-            <div className="modal-backdrop">
-              <div className="modal-dialog" style={{ maxWidth: 520, textAlign: 'center' }}>
-                <div className="modal-header">
-                  <h3>🎉 Partidă Finalizată & Salvată Automat!</h3>
-                </div>
-                <div className="modal-body">
-                  <h2 style={{ color: 'var(--accent-gold)', marginBottom: '0.5rem' }}>
-                    🏆 {getPlayerById(gameState, gameState.winnerId)?.name}{' '}
-                    {locale === 'ro' ? 'a câștigat partida!' : 'won the game!'}
-                  </h2>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', marginBottom: '1rem' }}>
-                    Partida ({gameState.gameId}) a fost salvată automat în Istoricul Partidelor pentru analiză pas-cu-pas, evaluarea deciziilor și statistici.
-                  </p>
-                  <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center' }}>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={() => openGameReplay(gameState.gameId)}
+          {gameState.winnerId && (() => {
+            const winner = getPlayerById(gameState, gameState.winnerId);
+            const scoreInfo = calculateScore(gameState, gameState.winnerId);
+            let settlementCount = 0;
+            let cityCount = 0;
+            for (const b of Object.values(gameState.board.buildings)) {
+              if (b.ownerId === gameState.winnerId) {
+                if (b.type === 'city') cityCount++;
+                else settlementCount++;
+              }
+            }
+            const hasLongestRoad = gameState.longestRoadOwnerId === gameState.winnerId;
+            const hasLargestArmy = gameState.largestArmyOwnerId === gameState.winnerId;
+
+            return (
+              <div className="modal-backdrop">
+                <div className="modal-dialog" style={{ maxWidth: 540, textAlign: 'center' }}>
+                  <div className="modal-header">
+                    <h3>🎉 Partidă Finalizată & Salvată Automat!</h3>
+                  </div>
+                  <div className="modal-body">
+                    <h2 style={{ color: 'var(--accent-gold)', marginBottom: '0.4rem' }}>
+                      🏆 {winner?.name}{' '}
+                      {locale === 'ro' ? 'a câștigat partida!' : 'won the game!'}
+                    </h2>
+
+                    {/* Winner Points Breakdown */}
+                    <div
+                      style={{
+                        background: 'rgba(245, 158, 11, 0.1)',
+                        border: '1px solid var(--accent-gold)',
+                        borderRadius: 8,
+                        padding: '0.75rem',
+                        margin: '0.75rem 0',
+                        textAlign: 'left'
+                      }}
                     >
-                      🎬 Deschide în Replay & Analiză
-                    </button>
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => setActiveTab('lobby')}
-                    >
-                      ⚙️ Partidă Nouă
-                    </button>
+                      <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: 6, textAlign: 'center', fontSize: '0.95rem' }}>
+                        📊 Detaliu Puncte de Victorie (Total: {scoreInfo.totalScore} / {gameState.rules.victoryPointsToWin} VP)
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', fontSize: '0.84rem' }}>
+                        <div>🏠 {settlementCount}x Așezări: <strong>+{settlementCount} VP</strong></div>
+                        <div>🏰 {cityCount}x Orașe: <strong>+{cityCount * 2} VP</strong></div>
+                        {hasLongestRoad && <div>🛣️ Drumul cel mai lung: <strong>+2 VP</strong></div>}
+                        {hasLargestArmy && <div>⚔️ Armata cea mai mare: <strong>+2 VP</strong></div>}
+                        {scoreInfo.hiddenVictoryPoints > 0 && (
+                          <div style={{ color: '#4ade80', fontWeight: 600 }}>
+                            🏆 {scoreInfo.hiddenVictoryPoints}x Punct de Victorie: <strong>+{scoreInfo.hiddenVictoryPoints} VP</strong>
+                          </div>
+                        )}
+                      </div>
+                      {scoreInfo.hiddenVictoryPoints > 0 && (
+                        <div style={{ marginTop: 8, fontSize: '0.82rem', color: '#4ade80', background: 'rgba(34, 197, 94, 0.15)', padding: '0.4rem 0.6rem', borderRadius: 4, textAlign: 'center', fontWeight: 600 }}>
+                          ✨ Victoria a fost decisă prin tragerea cărții de dezvoltare: 🏆 Punct de Victorie!
+                        </div>
+                      )}
+                    </div>
+
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.84rem', marginBottom: '1rem' }}>
+                      Partida ({gameState.gameId}) a fost salvată automat în Istoricul Partidelor pentru analiză pas-cu-pas, evaluarea deciziilor și statistici.
+                    </p>
+                    <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center' }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => openGameReplay(gameState.gameId)}
+                      >
+                        🎬 Deschide în Replay & Analiză
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => setActiveTab('lobby')}
+                      >
+                        ⚙️ Partidă Nouă
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </main>
       )}
 
