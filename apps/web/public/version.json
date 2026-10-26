@@ -1,9 +1,14 @@
 {
-  "version": "v1.89",
-  "commitCount": 89,
-  "shortHash": "512ccca",
-  "buildDate": "2026-10-26T20:50:42.870Z",
+  "version": "v1.90",
+  "commitCount": 90,
+  "shortHash": "e5578f2",
+  "buildDate": "2026-10-26T20:50:56.529Z",
   "releaseNotes": [
+    {
+      "hash": "e5578f2",
+      "date": "2026-10-26",
+      "message": "fix(web): responsive grid layout for join lobby form to prevent input collapse"
+    },
     {
       "hash": "512ccca",
       "date": "2026-10-26",
@@ -248,11 +253,6 @@
       "hash": "8a23b3d",
       "date": "2026-10-26",
       "message": "feat: dice roll decides starting player, trade-modal card preview, steal-target colors"
-    },
-    {
-      "hash": "e4ad831",
-      "date": "2026-10-26",
-      "message": "feat: animate resource cards flying from the producing hex to the receiving player"
     }
   ]
 }
