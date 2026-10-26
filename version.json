@@ -1,9 +1,24 @@
 {
-  "version": "v1.59",
-  "commitCount": 59,
-  "shortHash": "f2a6932",
-  "buildDate": "2026-10-26T18:48:10.975Z",
+  "version": "v1.62",
+  "commitCount": 62,
+  "shortHash": "518d840",
+  "buildDate": "2026-10-26T18:58:03.281Z",
   "releaseNotes": [
+    {
+      "hash": "518d840",
+      "date": "2026-10-26",
+      "message": "merge: fix/dismiss-trade-modal-and-reject-counteroffer into main"
+    },
+    {
+      "hash": "8638edc",
+      "date": "2026-10-26",
+      "message": "fix(web): add explicit close button, backdrop dismissal, immediate local state cleanup, and 409 retry for trade offers"
+    },
+    {
+      "hash": "3d1e04b",
+      "date": "2026-10-26",
+      "message": "chore: update static version.json to v1.59"
+    },
     {
       "hash": "f2a6932",
       "date": "2026-10-26",
@@ -238,21 +253,6 @@
       "hash": "8fbe72b",
       "date": "2026-10-24",
       "message": "feat(core,web): implement official A-R clockwise spiral board generator, colored cities without circles, larger harbors, and wider single-row bank sidebar"
-    },
-    {
-      "hash": "5e983ee",
-      "date": "2026-10-24",
-      "message": "Merge branch 'feat/ui-assets-viewport-and-persistence' into main"
-    },
-    {
-      "hash": "3dd1664",
-      "date": "2026-10-24",
-      "message": "feat(web): add poze terrain/harbor/coastline/card sprites, animated dice, saved replays history, and zero-scroll modal viewport"
-    },
-    {
-      "hash": "f01a1ee",
-      "date": "2026-10-24",
-      "message": "Merge branch 'feat/web-ui-and-replay-viewer' into main"
     }
   ]
 }
