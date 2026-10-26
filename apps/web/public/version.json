@@ -1,9 +1,19 @@
 {
-  "version": "v1.85",
-  "commitCount": 85,
-  "shortHash": "d18cbfa",
-  "buildDate": "2026-10-26T20:46:11.903Z",
+  "version": "v1.87",
+  "commitCount": 87,
+  "shortHash": "a76315e",
+  "buildDate": "2026-10-26T20:48:26.010Z",
   "releaseNotes": [
+    {
+      "hash": "a76315e",
+      "date": "2026-10-26",
+      "message": "feat(replay): show totalTaken and explanation for play_monopoly in replay and log"
+    },
+    {
+      "hash": "e700e5c",
+      "date": "2026-10-26",
+      "message": "chore(release): v1.85 metadata"
+    },
     {
       "hash": "d18cbfa",
       "date": "2026-10-26",
@@ -243,16 +253,6 @@
       "hash": "deedc31",
       "date": "2026-10-26",
       "message": "fix: settlement size, road marker placement/stacking, token font, card badge, coastline"
-    },
-    {
-      "hash": "6ee17ee",
-      "date": "2026-10-26",
-      "message": "fix: double settlement and city icon size on the board"
-    },
-    {
-      "hash": "04cea61",
-      "date": "2026-10-26",
-      "message": "fix: harbor rotation precision, vector number tokens, per-player road art"
     }
   ]
 }
