@@ -1,9 +1,14 @@
 {
-  "version": "v1.77",
-  "commitCount": 77,
-  "shortHash": "0b174a2",
-  "buildDate": "2026-10-26T20:16:14.288Z",
+  "version": "v1.78",
+  "commitCount": 78,
+  "shortHash": "aaa7194",
+  "buildDate": "2026-10-26T20:16:25.063Z",
   "releaseNotes": [
+    {
+      "hash": "aaa7194",
+      "date": "2026-10-26",
+      "message": "chore(release): bump version to v1.77"
+    },
     {
       "hash": "0b174a2",
       "date": "2026-10-26",
@@ -248,11 +253,6 @@
       "hash": "a887858",
       "date": "2026-10-25",
       "message": "feat: randomize board per match, render official A-R spiral letter tokens, and force single-row dock title bar"
-    },
-    {
-      "hash": "4e6b82b",
-      "date": "2026-10-25",
-      "message": "merge: feat/fix-lobby-button-overlap-sw-and-dock-toggle into main"
     }
   ]
 }
