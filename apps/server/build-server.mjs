@@ -38,4 +38,12 @@ if (candidateVersion) {
   console.log(`Copied ${path.basename(candidateVersion)} to ${outDir}`);
 }
 
+// Copy built frontend into dist/public so server.mjs is 100% standalone and portable
+const webDistSource = path.resolve(repoRoot, 'apps/web/dist');
+const serverPublicDir = path.resolve(outDir, 'public');
+if (fs.existsSync(webDistSource) && fs.existsSync(path.join(webDistSource, 'index.html'))) {
+  fs.cpSync(webDistSource, serverPublicDir, { recursive: true });
+  console.log(`Copied web frontend (${webDistSource}) to ${serverPublicDir}`);
+}
+
 console.log(`Server bundled successfully to ${outFile}`);
