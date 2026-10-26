@@ -1,9 +1,19 @@
 {
-  "version": "v1.57",
-  "commitCount": 57,
-  "shortHash": "155dfc5",
-  "buildDate": "2026-10-26T18:47:00.497Z",
+  "version": "v1.59",
+  "commitCount": 59,
+  "shortHash": "f2a6932",
+  "buildDate": "2026-10-26T18:48:10.975Z",
   "releaseNotes": [
+    {
+      "hash": "f2a6932",
+      "date": "2026-10-26",
+      "message": "merge: feat/build-time-version-changelog-and-plan-docs into main"
+    },
+    {
+      "hash": "4293fa5",
+      "date": "2026-10-26",
+      "message": "feat: pre-generate version and changelog at build time and document recent requirements in plan.md"
+    },
     {
       "hash": "155dfc5",
       "date": "2026-10-26",
@@ -243,16 +253,6 @@
       "hash": "f01a1ee",
       "date": "2026-10-24",
       "message": "Merge branch 'feat/web-ui-and-replay-viewer' into main"
-    },
-    {
-      "hash": "b463aaf",
-      "date": "2026-10-24",
-      "message": "feat(web): implement responsive React+SVG Catan board with Zoom/Pan, configurable lobby, i18n, and Replay+AI Inspector"
-    },
-    {
-      "hash": "ff220ca",
-      "date": "2026-10-24",
-      "message": "Merge branch 'feat/protocol-and-server' into main"
     }
   ]
 }
