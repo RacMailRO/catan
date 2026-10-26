@@ -1,9 +1,14 @@
 {
-  "version": "v1.81",
-  "commitCount": 81,
-  "shortHash": "c6545c6",
-  "buildDate": "2026-10-26T20:31:03.273Z",
+  "version": "v1.82",
+  "commitCount": 82,
+  "shortHash": "93068b9",
+  "buildDate": "2026-10-26T20:31:09.147Z",
   "releaseNotes": [
+    {
+      "hash": "93068b9",
+      "date": "2026-10-26",
+      "message": "chore(release): bump version to v1.81"
+    },
     {
       "hash": "c6545c6",
       "date": "2026-10-26",
@@ -248,11 +253,6 @@
       "hash": "2a2b8dc",
       "date": "2026-10-25",
       "message": "feat: real hex-tile port art and fixed (non-random) harbor layout"
-    },
-    {
-      "hash": "602fd36",
-      "date": "2026-10-25",
-      "message": "merge: fix/startup-and-security-audit into main"
     }
   ]
 }
