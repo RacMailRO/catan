@@ -1,9 +1,14 @@
 {
-  "version": "v1.109",
-  "commitCount": 109,
-  "shortHash": "08c5709",
-  "buildDate": "2026-10-26T23:22:34.705Z",
+  "version": "v1.110",
+  "commitCount": 110,
+  "shortHash": "b516c2b",
+  "buildDate": "2026-10-26T23:22:56.422Z",
   "releaseNotes": [
+    {
+      "hash": "b516c2b",
+      "date": "2026-10-27",
+      "message": "feat: spectator 4-AI autonomous play, replay starts at seq 0, and rich visual dynamic strategic report"
+    },
     {
       "hash": "08c5709",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "8638edc",
       "date": "2026-10-26",
       "message": "fix(web): add explicit close button, backdrop dismissal, immediate local state cleanup, and 409 retry for trade offers"
-    },
-    {
-      "hash": "3d1e04b",
-      "date": "2026-10-26",
-      "message": "chore: update static version.json to v1.59"
     }
   ]
 }
