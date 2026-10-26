@@ -1,10 +1,22 @@
 import os from 'node:os';
 import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { createCatanServer } from './server';
 
 const port = Number(process.env.PORT ?? 3001);
 const dbPath = process.env.CATAN_DB ?? path.resolve(process.cwd(), 'catan-local.sqlite');
-const assetsDir = path.resolve(process.cwd(), '../../poze');
+
+const candidateAssetsDirs = [
+  process.env.CATAN_ASSETS_DIR,
+  path.resolve(process.cwd(), '../../poze'),
+  path.resolve(process.cwd(), '../poze'),
+  path.resolve(process.cwd(), 'poze'),
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../poze'),
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../poze')
+].filter((d): d is string => Boolean(d && fs.existsSync(d)));
+
+const assetsDir = candidateAssetsDirs[0] ?? path.resolve(process.cwd(), 'poze');
 
 const server = createCatanServer({
   dbPath,
