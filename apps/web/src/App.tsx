@@ -1531,43 +1531,83 @@ export const App: React.FC = () => {
           <section className="panel">
             {/* Join by Code / Link Card */}
             <div className="join-game-box">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ fontWeight: 700, color: 'var(--accent-gold)', fontSize: '0.86rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 6 }}>
+                <span style={{ fontWeight: 700, color: 'var(--accent-gold)', fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: 6 }}>
                   🎮 Intră într-o partidă cu Cod de Invitație
                 </span>
                 {joinCodeInput && (
-                  <span style={{ fontSize: '0.72rem', color: 'var(--accent-blue)', fontWeight: 600 }}>
-                    Cod preluat din link!
+                  <span style={{ fontSize: '0.75rem', color: '#60a5fa', fontWeight: 700, background: 'rgba(59, 130, 246, 0.15)', padding: '2px 8px', borderRadius: 4 }}>
+                    ✓ Cod preluat din link!
                   </span>
                 )}
               </div>
-              <div className="join-form-row">
-                <input
-                  type="text"
-                  placeholder="Cod (ex: CATAN-1234)"
-                  value={joinCodeInput}
-                  onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
-                  style={{ flex: 1, minWidth: 0, width: '100%', textTransform: 'uppercase', fontWeight: 700 }}
-                />
-                <input
-                  type="text"
-                  placeholder="Numele tău"
-                  value={joinPlayerName}
-                  onChange={(e) => setJoinPlayerName(e.target.value)}
-                  style={{ flex: 1, minWidth: 0, width: '100%' }}
-                />
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                  gap: '0.65rem',
+                  alignItems: 'end'
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                    Cod de Invitație:
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Cod (ex: CATAN-1234)"
+                    value={joinCodeInput}
+                    onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      padding: '0.48rem 0.65rem',
+                      textTransform: 'uppercase',
+                      fontWeight: 700,
+                      fontSize: '0.92rem',
+                      borderRadius: 6
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                    Numele tău de jucător:
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Introdu numele tău (ex: Andrei)"
+                    value={joinPlayerName}
+                    onChange={(e) => setJoinPlayerName(e.target.value)}
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      padding: '0.48rem 0.65rem',
+                      fontSize: '0.92rem',
+                      fontWeight: 600,
+                      borderRadius: 6
+                    }}
+                  />
+                </div>
                 <button
                   type="button"
                   className="btn btn-primary"
                   onClick={handleJoinWithCode}
                   disabled={joinLoading || !joinCodeInput.trim()}
-                  style={{ minWidth: 0, width: '100%', justifyContent: 'center' }}
+                  style={{
+                    width: '100%',
+                    padding: '0.52rem 1rem',
+                    fontWeight: 700,
+                    fontSize: '0.92rem',
+                    justifyContent: 'center',
+                    height: 38,
+                    boxSizing: 'border-box'
+                  }}
                 >
-                  {joinLoading ? 'Se conectează...' : '🎮 Intră în Joc'}
+                  {joinLoading ? 'Se conectează...' : '🚀 Intră în Joc'}
                 </button>
               </div>
               {joinError && (
-                <div style={{ color: '#f87171', fontSize: '0.78rem', marginTop: 4 }}>
+                <div style={{ color: '#f87171', fontSize: '0.82rem', marginTop: 8, fontWeight: 600 }}>
                   ⚠️ {joinError}
                 </div>
               )}

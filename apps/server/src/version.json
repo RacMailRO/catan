@@ -1,9 +1,14 @@
 {
-  "version": "v1.88",
-  "commitCount": 88,
-  "shortHash": "3f436cc",
-  "buildDate": "2026-10-26T20:48:32.554Z",
+  "version": "v1.89",
+  "commitCount": 89,
+  "shortHash": "512ccca",
+  "buildDate": "2026-10-26T20:50:42.870Z",
   "releaseNotes": [
+    {
+      "hash": "512ccca",
+      "date": "2026-10-26",
+      "message": "chore(release): v1.88 metadata"
+    },
     {
       "hash": "3f436cc",
       "date": "2026-10-26",
@@ -248,11 +253,6 @@
       "hash": "e4ad831",
       "date": "2026-10-26",
       "message": "feat: animate resource cards flying from the producing hex to the receiving player"
-    },
-    {
-      "hash": "f842198",
-      "date": "2026-10-26",
-      "message": "feat: per-turn countdown, action feedback banner, resource-gain flash, trade hand visibility"
     }
   ]
 }
