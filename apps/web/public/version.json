@@ -1,9 +1,14 @@
 {
-  "version": "v1.91",
-  "commitCount": 91,
-  "shortHash": "cd7b25b",
-  "buildDate": "2026-10-26T21:11:41.472Z",
+  "version": "v1.92",
+  "commitCount": 92,
+  "shortHash": "0c3da92",
+  "buildDate": "2026-10-26T21:11:53.683Z",
   "releaseNotes": [
+    {
+      "hash": "0c3da92",
+      "date": "2026-10-26",
+      "message": "fix(server): case-insensitive static asset lookup for Linux filesystems"
+    },
     {
       "hash": "cd7b25b",
       "date": "2026-10-26",
@@ -248,11 +253,6 @@
       "hash": "9b91395",
       "date": "2026-10-26",
       "message": "fix: match plain sea tile color to harbor tiles, vary their rotation"
-    },
-    {
-      "hash": "9d2ce46",
-      "date": "2026-10-26",
-      "message": "fix: explicit steal feedback banner, correct mobile board pan speed"
     }
   ]
 }
