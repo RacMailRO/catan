@@ -844,12 +844,13 @@ select:focus,
   }
 
   .dock-actions-row .btn {
-    padding: 0.35rem 0.5rem;
-    font-size: 0.78rem;
-    flex: 1 1 calc(33.333% - 6px);
-    min-width: 78px;
+    padding: 0.32rem 0.45rem;
+    font-size: 0.76rem;
+    flex: 1 1 auto;
+    min-width: 64px;
     text-align: center;
     justify-content: center;
+    white-space: nowrap;
   }
 
   .board-top-banner {
@@ -896,9 +897,11 @@ select:focus,
   }
 
   .dock-actions-row .btn {
-    padding: 0.25rem 0.45rem;
-    font-size: 0.74rem;
+    padding: 0.25rem 0.4rem;
+    font-size: 0.72rem;
     flex: 1 1 auto;
+    min-width: 58px;
+    white-space: nowrap;
   }
 }
 

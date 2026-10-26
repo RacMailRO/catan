@@ -1087,6 +1087,11 @@ Această secțiune documentează cerințele practice apărute în cursul utiliz�
    - Jetoanele numerice afișează atât numărul asociat zarurilor (și probabilitatea prin puncte), cât și litera alocată (A-R conform ordinii clasice de spiralare), permițând verificarea rapidă a generării corecte a hărții.
 3. **Dispunere compactă a panoului de cărți**:
    - Butonul de ascundere/afișare a cărților din mână este integrat pe aceeași linie cu titlul panoului, economisind spațiu vertical prețios pe ecrane de laptop și dispozitive mobile.
+4. **Navigare și Pan fluid pe hartă la aruncarea zarului 7**:
+   - Panning-ul hărții (drag / swipe cu mouse-ul sau touch pe mobil) rămâne activ în permanență, inclusiv în faza de mutare a hoțului (`move_robber`) când toate hexagoanele sunt evidențiate. Diferențierea dintre pan și tap/click se realizează printr-un prag de translație (> 6px), prevenind selecția accidentală a hexagoanelor în timpul navigării.
+   - Posibilitate de minimizare a ferestrei de decartare la 7 (`discard_resources`) prin butonul „👁️ Vezi Harta”, oferind libertate completă de inspecție a tablei.
+5. **Denumiri compacte pentru butoanele de construcție pe mobil**:
+   - Butoanele de acțiuni din dock-ul de jos folosesc etichete scurte fără costuri atașate în text (`Drum`, `Așezare`, `Oraș`, `Dezvoltare`), garantând că butoanele nu se suprapun și pot fi atinse fără dificultate pe orice ecran mobil.
 
 ## 15.4 Replay și Reziliență la Sincronizare în Modul Online
 
