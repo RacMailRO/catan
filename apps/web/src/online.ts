@@ -146,7 +146,12 @@ export async function submitOnlineAction(params: {
     })
   });
   const data = await parseJsonResponse(res);
-  if (!res.ok) throw new Error(data.error ?? 'Mutare invalidă.');
+  if (!res.ok) {
+    const err = new Error(data.error ?? 'Mutare invalidă.');
+    (err as any).statusCode = res.status;
+    (err as any).data = data;
+    throw err;
+  }
   return data;
 }
 

@@ -166,6 +166,7 @@ export interface TradeOffer {
   createdAtMs: number;
   expiresAtMs: number;
   rejectedByPlayerIds: string[];
+  rejectionReasons?: Record<string, string>;
   status: 'open' | 'accepted' | 'rejected' | 'cancelled' | 'expired';
 }
 
@@ -281,7 +282,7 @@ export type GameAction =
       offering: Partial<ResourceCount>;
       requesting: Partial<ResourceCount>;
     }
-  | { type: 'respond_trade'; offerId: string; response: 'accept' | 'reject' }
+  | { type: 'respond_trade'; offerId: string; response: 'accept' | 'reject'; reason?: string }
   | { type: 'cancel_trade'; offerId: string }
   | { type: 'end_turn' };
 

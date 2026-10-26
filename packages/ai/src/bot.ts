@@ -1,4 +1,6 @@
 import {
+  ALL_RESOURCES,
+  ResourceType,
   AICandidateEvaluation,
   AIDecisionRecord,
   AIDifficulty,
@@ -15,7 +17,8 @@ import {
 } from '@catan/core';
 import {
   evaluateBoardPosition,
-  evaluateCandidateAction
+  evaluateCandidateAction,
+  evaluateResourceNeed
 } from './evaluator';
 
 export interface ChooseAIActionOptions {
@@ -66,14 +69,15 @@ export function choosePassiveBotAction(
     const roll = legal.find((a) => a.type === 'roll_dice');
     const endTurn = legal.find((a) => a.type === 'end_turn');
     const rejectTrade = legal.find(
-      (a) => a.type === 'respond_trade' && a.response === 'reject'
+      (a): a is Extract<GameAction, { type: 'respond_trade' }> =>
+        a.type === 'respond_trade' && a.response === 'reject'
     );
 
     if (roll) {
       chosenAction = roll;
       chosenReason = 'Botul neutru aruncă zarurile';
     } else if (rejectTrade) {
-      chosenAction = rejectTrade;
+      chosenAction = { ...rejectTrade, reason: 'Botul neutru nu participă la schimburi' };
       chosenReason = 'Botul neutru refuză schimburile';
     } else if (endTurn) {
       chosenAction = endTurn;
@@ -225,6 +229,43 @@ export function chooseAIAction(
       evaluatedCandidates.sort((a, b) => b.score - a.score);
       chosenCandidate = evaluatedCandidates[0]!;
     }
+  }
+
+  if (chosenCandidate.action.type === 'respond_trade' && chosenCandidate.action.response === 'reject') {
+    const act = chosenCandidate.action;
+    const openOffer = view.activeTradeOffers.find((o) => o.id === act.offerId);
+    let reason = 'Oferta nu se potrivește planului meu curent';
+    if (openOffer) {
+      const lacksRequested = ALL_RESOURCES.some(
+        (r) => openOffer.requesting[r] > 0 && player.resources[r] < openOffer.requesting[r]
+      );
+      const RES_NAMES: Record<ResourceType, string> = {
+        wood: 'Lemn',
+        brick: 'Argilă',
+        sheep: 'Lână',
+        wheat: 'Grâu',
+        ore: 'Minereu'
+      };
+      if (lacksRequested) {
+        const missing = ALL_RESOURCES.filter(
+          (r) => openOffer.requesting[r] > 0 && player.resources[r] < openOffer.requesting[r]
+        )
+          .map((r) => RES_NAMES[r])
+          .join(', ');
+        reason = `Nu am ${missing} în mână`;
+      } else {
+        const needed = ALL_RESOURCES.filter((r) => evaluateResourceNeed(player.resources, r, style) >= 3.5)
+          .map((r) => RES_NAMES[r]);
+        if (needed.length > 0) {
+          reason = `Aș dori ${needed.slice(0, 2).join(' sau ')} la schimb`;
+        }
+      }
+    }
+    chosenCandidate = {
+      ...chosenCandidate,
+      action: { ...act, reason },
+      explanation: `${chosenCandidate.explanation} (${reason})`
+    };
   }
 
   const computeTimeMs = Number((performance.now() - startTime).toFixed(2));

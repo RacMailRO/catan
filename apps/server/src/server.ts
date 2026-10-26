@@ -867,9 +867,11 @@ export function createCatanServer(options?: {
           expectedSequence !== runtime.state.sequence
         ) {
           sendJson(res, 409, {
-            error: 'Stale sequence number (duplicate or delayed action)',
+            error: 'Secvență desincronizată (acțiune duplicată sau întârziată)',
             code: 'SEQUENCE_MISMATCH',
-            currentSequence: runtime.state.sequence
+            currentSequence: runtime.state.sequence,
+            playerView: getPlayerView(runtime.state, playerId),
+            legalActions: getLegalActions(runtime.state, playerId)
           });
           return;
         }

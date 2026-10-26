@@ -917,10 +917,10 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 {building && building.type === 'city' && (
                   <image
                     href={CITY_SVG_BY_COLOR[pColor]}
-                    x={-54}
-                    y={-54}
-                    width={108}
-                    height={108}
+                    x={-28}
+                    y={-32}
+                    width={56}
+                    height={56}
                     style={{
                       pointerEvents: 'none',
                       filter:

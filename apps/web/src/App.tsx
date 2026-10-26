@@ -44,6 +44,7 @@ import {
 import { ReplayAndAnalysisView } from './components/ReplayAndAnalysisView';
 import { saveReplayToHistory } from './storage';
 import {
+  GameSyncPayload,
   LobbyState,
   OnlineSession,
   createOnlineLobby,
@@ -579,6 +580,34 @@ export const App: React.FC = () => {
 
   // Replay Viewer State
   const [activeReplay, setActiveReplay] = useState<ReplayFile | null>(null);
+  const openGameReplay = async (targetGameId?: string) => {
+    if (recorder) {
+      const rep = recorder.toReplayFile();
+      saveReplayToHistory(rep, true);
+      setActiveReplay(rep);
+      setActiveTab('replay');
+      return;
+    }
+    const gId = targetGameId ?? onlineSession?.gameId;
+    if (gId) {
+      try {
+        const res = await fetch(`/api/games/${gId}/replay`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.replay) {
+            saveReplayToHistory(data.replay, true);
+            setActiveReplay(data.replay);
+            setActiveTab('replay');
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Eroare la încărcarea replay-ului:', err);
+      }
+    }
+    setActiveTab('replay');
+  };
+
 
   // Benchmark Simulator State
   const [benchmarkGamesCount, setBenchmarkGamesCount] = useState<number>(8);
@@ -752,8 +781,13 @@ export const App: React.FC = () => {
         action
       });
       applyOnlineSync(data, action, playerId, prevView);
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Mutare invalidă.');
+    } catch (err: any) {
+      if (err?.statusCode === 409 && err?.data?.playerView) {
+        applyOnlineSync(err.data as GameSyncPayload, action, playerId, prevView);
+        setActionError('Starea partidei a fost resincronizată automat cu serverul.');
+      } else {
+        setActionError(err instanceof Error ? err.message : 'Mutare invalidă.');
+      }
     }
   };
 
@@ -1218,12 +1252,7 @@ export const App: React.FC = () => {
                   type="button"
                   className={`nav-btn ${activeTab === 'replay' ? 'active' : ''}`}
                   onClick={() => {
-                    if (recorder) {
-                      const rep = recorder.toReplayFile();
-                      saveReplayToHistory(rep, false);
-                      setActiveReplay(rep);
-                    }
-                    setActiveTab('replay');
+                    openGameReplay();
                     setNavMenuOpen(false);
                   }}
                 >
@@ -1958,6 +1987,31 @@ export const App: React.FC = () => {
                       >
                         🛣️ {t.buildRoad}
                       </button>
+                      {/* Port Shortcut: if player has wood port and >= 2 wood, show quick conversion button */}
+                      {isHumanTurn && activePlayerObj && activePlayerObj.resources.wood >= 2 && activePlayerObj.resources.brick === 0 && (() => {
+                        const wRatio = getPlayerBankTradeRatio(gameState.board, activePlayerObj.id, 'wood');
+                        if (activePlayerObj.resources.wood >= wRatio && gameState.bank.brick >= 1) {
+                          return (
+                            <button
+                              type="button"
+                              className="btn"
+                              style={{ fontSize: '0.68rem', padding: '0.15rem 0.45rem', borderColor: 'var(--accent-gold)', color: 'var(--accent-gold)' }}
+                              title="Schimbă la port pentru a obține Argilă pentru Drum"
+                              onClick={() => {
+                                executeAction(activePlayerObj.id, {
+                                  type: 'trade_bank',
+                                  give: 'wood',
+                                  giveAmount: wRatio,
+                                  receive: 'brick'
+                                });
+                              }}
+                            >
+                              ⚓ Port ({wRatio}L ➔ 1A)
+                            </button>
+                          );
+                        }
+                        return null;
+                      })()}
 
                       <button
                         type="button"
@@ -2456,6 +2510,73 @@ export const App: React.FC = () => {
                         </div>
                       );
                     })()}
+
+                    {/* Port Quick-Trade Suggestions (e.g. 3 Wood + 2:1 Wood Port -> 1 Brick for Road) */}
+                    {(() => {
+                      const portRatioWood = getPlayerBankTradeRatio(gameState.board, activePlayerObj.id, 'wood');
+                      const portRatioBrick = getPlayerBankTradeRatio(gameState.board, activePlayerObj.id, 'brick');
+                      const portRatioOre = getPlayerBankTradeRatio(gameState.board, activePlayerObj.id, 'ore');
+                      const portRatioWheat = getPlayerBankTradeRatio(gameState.board, activePlayerObj.id, 'wheat');
+
+                      const suggestions: { label: string; give: ResourceType; giveAmount: number; receive: ResourceType }[] = [];
+
+                      // Road suggestion: 1 Wood + 1 Brick needed
+                      if (activePlayerObj.resources.wood >= portRatioWood + 1 && activePlayerObj.resources.brick === 0 && gameState.bank.brick >= 1) {
+                        suggestions.push({
+                          label: 'Ai Port la Lemn (' + portRatioWood + ':1) și ' + activePlayerObj.resources.wood + ' Lemn! Schimbă ' + portRatioWood + ' Lemn ➔ 1 Argilă pentru Drum',
+                          give: 'wood',
+                          giveAmount: portRatioWood,
+                          receive: 'brick'
+                        });
+                      } else if (activePlayerObj.resources.brick >= portRatioBrick + 1 && activePlayerObj.resources.wood === 0 && gameState.bank.wood >= 1) {
+                        suggestions.push({
+                          label: 'Ai Port la Argilă (' + portRatioBrick + ':1) și ' + activePlayerObj.resources.brick + ' Argilă! Schimbă ' + portRatioBrick + ' Argilă ➔ 1 Lemn pentru Drum',
+                          give: 'brick',
+                          giveAmount: portRatioBrick,
+                          receive: 'wood'
+                        });
+                      }
+
+                      // City suggestion: 3 Ore + 2 Wheat needed
+                      if (activePlayerObj.resources.ore >= portRatioOre + 3 && activePlayerObj.resources.wheat < 2 && gameState.bank.wheat >= 1) {
+                        suggestions.push({
+                          label: 'Schimbă ' + portRatioOre + ' Minereu ➔ 1 Grâu pentru Oraș',
+                          give: 'ore',
+                          giveAmount: portRatioOre,
+                          receive: 'wheat'
+                        });
+                      }
+
+                      if (suggestions.length === 0) return null;
+
+                      return (
+                        <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid var(--accent-gold)', borderRadius: 6, padding: '0.45rem 0.65rem', marginTop: '0.6rem' }}>
+                          <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--accent-gold)', marginBottom: 4 }}>
+                            ⚓ Sugestii Rapide de Schimb la Porturi:
+                          </div>
+                          {suggestions.map((sug, idx) => (
+                            <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '0.78rem' }}>{sug.label}</span>
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                style={{ fontSize: '0.74rem', padding: '0.2rem 0.5rem' }}
+                                onClick={() => {
+                                  executeAction(activePlayerObj.id, {
+                                    type: 'trade_bank',
+                                    give: sug.give,
+                                    giveAmount: sug.giveAmount,
+                                    receive: sug.receive
+                                  });
+                                }}
+                              >
+                                Schimbă Rapid la Port
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div className="candidate-row" style={{ padding: '0.75rem' }}>
@@ -2729,6 +2850,178 @@ export const App: React.FC = () => {
             </div>
           )}
 
+          {/* INCOMING TRADE OFFER FOR HUMAN PLAYER (Allows Accept, Reject, Counter-Offer) */}
+          {(() => {
+            const incomingOffer = gameState.activeTradeOffers.find(
+              (o) =>
+                o.status === 'open' &&
+                o.fromPlayerId !== viewerId &&
+                (!o.toPlayerId || o.toPlayerId === viewerId) &&
+                !o.rejectedByPlayerIds.includes(viewerId)
+            );
+            if (!incomingOffer) return null;
+            const proposer = getPlayerById(gameState, incomingOffer.fromPlayerId);
+            const myRes = viewerPlayerObj?.resources ?? createEmptyResources();
+            const canAfford = hasResources(myRes, incomingOffer.requesting);
+
+            return (
+              <div className="modal-backdrop">
+                <div className="modal-dialog" style={{ maxWidth: 480, borderColor: 'var(--accent-gold)' }}>
+                  <div className="modal-header">
+                    <h3>
+                      🤝 Ofertă de Schimb de la{' '}
+                      <strong style={{ color: 'var(--accent-gold)' }}>{proposer?.name ?? incomingOffer.fromPlayerId}</strong>
+                    </h3>
+                  </div>
+                  <div className="modal-body">
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem', marginBottom: '1rem' }}>
+                      <div style={{ background: 'rgba(34, 197, 94, 0.12)', padding: '0.6rem', borderRadius: 8, border: '1px solid rgba(34, 197, 94, 0.3)' }}>
+                        <h4 style={{ color: '#4ade80', fontSize: '0.84rem', margin: '0 0 0.4rem 0' }}>Primești (îți oferă):</h4>
+                        {ALL_RESOURCES.filter((r) => incomingOffer.offering[r] > 0).map((r) => (
+                          <div key={r} style={{ fontSize: '0.84rem', fontWeight: 600, marginTop: 2 }}>
+                            {RESOURCE_ICONS[r]} {incomingOffer.offering[r]}x {RESOURCE_LABELS[locale][r]}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ background: 'rgba(239, 68, 68, 0.12)', padding: '0.6rem', borderRadius: 8, border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                        <h4 style={{ color: '#f87171', fontSize: '0.84rem', margin: '0 0 0.4rem 0' }}>Dai (îți cere):</h4>
+                        {ALL_RESOURCES.filter((r) => incomingOffer.requesting[r] > 0).map((r) => (
+                          <div key={r} style={{ fontSize: '0.84rem', fontWeight: 600, marginTop: 2 }}>
+                            {RESOURCE_ICONS[r]} {incomingOffer.requesting[r]}x {RESOURCE_LABELS[locale][r]}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {!canAfford && (
+                      <div style={{ color: '#f87171', fontSize: '0.8rem', textAlign: 'center', marginBottom: '0.6rem' }}>
+                        ⚠️ Nu ai în mână toate resursele cerute pentru a accepta.
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={!canAfford}
+                        onClick={() => {
+                          executeAction(viewerId, {
+                            type: 'respond_trade',
+                            offerId: incomingOffer.id,
+                            response: 'accept'
+                          });
+                        }}
+                      >
+                        ✅ Acceptă Schimbul
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => {
+                          executeAction(viewerId, {
+                            type: 'respond_trade',
+                            offerId: incomingOffer.id,
+                            response: 'reject',
+                            reason: 'Nu doresc acest schimb'
+                          });
+                        }}
+                      >
+                        ❌ Refuză
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ borderColor: 'var(--accent-gold)', color: 'var(--accent-gold)' }}
+                        onClick={() => {
+                          // Swap resources for counter-offer
+                          setP2pOffer({ ...incomingOffer.requesting });
+                          setP2pRequest({ ...incomingOffer.offering });
+                          executeAction(viewerId, {
+                            type: 'respond_trade',
+                            offerId: incomingOffer.id,
+                            response: 'reject',
+                            reason: 'Propune o contra-ofertă'
+                          });
+                          setActiveModal('trade');
+                        }}
+                      >
+                        🔄 Negociază / Contra-ofertă
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* TRADE PROPOSER STATUS BANNER (Real-time Rejections & Negotiation Feedback) */}
+          {(() => {
+            const myOpenOffer = gameState.activeTradeOffers.find(
+              (o) => o.fromPlayerId === viewerId && (o.status === 'open' || o.status === 'rejected')
+            );
+            if (!myOpenOffer) return null;
+
+            return (
+              <div
+                style={{
+                  position: 'fixed',
+                  top: 56,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  zIndex: 85,
+                  background: 'var(--bg-panel)',
+                  border: '1px solid var(--accent-gold)',
+                  borderRadius: 8,
+                  padding: '0.55rem 0.9rem',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+                  maxWidth: '94vw',
+                  width: 440,
+                  textAlign: 'center'
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: '0.84rem', color: 'var(--accent-gold)', marginBottom: 3 }}>
+                  🤝 Oferta ta de Schimb ({myOpenOffer.status === 'rejected' ? 'Refuzată de toți' : 'Activă'})
+                </div>
+                {myOpenOffer.rejectedByPlayerIds.length > 0 && (
+                  <div style={{ fontSize: '0.78rem', color: '#f87171', margin: '4px 0', textAlign: 'left' }}>
+                    {myOpenOffer.rejectedByPlayerIds.map((rId) => {
+                      const rName = getPlayerById(gameState, rId)?.name ?? rId;
+                      const reason = myOpenOffer.rejectionReasons?.[rId];
+                      return (
+                        <div key={rId} style={{ marginTop: 2 }}>
+                          ❌ <strong>{rName}</strong> a refuzat{reason ? ': "' + reason + '"' : ''}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 6 }}>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ fontSize: '0.76rem', padding: '0.2rem 0.55rem', borderColor: 'var(--accent-gold)', color: 'var(--accent-gold)' }}
+                    onClick={() => {
+                      executeAction(viewerId, { type: 'cancel_trade', offerId: myOpenOffer.id });
+                      setActiveModal('trade');
+                    }}
+                  >
+                    🔄 Negociază / Schimbă Oferta
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ fontSize: '0.76rem', padding: '0.2rem 0.55rem' }}
+                    onClick={() => {
+                      executeAction(viewerId, { type: 'cancel_trade', offerId: myOpenOffer.id });
+                    }}
+                  >
+                    ✕ Închide
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* AUTOMATIC MODAL G: GAME OVER & SAVED FOR LATER ANALYSIS */}
           {gameState.winnerId && (
             <div className="modal-backdrop">
@@ -2748,14 +3041,7 @@ export const App: React.FC = () => {
                     <button
                       type="button"
                       className="btn btn-primary"
-                      onClick={() => {
-                        if (recorder) {
-                          const rep = recorder.toReplayFile();
-                          saveReplayToHistory(rep, true);
-                          setActiveReplay(rep);
-                          setActiveTab('replay');
-                        }
-                      }}
+                      onClick={() => openGameReplay(gameState.gameId)}
                     >
                       🎬 Deschide în Replay & Analiză
                     </button>
