@@ -1,9 +1,14 @@
 {
-  "version": "v1.102",
-  "commitCount": 102,
-  "shortHash": "3563ee6",
-  "buildDate": "2026-10-26T22:31:53.670Z",
+  "version": "v1.103",
+  "commitCount": 103,
+  "shortHash": "430ebae",
+  "buildDate": "2026-10-26T22:52:30.062Z",
   "releaseNotes": [
+    {
+      "hash": "430ebae",
+      "date": "2026-10-27",
+      "message": "chore: bump build version to v1.102"
+    },
     {
       "hash": "3563ee6",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "8d6ff23",
       "date": "2026-10-26",
       "message": "fix(server): pre-bundle server into standalone JS to eliminate runtime esbuild crashes on cPanel"
-    },
-    {
-      "hash": "a6d4a57",
-      "date": "2026-10-26",
-      "message": "merge: feat/enable-live-websocket-and-reconnect into main"
     }
   ]
 }

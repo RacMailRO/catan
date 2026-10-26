@@ -746,9 +746,11 @@ export const App: React.FC = () => {
   const [bankReceiveRes, setBankReceiveRes] = useState<ResourceType>('ore');
   const [p2pOffer, setP2pOffer] = useState<ResourceCount>(createEmptyResources());
   const [dismissedTradeOfferIds, setDismissedTradeOfferIds] = useState<Set<string>>(new Set());
+  const [autoRejectCountdown, setAutoRejectCountdown] = useState<{ offerId: string; secondsLeft: number } | null>(null);
   const [minimizedDiscard, setMinimizedDiscard] = useState<boolean>(false);
 
   const dismissTradeOffer = (offerId: string, reason = 'Refuzat de utilizator') => {
+    setAutoRejectCountdown(null);
     setDismissedTradeOfferIds((prev) => new Set(prev).add(offerId));
     executeAction(viewerId, {
       type: 'respond_trade',
@@ -1432,6 +1434,66 @@ export const App: React.FC = () => {
     const id = setTimeout(() => setTurnTimeLeft((t) => (t !== null ? t - 1 : null)), 1000);
     return () => clearTimeout(id);
   }, [turnTimeLeft]);
+
+  // Auto-decline incoming trade offers when user lacks requested resources (5s countdown)
+  useEffect(() => {
+    if (!gameState) {
+      if (autoRejectCountdown) setAutoRejectCountdown(null);
+      return;
+    }
+
+    const incomingOffer = gameState.activeTradeOffers?.find(
+      (o) =>
+        o.status === 'open' &&
+        o.fromPlayerId !== viewerId &&
+        (!o.toPlayerId || o.toPlayerId === viewerId) &&
+        !o.rejectedByPlayerIds.includes(viewerId) &&
+        !dismissedTradeOfferIds.has(o.id)
+    );
+
+    if (!incomingOffer) {
+      if (autoRejectCountdown) setAutoRejectCountdown(null);
+      return;
+    }
+
+    const myRes = viewerPlayerObj?.resources ?? createEmptyResources();
+    const canAfford = hasResources(myRes, incomingOffer.requesting);
+
+    // Only auto-reject if the player cannot afford the requested resources!
+    if (canAfford) {
+      if (autoRejectCountdown) setAutoRejectCountdown(null);
+      return;
+    }
+
+    // Initialize countdown for this specific offer if not started yet
+    if (!autoRejectCountdown || autoRejectCountdown.offerId !== incomingOffer.id) {
+      setAutoRejectCountdown({ offerId: incomingOffer.id, secondsLeft: 5 });
+      return;
+    }
+
+    // When timer expires, auto-reject and close modal
+    if (autoRejectCountdown.secondsLeft <= 0) {
+      dismissTradeOffer(incomingOffer.id, 'Refuzat automat (lipsă resurse)');
+      setAutoRejectCountdown(null);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setAutoRejectCountdown((prev) =>
+        prev && prev.offerId === incomingOffer.id
+          ? { ...prev, secondsLeft: prev.secondsLeft - 1 }
+          : null
+      );
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [
+    gameState,
+    viewerId,
+    dismissedTradeOfferIds,
+    viewerPlayerObj?.resources,
+    autoRejectCountdown
+  ]);
 
   // Count unplayed development cards by type for the viewer/active player
   const unplayedDevCards = (viewerPlayerObj ?? activePlayerObj)?.devCards.filter((c) => !c.played) ?? [];
@@ -3510,6 +3572,10 @@ export const App: React.FC = () => {
             const proposer = getPlayerById(gameState, incomingOffer.fromPlayerId);
             const myRes = viewerPlayerObj?.resources ?? createEmptyResources();
             const canAfford = hasResources(myRes, incomingOffer.requesting);
+            const autoRejectSeconds =
+              autoRejectCountdown && autoRejectCountdown.offerId === incomingOffer.id
+                ? autoRejectCountdown.secondsLeft
+                : null;
 
             return (
               <div
@@ -3531,15 +3597,32 @@ export const App: React.FC = () => {
                         {proposer?.name ?? incomingOffer.fromPlayerId}
                       </strong>
                     </h3>
-                    <button
-                      type="button"
-                      className="btn"
-                      style={{ padding: '0.2rem 0.55rem', fontSize: '0.82rem' }}
-                      title="Închide / Refuză oferta"
-                      onClick={() => dismissTradeOffer(incomingOffer.id, 'Fereastră închisă')}
-                    >
-                      ✕ Închide
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {!canAfford && autoRejectSeconds !== null && (
+                        <span
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.2)',
+                            color: '#f87171',
+                            border: '1px solid rgba(239, 68, 68, 0.4)',
+                            padding: '2px 8px',
+                            borderRadius: 12,
+                            fontSize: '0.78rem',
+                            fontWeight: 700
+                          }}
+                        >
+                          ⏱️ Auto-refuz în {autoRejectSeconds}s
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ padding: '0.2rem 0.55rem', fontSize: '0.82rem' }}
+                        title="Închide / Refuză oferta"
+                        onClick={() => dismissTradeOffer(incomingOffer.id, 'Fereastră închisă')}
+                      >
+                        ✕ Închide
+                      </button>
+                    </div>
                   </div>
                   <div className="modal-body">
                     <div
@@ -3692,13 +3775,68 @@ export const App: React.FC = () => {
                     {!canAfford && (
                       <div
                         style={{
-                          color: '#f87171',
-                          fontSize: '0.82rem',
+                          background: 'rgba(239, 68, 68, 0.12)',
+                          border: '1px solid rgba(239, 68, 68, 0.35)',
+                          borderRadius: 8,
+                          padding: '0.6rem 0.75rem',
                           textAlign: 'center',
-                          marginBottom: '0.65rem'
+                          marginBottom: '0.85rem'
                         }}
                       >
-                        ⚠️ Nu ai în mână toate resursele cerute pentru a accepta acest schimb.
+                        <div
+                          style={{
+                            color: '#f87171',
+                            fontSize: '0.84rem',
+                            fontWeight: 700,
+                            marginBottom: 4
+                          }}
+                        >
+                          ⚠️ Nu ai în mână toate resursele cerute pentru a accepta acest schimb.
+                        </div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 8,
+                            fontSize: '0.82rem',
+                            color: '#fca5a5'
+                          }}
+                        >
+                          <span>⏱️ Oferta se va refuza automat în:</span>
+                          <strong
+                            style={{
+                              background: '#ef4444',
+                              color: '#fff',
+                              padding: '1px 8px',
+                              borderRadius: 12,
+                              fontSize: '0.88rem',
+                              minWidth: 26,
+                              display: 'inline-block'
+                            }}
+                          >
+                            {autoRejectSeconds !== null ? autoRejectSeconds : 5}s
+                          </strong>
+                        </div>
+                        <div
+                          style={{
+                            width: '100%',
+                            height: 4,
+                            background: 'rgba(255, 255, 255, 0.12)',
+                            borderRadius: 2,
+                            marginTop: 6,
+                            overflow: 'hidden'
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: `${Math.max(0, (((autoRejectSeconds !== null ? autoRejectSeconds : 5)) / 5) * 100)}%`,
+                              height: '100%',
+                              background: '#ef4444',
+                              transition: 'width 1s linear'
+                            }}
+                          />
+                        </div>
                       </div>
                     )}
 
@@ -3728,7 +3866,7 @@ export const App: React.FC = () => {
                         }}
                         onClick={() => dismissTradeOffer(incomingOffer.id, 'Nu doresc acest schimb')}
                       >
-                        ❌ Refuză
+                        ❌ Refuză {!canAfford && autoRejectSeconds !== null ? `(${autoRejectSeconds}s)` : ''}
                       </button>
                       <button
                         type="button"
