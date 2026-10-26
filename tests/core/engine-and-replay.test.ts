@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   ALL_RESOURCES,
+  GameAction,
   ReplayRecorder,
   applyAction,
   calculatePlayerLongestRoad,
   calculateScore,
+  canPlayDevCardType,
   createGame,
   expireStaleTradesInPlace,
   exportReplayJson,
@@ -18,6 +20,7 @@ import {
   validateAction,
   verifyReplayDeterminism
 } from '@catan/core';
+import { chooseAIAction } from '@catan/ai';
 
 describe('Catan Core Engine & Replay System', () => {
   it('generates standard board with 19 hexes, 54 vertices, 72 edges, 9 harbors and balanced red numbers', () => {
@@ -590,6 +593,162 @@ describe('Catan Core Engine & Replay System', () => {
 
     const cancelledState = applyAction(state, 'p1', { type: 'cancel_trade', offerId }).state;
     expect(cancelledState.activeTradeOffers[0]!.status).toBe('cancelled');
+  });
+
+  it('plays Road Building for 2 free roads, both before rolling dice (back to turn_start) and after (back to main_actions)', () => {
+    let state = createGame({
+      gameId: 'road-building-test',
+      seed: 'road-building-seed',
+      participants: [
+        { id: 'p1', name: 'P1', type: 'human' },
+        { id: 'p2', name: 'P2', type: 'human' },
+        { id: 'p3', name: 'P3', type: 'human' }
+      ]
+    });
+    while (state.phase !== 'turn_start') {
+      const pId = state.activePlayerId;
+      state = applyAction(state, pId, getLegalActions(state, pId)[0]!).state;
+    }
+
+    // Case A: play Road Building BEFORE rolling dice this turn.
+    state.activePlayerId = 'p1';
+    state.lastDiceRoll = undefined;
+    const p1 = getPlayerById(state, 'p1')!;
+    const roadsBefore = p1.remainingPieces.roads;
+    p1.devCards.push({ id: 'rb1', type: 'road_building', boughtAtTurn: 0, played: false });
+
+    expect(canPlayDevCardType(state, p1, 'road_building')).toBe(true);
+    const legalAtTurnStart = getLegalActions(state, 'p1');
+    expect(legalAtTurnStart.some((a) => a.type === 'play_road_building')).toBe(true);
+
+    state = applyAction(state, 'p1', { type: 'play_road_building' }).state;
+    expect(state.phase).toBe('road_building_card');
+    expect(state.freeRoadsRemaining).toBe(2);
+    expect(getPlayerById(state, 'p1')!.devCards.find((c) => c.id === 'rb1')!.played).toBe(true);
+
+    // Place both free roads, discovering legal edges dynamically (board-layout-agnostic).
+    for (let i = 0; i < 2; i++) {
+      const legalRoads = getLegalActions(state, 'p1').filter(
+        (a): a is Extract<GameAction, { type: 'place_free_road' }> => a.type === 'place_free_road'
+      );
+      expect(legalRoads.length).toBeGreaterThan(0);
+      state = applyAction(state, 'p1', legalRoads[0]!).state;
+    }
+
+    expect(state.freeRoadsRemaining).toBe(0);
+    expect(getPlayerById(state, 'p1')!.remainingPieces.roads).toBe(roadsBefore - 2);
+    // Played before rolling dice this turn -> must still roll, not skip straight to main_actions.
+    expect(state.phase).toBe('turn_start');
+    expect(getLegalActions(state, 'p1').some((a) => a.type === 'roll_dice')).toBe(true);
+
+    // Roll dice to leave turn_start legally, resolve a 7 if one came up, then end the turn so
+    // hasPlayedDevCardThisTurn resets (the default 'one_total' rule forbids a second dev card in
+    // the same turn regardless of before/after-dice timing), and force play back to p1 for a
+    // fresh turn to test Case B in isolation.
+    state = applyAction(state, 'p1', { type: 'roll_dice' }).state;
+    while (state.phase !== 'main_actions') {
+      const actorId =
+        state.phase === 'discard_resources' ? Object.keys(state.pendingDiscards)[0]! : state.activePlayerId;
+      const legal = getLegalActions(state, actorId);
+      state = applyAction(state, actorId, legal[0]!).state;
+    }
+    state = applyAction(state, 'p1', { type: 'end_turn' }).state;
+    state.activePlayerId = 'p1';
+    state.phase = 'turn_start';
+    state.lastDiceRoll = undefined;
+
+    // Case B: play Road Building AFTER rolling dice this turn -> returns to main_actions.
+    state = applyAction(state, 'p1', { type: 'roll_dice' }).state;
+    while (state.phase !== 'main_actions') {
+      const actorId =
+        state.phase === 'discard_resources' ? Object.keys(state.pendingDiscards)[0]! : state.activePlayerId;
+      const legal = getLegalActions(state, actorId);
+      state = applyAction(state, actorId, legal[0]!).state;
+    }
+    expect(state.phase).toBe('main_actions');
+
+    const p1Again = getPlayerById(state, 'p1')!;
+    p1Again.devCards.push({ id: 'rb2', type: 'road_building', boughtAtTurn: 0, played: false });
+    const roadsBeforeSecond = p1Again.remainingPieces.roads;
+
+    state = applyAction(state, 'p1', { type: 'play_road_building' }).state;
+    expect(state.phase).toBe('road_building_card');
+    expect(state.freeRoadsRemaining).toBe(2);
+
+    for (let i = 0; i < 2; i++) {
+      const legalRoads = getLegalActions(state, 'p1').filter(
+        (a): a is Extract<GameAction, { type: 'place_free_road' }> => a.type === 'place_free_road'
+      );
+      expect(legalRoads.length).toBeGreaterThan(0);
+      state = applyAction(state, 'p1', legalRoads[0]!).state;
+    }
+
+    expect(state.freeRoadsRemaining).toBe(0);
+    expect(getPlayerById(state, 'p1')!.remainingPieces.roads).toBe(roadsBeforeSecond - 2);
+    // Played after rolling dice this turn -> returns to main_actions, not back to turn_start.
+    expect(state.phase).toBe('main_actions');
+
+    // Cannot play a second Road Building this turn once one is already played ('one_total' default rule).
+    const p1Final = getPlayerById(state, 'p1')!;
+    p1Final.devCards.push({ id: 'rb3', type: 'road_building', boughtAtTurn: 0, played: false });
+    expect(canPlayDevCardType(state, p1Final, 'road_building')).toBe(false);
+  });
+
+  it('negotiates a trade: AI rejects an unfavorable offer, tracks who rejected, and accepts a re-proposed counter-offer', () => {
+    let state = createGame({
+      gameId: 'trade-negotiate-test',
+      participants: [
+        { id: 'p1', name: 'P1', type: 'human' },
+        { id: 'p2', name: 'P2', type: 'ai', aiDifficulty: 'medium', aiStyle: 'balanced' },
+        { id: 'p3', name: 'P3', type: 'ai', aiDifficulty: 'medium', aiStyle: 'balanced' }
+      ]
+    });
+    state.phase = 'main_actions';
+    state.activePlayerId = 'p1';
+    const p1 = getPlayerById(state, 'p1')!;
+    const p2 = getPlayerById(state, 'p2')!;
+    p1.resources = { wood: 4, brick: 0, sheep: 0, wheat: 0, ore: 0 };
+    p2.resources = { wood: 0, brick: 3, sheep: 0, wheat: 0, ore: 0 };
+
+    // Lowball offer p2 should reject: giving up its only scarce resource (brick) for a
+    // single wood it doesn't especially need.
+    state = applyAction(state, 'p1', {
+      type: 'propose_trade',
+      toPlayerId: 'p2',
+      offering: { wood: 1, brick: 0, sheep: 0, wheat: 0, ore: 0 },
+      requesting: { wood: 0, brick: 3, sheep: 0, wheat: 0, ore: 0 }
+    }).state;
+    const firstOfferId = state.activeTradeOffers[0]!.id;
+
+    const rejectDecision = chooseAIAction(state, 'p2');
+    expect(rejectDecision.action.type).toBe('respond_trade');
+    if (rejectDecision.action.type === 'respond_trade') {
+      expect(rejectDecision.action.response).toBe('reject');
+    }
+    state = applyAction(state, 'p2', rejectDecision.action).state;
+    expect(state.activeTradeOffers.find((o) => o.id === firstOfferId)!.status).toBe('rejected');
+    expect(
+      state.activeTradeOffers.find((o) => o.id === firstOfferId)!.rejectedByPlayerIds
+    ).toContain('p2');
+
+    // Re-propose (negotiate) a fairer counter-offer: 1-for-1, which p2's evaluator should accept.
+    state = applyAction(state, 'p1', {
+      type: 'propose_trade',
+      toPlayerId: 'p2',
+      offering: { wood: 1, brick: 0, sheep: 0, wheat: 0, ore: 0 },
+      requesting: { wood: 0, brick: 1, sheep: 0, wheat: 0, ore: 0 }
+    }).state;
+    const secondOfferId = state.activeTradeOffers.find((o) => o.status === 'open')!.id;
+
+    const acceptDecision = chooseAIAction(state, 'p2');
+    expect(acceptDecision.action.type).toBe('respond_trade');
+    if (acceptDecision.action.type === 'respond_trade') {
+      expect(acceptDecision.action.response).toBe('accept');
+    }
+    state = applyAction(state, 'p2', acceptDecision.action).state;
+    expect(state.activeTradeOffers.find((o) => o.id === secondOfferId)!.status).toBe('accepted');
+    expect(getPlayerById(state, 'p1')!.resources.brick).toBe(1);
+    expect(getPlayerById(state, 'p2')!.resources.wood).toBe(1);
   });
 
   it('aligns getPlayerView.players strictly with playerOrder and includes propose_trade actions in getLegalActions', () => {
