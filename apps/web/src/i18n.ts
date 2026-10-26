@@ -313,10 +313,24 @@ export function formatActionDescription(
       return locale === 'ro'
         ? `Anul Abundenței (${rLabel[action.resources[0]]} + ${rLabel[action.resources[1]]})`
         : `Year of Plenty (${rLabel[action.resources[0]]} + ${rLabel[action.resources[1]]})`;
-    case 'play_monopoly':
+    case 'play_monopoly': {
+      const totalTaken = details?.totalTaken as number | undefined;
+      const resName = rLabel[action.resource];
+      if (totalTaken !== undefined) {
+        if (totalTaken > 0) {
+          return locale === 'ro'
+            ? `Monopol pe ${resName} (+${totalTaken} cărți confiscate)`
+            : `Monopoly on ${resName} (+${totalTaken} cards taken)`;
+        } else {
+          return locale === 'ro'
+            ? `Monopol pe ${resName} (0 cărți confiscate - adversarii nu aveau ${resName})`
+            : `Monopoly on ${resName} (0 cards taken - opponents had no ${resName})`;
+        }
+      }
       return locale === 'ro'
-        ? `Monopol pe ${rLabel[action.resource]}`
-        : `Monopoly on ${rLabel[action.resource]}`;
+        ? `Monopol pe ${resName}`
+        : `Monopoly on ${resName}`;
+    }
     case 'trade_bank':
       return locale === 'ro'
         ? `Schimb ${action.giveAmount} ${rLabel[action.give]} -> 1 ${rLabel[action.receive]}`
