@@ -932,6 +932,9 @@ export function createCatanServer(options?: {
         const hasAnyHuman = runtime.state.players.some((p) => p.type === 'human');
         if (hasAnyHuman) {
           executeBotStepsUntilHumanNeeded(runtime);
+        } else {
+          // All-AI / Spectator mode: advance initial batch so setup phase begins autonomously
+          executeBotStepsUntilHumanNeeded(runtime, 8);
         }
 
         sendJson(res, 200, {
@@ -956,6 +959,13 @@ export function createCatanServer(options?: {
         }
 
         expireStaleTradesInPlace(runtime.state);
+
+        const hasAnyHuman = runtime.state.players.some((p) => p.type === 'human');
+        if (!hasAnyHuman && runtime.state.phase !== 'game_over') {
+          executeBotStepsUntilHumanNeeded(runtime, 4);
+          persistRuntime(runtime);
+          broadcastGameSync(runtime);
+        }
 
         const sessionToken = urlObj.searchParams.get('sessionToken');
         const queryViewerId = urlObj.searchParams.get('viewerId');

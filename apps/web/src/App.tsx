@@ -51,6 +51,7 @@ import {
   OnlineSession,
   createOnlineLobby,
   fetchGameState,
+  stepOnlineAi,
   fetchLobby,
   fetchSpectatorGameState,
   joinOnlineLobbyByCode,
@@ -568,15 +569,30 @@ export const App: React.FC = () => {
     setOnlineBusy(true);
     setOnlineError(null);
     try {
-      const hostName = participants[0]?.name?.trim() || 'Gazdă';
-      const seats = participants.map((p, idx) => ({
-        seatIndex: idx,
-        name: idx === 0 ? hostName : p.name,
-        type: idx === 0 ? 'human' : p.type === 'human' ? 'open' : p.type,
-        color: p.color,
-        aiDifficulty: p.aiDifficulty,
-        aiStyle: p.aiStyle
-      }));
+      const hasHumans = participants.some((p) => p.type === 'human');
+      const firstHumanIdx = participants.findIndex((p) => p.type === 'human');
+      const hostName = (hasHumans ? participants[firstHumanIdx]?.name : participants[0]?.name)?.trim() || 'Spectator';
+      const seats = participants.map((p, idx) => {
+        if (!hasHumans) {
+          return {
+            seatIndex: idx,
+            name: p.name,
+            type: p.type,
+            color: p.color,
+            aiDifficulty: p.aiDifficulty,
+            aiStyle: p.aiStyle
+          };
+        }
+        const isHostSeat = idx === firstHumanIdx;
+        return {
+          seatIndex: idx,
+          name: isHostSeat ? hostName : p.name,
+          type: isHostSeat ? 'human' : (p.type === 'human' ? 'open' : p.type),
+          color: p.color,
+          aiDifficulty: p.aiDifficulty,
+          aiStyle: p.aiStyle
+        };
+      });
       const data = await createOnlineLobby({
         hostName,
         seats,
@@ -730,7 +746,8 @@ export const App: React.FC = () => {
         // Transient network hiccup — the next tick will retry.
       }
     };
-    const interval = setInterval(poll, 3000);
+    const isAllAi = Boolean(onlinePlayerView?.players && onlinePlayerView.players.every((p) => p.type !== 'human'));
+    const interval = setInterval(poll, isAllAi ? 1200 : 3000);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -1201,7 +1218,17 @@ export const App: React.FC = () => {
   };
 
   // Step one AI move
-  const executeOneAiStep = () => {
+  const executeOneAiStep = async () => {
+    if (onlineSession?.gameId) {
+      try {
+        const data = await stepOnlineAi(onlineSession.gameId, 1, onlineSession.playerId);
+        setOnlinePlayerView(data.playerView);
+        setOnlineLegalActions(data.legalActions as GameAction[]);
+      } catch (err) {
+        console.error('Failed to step AI online:', err);
+      }
+      return;
+    }
     if (!recorder) return;
     const st = recorder.getState();
     if (st.phase === 'game_over') return;
@@ -1370,7 +1397,7 @@ export const App: React.FC = () => {
 
   // Handlers for clicking on the interactive board
   const handleSelectVertex = (vertexId: string) => {
-    if (!gameState) return;
+    if (!gameState || !isHumanTurn) return;
     const pId = gameState.activePlayerId;
     if (gameState.phase === 'setup_settlement_1' || gameState.phase === 'setup_settlement_2') {
       executeAction(pId, { type: 'place_initial_settlement', vertexId });
@@ -1382,7 +1409,7 @@ export const App: React.FC = () => {
   };
 
   const handleSelectEdge = (edgeId: string) => {
-    if (!gameState) return;
+    if (!gameState || !isHumanTurn) return;
     const pId = gameState.activePlayerId;
     if (gameState.phase === 'setup_road_1' || gameState.phase === 'setup_road_2') {
       executeAction(pId, { type: 'place_initial_road', edgeId });
@@ -1430,10 +1457,14 @@ export const App: React.FC = () => {
 
   const activePlayerObj = gameState ? getPlayerById(gameState, gameState.activePlayerId) : undefined;
   const viewerPlayerObj = gameState ? getPlayerById(gameState, viewerId) : undefined;
+  const isAllAiOnlineGame = Boolean(
+    onlineSession && gameState?.players && gameState.players.every((p) => p.type !== 'human')
+  );
   // Online: "my turn" means literally mine — other human seats are on other devices, so seeing
   // that *a* human is active (the local hot-seat definition) isn't enough to let me act.
+  // In a 4-AI online match, the user is strictly a spectator and should never be prompted to act.
   const isHumanTurn = onlineSession
-    ? gameState?.activePlayerId === viewerId
+    ? (!isAllAiOnlineGame && gameState?.activePlayerId === viewerId && activePlayerObj?.type === 'human')
     : activePlayerObj?.type === 'human';
 
   // Reset the countdown only when a genuinely new turn starts for a human player (not on every
@@ -2044,9 +2075,9 @@ export const App: React.FC = () => {
                 🌐 {onlineBusy ? 'Se creează...' : 'Creează Partidă Online'}
               </button>
               <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: 0 }}>
-                Locul 1 ești tu. Orice alt loc marcat „Om” devine un loc liber — ceilalți
-                jucători se alătură de pe propriul dispozitiv cu codul de invitație, înainte să
-                poată începe partida.
+                {participants.every((p) => p.type !== 'human')
+                  ? '👁️ Toți cei 4 participanți sunt AI: partida se va desfășura în Mod Spectator, iar agenții vor construi și plasa totul autonom.'
+                  : 'Locul 1 ești tu. Orice alt loc marcat „Om” devine un loc liber — ceilalți jucători se alătură de pe propriul dispozitiv cu codul de invitație, înainte să poată începe partida.'}
               </p>
               {onlineError && (
                 <div style={{ color: '#f87171', fontSize: '0.78rem' }}>⚠️ {onlineError}</div>

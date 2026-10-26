@@ -1,9 +1,14 @@
 {
-  "version": "v1.108",
-  "commitCount": 108,
-  "shortHash": "0424d27",
-  "buildDate": "2026-10-26T23:02:42.878Z",
+  "version": "v1.109",
+  "commitCount": 109,
+  "shortHash": "08c5709",
+  "buildDate": "2026-10-26T23:22:34.705Z",
   "releaseNotes": [
+    {
+      "hash": "08c5709",
+      "date": "2026-10-27",
+      "message": "chore: bump build version to v1.108"
+    },
     {
       "hash": "0424d27",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "3d1e04b",
       "date": "2026-10-26",
       "message": "chore: update static version.json to v1.59"
-    },
-    {
-      "hash": "f2a6932",
-      "date": "2026-10-26",
-      "message": "merge: feat/build-time-version-changelog-and-plan-docs into main"
     }
   ]
 }

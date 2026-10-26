@@ -48,6 +48,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
   const [filterActionType, setFilterActionType] = useState<string>('all');
   const [importError, setImportError] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<ReplayModalType>('none');
+  const [reportTab, setReportTab] = useState<'overview' | 'initial' | 'ports' | 'cards' | 'dice' | 'decisions'>('overview');
   const [savedReplays, setSavedReplays] = useState<SavedReplaySummary[]>(() =>
     loadSavedReplays()
   );
@@ -59,7 +60,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
 
   useEffect(() => {
     if (replay) {
-      setCurrentSeq(replay.events.length);
+      setCurrentSeq(0);
       setIsPlaying(false);
     }
   }, [replay?.gameId]);
@@ -601,88 +602,880 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
         </div>
       )}
 
-      {/* MODAL 2: STRATEGIC REPORT & DICE HISTOGRAM */}
-      {activeModal === 'strategic_report' && strategicReport && (
-        <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
-          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>📊 Raport Strategic & Statistici Partidă ({replay.gameId})</h3>
-              <button type="button" className="btn" onClick={() => setActiveModal('none')}>
-                ✕ Închide
-              </button>
-            </div>
-            <div className="modal-body">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', marginBottom: '0.9rem' }}>
-                {Object.values(strategicReport.playerSummaries).map((ps) => {
-                  const totalEval = ps.optimalDecisionsCount + ps.suboptimalDecisionsCount;
-                  const accuracy =
-                    totalEval > 0 ? Math.round((ps.optimalDecisionsCount / totalEval) * 100) : 100;
-                  return (
-                    <div key={ps.playerId} className="candidate-row">
-                      <strong>{ps.playerName}</strong> ({ps.finalScore} VP)
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                        Acuratețe decizii: <strong>{accuracy}%</strong> · Gap mediu:{' '}
-                        {ps.averageDecisionGap}
-                      </div>
-                      {ps.biggestMistakes[0] && (
-                        <button
-                          type="button"
-                          className="btn"
-                          style={{ marginTop: 6, padding: '2px 8px', fontSize: '0.74rem' }}
-                          onClick={() => {
-                            setCurrentSeq(ps.biggestMistakes[0]!.sequence);
-                            setActiveModal('none');
-                          }}
-                        >
-                          🔍 Mergi la ezitarea #{ps.biggestMistakes[0]!.sequence} (-
-                          {ps.biggestMistakes[0]!.scoreGap})
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+            {/* MODAL 2: INTERACTIVE & DYNAMIC VISUAL STRATEGIC REPORT */}
+      {activeModal === 'strategic_report' && strategicReport && (() => {
+        const pColors: Record<string, string> = {
+          red: '#ef4444',
+          blue: '#3b82f6',
+          orange: '#f97316',
+          green: '#10b981',
+          white: '#f1f5f9'
+        };
+        const profiles = Object.values(strategicReport.playerProfiles);
+        const maxScoreAcross = Math.max(10, ...profiles.map((p) => p.finalScore));
+        const totalGameTurns = Math.max(1, strategicReport.totalTurns);
+        const winner = profiles.find((p) => p.isWinner) ?? profiles[0];
 
-              <div style={{ fontSize: '0.84rem', fontWeight: 600, marginBottom: '0.4rem' }}>
-                🎲 Distribuția Zarurilor (2–12):
-              </div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 95, paddingTop: 12 }}>
-                {Object.entries(strategicReport.diceHistogram).map(([sumStr, count]) => {
-                  const hPct = Math.round((count / maxDiceCount) * 65);
-                  return (
-                    <div
-                      key={sumStr}
+        // Chart coordinates computation
+        const chartW = 760;
+        const chartH = 220;
+        const padL = 40;
+        const padR = 25;
+        const padT = 20;
+        const padB = 30;
+        const plotW = chartW - padL - padR;
+        const plotH = chartH - padT - padB;
+
+        const scaleX = (turn: number) => padL + (Math.max(1, Math.min(totalGameTurns, turn)) / totalGameTurns) * plotW;
+        const scaleY = (score: number) => padT + plotH - ((Math.min(maxScoreAcross, Math.max(0, score)) / maxScoreAcross) * plotH);
+
+        const yTicks = [2, 4, 6, 8, 10, maxScoreAcross > 10 ? maxScoreAcross : 10];
+        const uniqueYTicks = Array.from(new Set(yTicks)).sort((a, b) => a - b);
+
+        const xInterval = totalGameTurns <= 30 ? 5 : totalGameTurns <= 80 ? 10 : 20;
+        const xTicks: number[] = [];
+        for (let t = xInterval; t <= totalGameTurns; t += xInterval) {
+          xTicks.push(t);
+        }
+
+        return (
+          <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
+            <div
+              className="modal-dialog"
+              style={{ maxWidth: 940, width: '96vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-header" style={{ padding: '0.65rem 1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem' }}>
+                    📊 Raport Strategic & Analiză Partidă ({replay.gameId})
+                  </h3>
+                  {winner && (
+                    <span
                       style={{
-                        flex: 1,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        fontSize: '0.75rem'
+                        background: 'rgba(245, 158, 11, 0.15)',
+                        border: '1px solid var(--accent-gold)',
+                        color: 'var(--accent-gold)',
+                        fontSize: '0.78rem',
+                        padding: '2px 8px',
+                        borderRadius: 12,
+                        fontWeight: 700
                       }}
                     >
-                      <span style={{ color: 'var(--text-muted)' }}>{count}</span>
+                      🏆 Câștigător: {winner.playerName} ({winner.finalScore} VP)
+                    </span>
+                  )}
+                </div>
+                <button type="button" className="btn" onClick={() => setActiveModal('none')}>
+                  ✕ Închide
+                </button>
+              </div>
+
+              {/* Sub-Navigation Tabs */}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 4,
+                  padding: '0.45rem 0.85rem',
+                  background: '#0a1520',
+                  borderBottom: '1px solid var(--border-color)',
+                  overflowX: 'auto',
+                  flexShrink: 0
+                }}
+              >
+                {[
+                  { id: 'overview', label: '📈 Parcurs & Repere' },
+                  { id: 'initial', label: '🎯 Poziție Inițială & Pips' },
+                  { id: 'ports', label: '⚓ Porturi & Comerț' },
+                  { id: 'cards', label: '🃏 Cărți & Armată' },
+                  { id: 'dice', label: '🎲 Zaruri, Rată & Economie' },
+                  { id: 'decisions', label: '🔍 Decizii AI & Ezitări' }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    className={`btn ${reportTab === tab.id ? 'btn-primary' : ''}`}
+                    style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem', whiteSpace: 'nowrap' }}
+                    onClick={() => setReportTab(tab.id as any)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="modal-body" style={{ flex: 1, overflowY: 'auto', padding: '0.85rem' }}>
+                {/* TAB 1: PARCURS & REPERE (DEVELOPMENT CURVE CHART + MILESTONES) */}
+                {reportTab === 'overview' && (
+                  <div>
+                    {/* Winner Verdict Card */}
+                    {winner && (
                       <div
                         style={{
-                          width: '100%',
-                          height: Math.max(4, hPct),
-                          background:
-                            sumStr === '6' || sumStr === '8'
-                              ? '#ef4444'
-                              : sumStr === '7'
-                              ? '#f59e0b'
-                              : '#38bdf8',
-                          borderRadius: '4px 4px 0 0'
+                          background: 'rgba(245, 158, 11, 0.08)',
+                          border: '1px solid var(--accent-gold)',
+                          borderRadius: 8,
+                          padding: '0.65rem 0.85rem',
+                          marginBottom: '0.85rem'
                         }}
-                      />
-                      <strong>{sumStr}</strong>
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                          <span style={{ fontWeight: 700, color: 'var(--accent-gold)', fontSize: '0.88rem' }}>
+                            🏆 Verdictul Partidei: Ce a determinat victoria lui {winner.playerName}?
+                          </span>
+                          <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                            {strategicReport.totalTurns} ture · {strategicReport.totalEvents} acțiuni
+                          </span>
+                        </div>
+                        <p style={{ margin: '0 0 0.4rem 0', fontSize: '0.82rem', lineHeight: 1.45 }}>
+                          {strategicReport.winningReason}
+                        </p>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.76rem' }}>
+                          <span style={{ background: '#112233', padding: '2px 8px', borderRadius: 4 }}>
+                            Așezări: <strong>{winner.scoreBreakdown.settlements}</strong>
+                          </span>
+                          <span style={{ background: '#112233', padding: '2px 8px', borderRadius: 4 }}>
+                            Orașe: <strong>{winner.scoreBreakdown.cities}</strong>
+                          </span>
+                          {winner.scoreBreakdown.largestArmy > 0 && (
+                            <span style={{ background: '#1e3a2f', color: '#6ee7b7', padding: '2px 8px', borderRadius: 4 }}>
+                              ⚔️ Cea mai mare Armată (+2 VP)
+                            </span>
+                          )}
+                          {winner.scoreBreakdown.longestRoad > 0 && (
+                            <span style={{ background: '#1e3a2f', color: '#6ee7b7', padding: '2px 8px', borderRadius: 4 }}>
+                              🛣️ Cel mai lung Drum (+2 VP)
+                            </span>
+                          )}
+                          {winner.scoreBreakdown.victoryPointCards > 0 && (
+                            <span style={{ background: '#312e81', color: '#c7d2fe', padding: '2px 8px', borderRadius: 4 }}>
+                              🃏 Cărți VP Ascunse (+{winner.scoreBreakdown.victoryPointCards} VP)
+                            </span>
+                          )}
+                          <span style={{ background: '#112233', padding: '2px 8px', borderRadius: 4 }}>
+                            Pips Inițiali: <strong>{winner.initialPlacement.totalPips}</strong>
+                          </span>
+                          <span style={{ background: '#112233', padding: '2px 8px', borderRadius: 4 }}>
+                            Medie Resurse: <strong>{winner.economy.avgResourcesPerTurn}/tură</strong>
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Interactive Development SVG Line Chart */}
+                    <div style={{ background: '#09131d', border: '1px solid var(--border-color)', borderRadius: 8, padding: '0.65rem 0.75rem', marginBottom: '0.85rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <strong style={{ fontSize: '0.84rem' }}>
+                          📈 Parcursul Dezvoltării în Timp (Puncte de Victorie per Tură)
+                        </strong>
+                        <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                          💡 Dă click pe orice punct de pe grafic pentru a derula la acea tură
+                        </span>
+                      </div>
+
+                      <svg
+                        viewBox={`0 0 ${chartW} ${chartH}`}
+                        style={{ width: '100%', height: 'auto', display: 'block', overflow: 'visible' }}
+                      >
+                        {/* Horizontal Grid Lines */}
+                        {uniqueYTicks.map((yVal) => {
+                          const yPos = scaleY(yVal);
+                          return (
+                            <g key={yVal}>
+                              <line
+                                x1={padL}
+                                y1={yPos}
+                                x2={chartW - padR}
+                                y2={yPos}
+                                stroke="rgba(255,255,255,0.08)"
+                                strokeDasharray={yVal === 10 ? 'none' : '3,3'}
+                                strokeWidth={yVal === 10 ? 1.5 : 1}
+                              />
+                              <text
+                                x={padL - 6}
+                                y={yPos + 4}
+                                textAnchor="end"
+                                fontSize="10"
+                                fill={yVal === 10 ? 'var(--accent-gold)' : 'var(--text-muted)'}
+                              >
+                                {yVal} VP
+                              </text>
+                            </g>
+                          );
+                        })}
+
+                        {/* Vertical Grid Lines (Turns) */}
+                        {xTicks.map((tVal) => {
+                          const xPos = scaleX(tVal);
+                          return (
+                            <g key={tVal}>
+                              <line
+                                x1={xPos}
+                                y1={padT}
+                                x2={xPos}
+                                y2={chartH - padB}
+                                stroke="rgba(255,255,255,0.06)"
+                                strokeDasharray="2,3"
+                              />
+                              <text
+                                x={xPos}
+                                y={chartH - padB + 14}
+                                textAnchor="middle"
+                                fontSize="10"
+                                fill="var(--text-muted)"
+                              >
+                                T{tVal}
+                              </text>
+                            </g>
+                          );
+                        })}
+
+                        {/* Player Lines */}
+                        {profiles.map((prof) => {
+                          const color = pColors[prof.color] ?? '#38bdf8';
+                          const pts = prof.scoreTimeline;
+                          if (pts.length === 0) return null;
+
+                          const polyPoints = pts
+                            .map((p) => `${scaleX(p.turn)},${scaleY(p.score)}`)
+                            .join(' ');
+
+                          return (
+                            <g key={prof.playerId}>
+                              <polyline
+                                points={polyPoints}
+                                fill="none"
+                                stroke={color}
+                                strokeWidth={prof.isWinner ? 3.5 : 2}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                opacity={prof.isWinner ? 1 : 0.8}
+                              />
+                              {pts.map((p, idx) => (
+                                <circle
+                                  key={idx}
+                                  cx={scaleX(p.turn)}
+                                  cy={scaleY(p.score)}
+                                  r={prof.isWinner ? 4.5 : 3.5}
+                                  fill={color}
+                                  stroke="#09131d"
+                                  strokeWidth={1.5}
+                                  style={{ cursor: 'pointer' }}
+                                  onClick={() => {
+                                    setCurrentSeq(p.sequence);
+                                    setActiveModal('none');
+                                  }}
+                                >
+                                  <title>
+                                    {`${prof.playerName} - Tura ${p.turn} (Pas #${p.sequence}): ${p.score} VP\nAșezări: ${p.settlements}, Orașe: ${p.cities}${p.largestArmy ? ', Armată' : ''}${p.longestRoad ? ', Drum' : ''}\n(Click pentru derulare)`}
+                                  </title>
+                                </circle>
+                              ))}
+                            </g>
+                          );
+                        })}
+                      </svg>
+
+                      {/* Chart Legend */}
+                      <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+                        {profiles.map((prof) => (
+                          <div key={prof.playerId} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.78rem' }}>
+                            <span
+                              style={{
+                                width: 12,
+                                height: 12,
+                                borderRadius: '50%',
+                                background: pColors[prof.color] ?? '#38bdf8'
+                              }}
+                            />
+                            <strong>{prof.playerName}</strong>: {prof.finalScore} VP
+                            {prof.isWinner && ' 🏆'}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  );
-                })}
+
+                    {/* Milestones / Key Game Moments with scrub buttons */}
+                    <div style={{ background: '#0d1a29', border: '1px solid var(--border-color)', borderRadius: 8, padding: '0.65rem 0.75rem' }}>
+                      <div style={{ fontSize: '0.84rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+                        📍 Repere Cheie ale Partidei (Click pentru salt la tură):
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.5rem' }}>
+                        {strategicReport.milestones.map((m, idx) => {
+                          const p = profiles.find((pr) => pr.playerId === m.playerId);
+                          const pColor = p ? pColors[p.color] ?? '#38bdf8' : '#38bdf8';
+                          const icon =
+                            m.type === 'win'
+                              ? '🏆'
+                              : m.type === 'city'
+                              ? '🏛️'
+                              : m.type === 'port'
+                              ? '⚓'
+                              : m.type === 'largest_army'
+                              ? '⚔️'
+                              : m.type === 'longest_road'
+                              ? '🛣️'
+                              : '🏘️';
+                          return (
+                            <div
+                              key={idx}
+                              style={{
+                                background: '#0a1420',
+                                borderLeft: `4px solid ${pColor}`,
+                                border: '1px solid var(--border-color)',
+                                borderRadius: 6,
+                                padding: '0.45rem 0.6rem',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                gap: 6
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontSize: '0.8rem', fontWeight: 700 }}>
+                                  {icon} Tura {m.turn}: {m.title}
+                                </div>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                  {m.description}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="btn"
+                                style={{ padding: '2px 8px', fontSize: '0.74rem', whiteSpace: 'nowrap' }}
+                                onClick={() => {
+                                  setCurrentSeq(m.sequence);
+                                  setActiveModal('none');
+                                }}
+                              >
+                                Sari la #{m.sequence}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 2: POZIȚIE INIȚIALĂ & PIPS (INITIAL PLACEMENT COMPARISON) */}
+                {reportTab === 'initial' && (
+                  <div>
+                    <div style={{ background: '#09131d', border: '1px solid var(--border-color)', borderRadius: 8, padding: '0.75rem', marginBottom: '0.85rem' }}>
+                      <h4 style={{ margin: '0 0 0.35rem 0', color: 'var(--accent-gold)' }}>
+                        🎯 A fost determinantă poziția inițială?
+                      </h4>
+                      <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                        Amplasarea inițială a primelor 2 așezări determină numărul total de pips (frecvența zarului) și diversitatea celor 5 resurse. Partidele cu diferențe mari de pips inițiali (ex. 19 pips vs 12 pips) conferă un avantaj de ritm aproape imposibil de recuperat fără porturi specializate sau noroc la cărți de dezvoltare.
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.65rem' }}>
+                      {profiles.map((p) => {
+                        const pColor = pColors[p.color] ?? '#38bdf8';
+                        const pipPct = Math.round((p.initialPlacement.totalPips / 24) * 100);
+                        return (
+                          <div
+                            key={p.playerId}
+                            style={{
+                              background: '#0d1a29',
+                              border: p.isWinner ? '1.5px solid var(--accent-gold)' : '1px solid var(--border-color)',
+                              borderRadius: 8,
+                              padding: '0.75rem',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 6
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ width: 10, height: 10, borderRadius: '50%', background: pColor }} />
+                                <strong>{p.playerName}</strong>
+                              </div>
+                              <span style={{ fontWeight: 700, color: p.isWinner ? 'var(--accent-gold)' : 'inherit', fontSize: '0.84rem' }}>
+                                {p.finalScore} VP {p.isWinner && '🏆'}
+                              </span>
+                            </div>
+
+                            <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                              Stil: <strong>{p.aiStyle ?? 'Echilibrat'}</strong> · Dificultate: <strong>{p.aiDifficulty ?? 'Medium'}</strong>
+                            </div>
+
+                            {/* Pips Meter */}
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', marginBottom: 2 }}>
+                                <span>Puncte Frecvență (Pips):</span>
+                                <strong style={{ color: p.initialPlacement.totalPips >= 18 ? '#10b981' : p.initialPlacement.totalPips >= 14 ? '#38bdf8' : '#f87171' }}>
+                                  {p.initialPlacement.totalPips} pips
+                                </strong>
+                              </div>
+                              <div style={{ width: '100%', height: 6, background: '#112233', borderRadius: 3, overflow: 'hidden' }}>
+                                <div
+                                  style={{
+                                    width: `${pipPct}%`,
+                                    height: '100%',
+                                    background: p.initialPlacement.totalPips >= 18 ? '#10b981' : p.initialPlacement.totalPips >= 14 ? '#38bdf8' : '#f87171'
+                                  }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Resource Diversity */}
+                            <div style={{ fontSize: '0.76rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                                <span>Diversitate Resurse:</span>
+                                <strong>{p.initialPlacement.resourceDiversity}/5 tipuri</strong>
+                              </div>
+                              <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                                {p.initialPlacement.resources.map((res) => (
+                                  <span
+                                    key={res}
+                                    style={{
+                                      fontSize: '0.72rem',
+                                      background: '#112233',
+                                      padding: '1px 6px',
+                                      borderRadius: 4
+                                    }}
+                                  >
+                                    {res === 'wood' ? '🪵 Lemn' : res === 'brick' ? '🧱 Argilă' : res === 'wheat' ? '🌾 Grâu' : res === 'sheep' ? '🐑 Lână' : '⛰️ Minereu'}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Initial Hex Numbers */}
+                            <div style={{ fontSize: '0.76rem' }}>
+                              <span style={{ color: 'var(--text-muted)' }}>Numere inițiale: </span>
+                              <strong>
+                                {p.initialPlacement.numbers.length > 0 ? p.initialPlacement.numbers.join(', ') : 'N/A'}
+                              </strong>
+                            </div>
+
+                            {/* Qualitative Analysis */}
+                            <div
+                              style={{
+                                fontSize: '0.74rem',
+                                background: '#0a1420',
+                                padding: '0.45rem',
+                                borderRadius: 4,
+                                color: 'var(--text-muted)',
+                                lineHeight: 1.4,
+                                marginTop: 'auto'
+                              }}
+                            >
+                              {p.initialPlacement.analysisText}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 3: PORTURI & COMERȚ (HARBORS & TRADING) */}
+                {reportTab === 'ports' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                    <div style={{ background: '#09131d', border: '1px solid var(--border-color)', borderRadius: 8, padding: '0.75rem' }}>
+                      <h4 style={{ margin: '0 0 0.35rem 0', color: 'var(--accent-gold)' }}>
+                        ⚓ Rolul Porturilor & Negocierilor în Partidă
+                      </h4>
+                      <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                        Porturile specializate (2:1) sau portul general (3:1) permit jucătorilor cu surplus de resurse să evite rata nefavorabilă de 4:1 a băncii. Urmăriți când a obținut fiecare jucător primul port și câte resurse a salvat.
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.65rem' }}>
+                      {profiles.map((p) => {
+                        const pColor = pColors[p.color] ?? '#38bdf8';
+                        return (
+                          <div
+                            key={p.playerId}
+                            style={{
+                              background: '#0d1a29',
+                              border: p.isWinner ? '1.5px solid var(--accent-gold)' : '1px solid var(--border-color)',
+                              borderRadius: 8,
+                              padding: '0.75rem',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 7
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ width: 10, height: 10, borderRadius: '50%', background: pColor }} />
+                                <strong>{p.playerName}</strong>
+                              </div>
+                              <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>{p.finalScore} VP</span>
+                            </div>
+
+                            {/* Port Status */}
+                            <div style={{ background: '#0a1420', padding: '0.5rem', borderRadius: 6, fontSize: '0.76rem' }}>
+                              <div style={{ marginBottom: 3 }}>
+                                Primul Port: <strong>{p.ports.firstPortTurn ? `Tura ${p.ports.firstPortTurn}` : 'Niciun port'}</strong>
+                              </div>
+                              {p.ports.firstPortType && (
+                                <div style={{ color: 'var(--accent-gold)', marginBottom: 3 }}>
+                                  Tip: <strong>{p.ports.firstPortType}</strong>
+                                </div>
+                              )}
+                              <div>
+                                Total Porturi Obținute: <strong>{p.ports.harborsAcquired.length}</strong>
+                              </div>
+                            </div>
+
+                            {/* Harbors Acquired jump list */}
+                            {p.ports.harborsAcquired.length > 0 && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                {p.ports.harborsAcquired.map((h, hIdx) => (
+                                  <button
+                                    key={hIdx}
+                                    type="button"
+                                    className="btn"
+                                    style={{ padding: '2px 6px', fontSize: '0.72rem', textAlign: 'left' }}
+                                    onClick={() => {
+                                      setCurrentSeq(h.sequence);
+                                      setActiveModal('none');
+                                    }}
+                                  >
+                                    ⚓ Tura {h.turn} ({h.type}) ➔ Pas #{h.sequence}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Bank vs Port Trades */}
+                            <div style={{ fontSize: '0.76rem', borderTop: '1px solid var(--border-color)', paddingTop: 5 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                                <span>Schimburi Port (3:1 / 2:1):</span>
+                                <strong style={{ color: '#10b981' }}>{p.ports.portTradesCount}</strong>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Schimburi Bancă (4:1):</span>
+                                <strong>{p.ports.bankTradesCount}</strong>
+                              </div>
+                            </div>
+
+                            {/* P2P Trading */}
+                            <div style={{ fontSize: '0.76rem', borderTop: '1px solid var(--border-color)', paddingTop: 5 }}>
+                              <div style={{ fontWeight: 600, marginBottom: 3 }}>Negocieri cu Jucători:</div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                                <span>Oferte propuse:</span>
+                                <span>{p.trading.tradesProposed}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                                <span>Oferte acceptate:</span>
+                                <span style={{ color: '#10b981' }}>{p.trading.tradesAccepted}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                                <span>Oferte refuzate:</span>
+                                <span style={{ color: '#f87171' }}>{p.trading.tradesRejected}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+                                <span>Schimburi reușite:</span>
+                                <strong>{p.trading.successfulP2pTrades}</strong>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 4: CĂRȚI & ARMATĂ (DEV CARDS & VICTORY POINTS) */}
+                {reportTab === 'cards' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                    <div style={{ background: '#09131d', border: '1px solid var(--border-color)', borderRadius: 8, padding: '0.75rem' }}>
+                      <h4 style={{ margin: '0 0 0.35rem 0', color: 'var(--accent-gold)' }}>
+                        🃏 Strategia Cărților de Dezvoltare & Titluri Speciale
+                      </h4>
+                      <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                        Cărțile de dezvoltare asigură surprize decisive: Cavaleri pentru controlul hoțului și Cea mai mare armată (+2 VP), cărți de Progres (Monopol, Anul Abundenței, Drumuri) și Puncte de Victorie ascunse.
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.65rem' }}>
+                      {profiles.map((p) => {
+                        const pColor = pColors[p.color] ?? '#38bdf8';
+                        return (
+                          <div
+                            key={p.playerId}
+                            style={{
+                              background: '#0d1a29',
+                              border: p.isWinner ? '1.5px solid var(--accent-gold)' : '1px solid var(--border-color)',
+                              borderRadius: 8,
+                              padding: '0.75rem',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 6
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ width: 10, height: 10, borderRadius: '50%', background: pColor }} />
+                                <strong>{p.playerName}</strong>
+                              </div>
+                              <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>{p.finalScore} VP</span>
+                            </div>
+
+                            {/* Dev Cards Bought & Played */}
+                            <div style={{ background: '#0a1420', padding: '0.5rem', borderRadius: 6, fontSize: '0.76rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                                <span>Cărți Cumpărate:</span>
+                                <strong style={{ color: 'var(--accent-gold)' }}>{p.devCards.bought}</strong>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                                <span>⚔️ Cavaleri Jucați:</span>
+                                <strong>{p.devCards.playedKnights}</strong>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                                <span>🌾 Anul Abundenței:</span>
+                                <strong>{p.devCards.playedYearOfPlenty}</strong>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                                <span>💰 Monopol Jucat:</span>
+                                <strong>{p.devCards.playedMonopoly}</strong>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>🛣️ Drumuri Gratuite:</span>
+                                <strong>{p.devCards.playedRoadBuilding}</strong>
+                              </div>
+                            </div>
+
+                            {/* Special Titles & Hidden VP */}
+                            <div style={{ fontSize: '0.76rem', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Cea mai mare Armată (2 VP):</span>
+                                <strong style={{ color: p.scoreBreakdown.largestArmy > 0 ? '#10b981' : 'var(--text-muted)' }}>
+                                  {p.scoreBreakdown.largestArmy > 0 ? 'DA (+2)' : 'NU'}
+                                </strong>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Cel mai lung Drum (2 VP):</span>
+                                <strong style={{ color: p.scoreBreakdown.longestRoad > 0 ? '#10b981' : 'var(--text-muted)' }}>
+                                  {p.scoreBreakdown.longestRoad > 0 ? 'DA (+2)' : 'NU'}
+                                </strong>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Puncte de Victorie Ascunse:</span>
+                                <strong style={{ color: p.scoreBreakdown.victoryPointCards > 0 ? '#c7d2fe' : 'var(--text-muted)' }}>
+                                  +{p.scoreBreakdown.victoryPointCards} VP
+                                </strong>
+                              </div>
+                            </div>
+
+                            {/* Complete VP Breakdown */}
+                            <div
+                              style={{
+                                background: '#112233',
+                                padding: '0.45rem',
+                                borderRadius: 4,
+                                fontSize: '0.74rem',
+                                marginTop: 'auto'
+                              }}
+                            >
+                              <strong>Defalcare Puncte de Victorie:</strong>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+                                <span>Așezări ({p.scoreBreakdown.settlements} × 1):</span>
+                                <span>{p.scoreBreakdown.settlements} VP</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Orașe ({p.scoreBreakdown.cities} × 2):</span>
+                                <span>{p.scoreBreakdown.cities * 2} VP</span>
+                              </div>
+                              {p.scoreBreakdown.largestArmy > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6ee7b7' }}>
+                                  <span>Armată:</span>
+                                  <span>+2 VP</span>
+                                </div>
+                              )}
+                              {p.scoreBreakdown.longestRoad > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6ee7b7' }}>
+                                  <span>Drum:</span>
+                                  <span>+2 VP</span>
+                                </div>
+                              )}
+                              {p.scoreBreakdown.victoryPointCards > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#c7d2fe' }}>
+                                  <span>Cărți VP:</span>
+                                  <span>+{p.scoreBreakdown.victoryPointCards} VP</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 5: ZARURI, RATĂ & ECONOMIE (DICE COVERAGE & PRODUCTION) */}
+                {reportTab === 'dice' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.65rem' }}>
+                      {profiles.map((p) => {
+                        const pColor = pColors[p.color] ?? '#38bdf8';
+                        return (
+                          <div
+                            key={p.playerId}
+                            style={{
+                              background: '#0d1a29',
+                              border: p.isWinner ? '1.5px solid var(--accent-gold)' : '1px solid var(--border-color)',
+                              borderRadius: 8,
+                              padding: '0.75rem',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 6
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ width: 10, height: 10, borderRadius: '50%', background: pColor }} />
+                                <strong>{p.playerName}</strong>
+                              </div>
+                              <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>{p.finalScore} VP</span>
+                            </div>
+
+                            {/* Dice Hit Rate */}
+                            <div style={{ background: '#0a1420', padding: '0.5rem', borderRadius: 6, fontSize: '0.76rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                                <span>Rată de Zar Favorabilă:</span>
+                                <strong style={{ color: p.coverage.diceHitRatePct >= 45 ? '#10b981' : '#38bdf8' }}>
+                                  {p.coverage.diceHitRatePct}%
+                                </strong>
+                              </div>
+                              <div style={{ width: '100%', height: 6, background: '#112233', borderRadius: 3, overflow: 'hidden' }}>
+                                <div
+                                  style={{
+                                    width: `${Math.min(100, p.coverage.diceHitRatePct * 1.5)}%`,
+                                    height: '100%',
+                                    background: p.coverage.diceHitRatePct >= 45 ? '#10b981' : '#38bdf8'
+                                  }}
+                                />
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>
+                                {p.coverage.diceHitsCount} aruncări au produs resurse
+                              </div>
+                            </div>
+
+                            {/* Production & Economy */}
+                            <div style={{ fontSize: '0.76rem', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Total Resurse Produse:</span>
+                                <strong style={{ color: 'var(--accent-gold)' }}>{p.economy.totalResourcesProduced}</strong>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Medie Resurse pe Tură:</span>
+                                <strong>{p.economy.avgResourcesPerTurn} / tură</strong>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#f87171' }}>
+                                <span>Aruncate la Hoț (7):</span>
+                                <span>-{p.economy.resourcesDiscardedOn7} resurse</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                                <span>Furate de la adversari:</span>
+                                <span>+{p.economy.resourcesStolenFromOthers}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                                <span>Furate de adversari:</span>
+                                <span>-{p.economy.resourcesStolenByOthers}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', paddingTop: 3 }}>
+                                <span>Hexagoane unice:</span>
+                                <span>{p.coverage.uniqueHexCount} hexagoane</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Dice Histogram */}
+                    <div style={{ background: '#09131d', border: '1px solid var(--border-color)', borderRadius: 8, padding: '0.75rem' }}>
+                      <div style={{ fontSize: '0.84rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+                        🎲 Distribuția Reală a Zarurilor în Partidă (2–12):
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 95, paddingTop: 12 }}>
+                        {Object.entries(strategicReport.diceHistogram).map(([sumStr, count]) => {
+                          const hPct = Math.round((count / maxDiceCount) * 65);
+                          return (
+                            <div
+                              key={sumStr}
+                              style={{
+                                flex: 1,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                fontSize: '0.75rem'
+                              }}
+                            >
+                              <span style={{ color: 'var(--text-muted)' }}>{count}</span>
+                              <div
+                                style={{
+                                  width: '100%',
+                                  height: Math.max(4, hPct),
+                                  background:
+                                    sumStr === '6' || sumStr === '8'
+                                      ? '#ef4444'
+                                      : sumStr === '7'
+                                      ? '#f59e0b'
+                                      : '#38bdf8',
+                                  borderRadius: '4px 4px 0 0'
+                                }}
+                              />
+                              <strong>{sumStr}</strong>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 6: DECIZII AI & EZITĂRI (DECISION ACCURACY) */}
+                {reportTab === 'decisions' && (
+                  <div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.65rem' }}>
+                      {Object.values(strategicReport.playerSummaries).map((ps) => {
+                        const totalEval = ps.optimalDecisionsCount + ps.suboptimalDecisionsCount;
+                        const accuracy =
+                          totalEval > 0 ? Math.round((ps.optimalDecisionsCount / totalEval) * 100) : 100;
+                        return (
+                          <div key={ps.playerId} className="candidate-row" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <strong>{ps.playerName}</strong>
+                              <span>{ps.finalScore} VP</span>
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                              Acuratețe decizii: <strong style={{ color: accuracy >= 80 ? '#10b981' : '#f59e0b' }}>{accuracy}%</strong> ({ps.optimalDecisionsCount} optime / {totalEval} evaluate)
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                              Gap mediu scor: <strong>{ps.averageDecisionGap}</strong>
+                            </div>
+                            {ps.biggestMistakes.slice(0, 3).map((m, mIdx) => (
+                              <button
+                                key={mIdx}
+                                type="button"
+                                className="btn"
+                                style={{ padding: '3px 8px', fontSize: '0.74rem', textAlign: 'left', marginTop: 2 }}
+                                onClick={() => {
+                                  setCurrentSeq(m.sequence);
+                                  setActiveModal('none');
+                                }}
+                              >
+                                🔍 Ezitarea #{m.sequence} (Tura {m.turn}, -{m.scoreGap} pct)
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* MODAL 3: FULL FILTERABLE EVENT LOG */}
       {activeModal === 'event_log' && (

@@ -141,6 +141,17 @@ export async function startOnlineLobby(lobbyId: string): Promise<GameSyncPayload
   return data;
 }
 
+export async function stepOnlineAi(gameId: string, steps = 1, viewerId?: string): Promise<GameSyncPayload> {
+  const res = await fetch(`/api/games/${gameId}/step-ai`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ steps, viewerId })
+  });
+  const data = await parseJsonResponse(res);
+  if (!res.ok) throw new Error(data.error ?? 'Nu s-a putut executa pasul AI.');
+  return data;
+}
+
 export async function fetchGameState(gameId: string, sessionToken: string): Promise<GameSyncPayload> {
   const res = await fetch(`/api/games/${gameId}/state?sessionToken=${encodeURIComponent(sessionToken)}`);
   const data = await parseJsonResponse(res);
