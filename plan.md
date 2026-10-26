@@ -1043,3 +1043,57 @@ Aș începe cu trei documente tehnice, în această ordine:
 Acestea vor constitui fundația pentru codul efectiv. În special, specificația formală trebuie să fie suficient de precisă încât două implementări independente ale motorului să producă aceleași rezultate pentru aceeași stare și aceeași acțiune.
 
 Recomandarea mea finală: să considerăm motorul de reguli, replay-ul reproductibil și testarea automată drept nucleul proiectului. Interfața, multiplayerul online și AI-ul avansat vor putea evolua independent în jurul acestui nucleu, fără să fie nevoie să reconstruim jocul de fiecare dată când îmbunătățim o componentă.
+
+
+---
+
+# 15. Cerințe operaționale, sistemul de versiuni și îmbunătățiri de ergonomie (V2 Update)
+
+Această secțiune documentează cerințele practice apărute în cursul utilizării și implementării versiunilor recente, acoperind versionarea, jurnalul de modificări (changelog), comerțul interactiv, ergonomia tablei și stabilitatea serverului.
+
+## 15.1 Sistemul de Versionare și Jurnal de Modificări (Changelog / Release Notes)
+
+### 15.1.1 Cerințe funcționale
+1. **Incrementare automată a versiunii**: Versiunea aplicației trebuie să reflecte în mod direct și automat numărul de commit-uri din repository (`v1.<număr_commituri>`), fără a necesita o operațiune manuală de bump sau editare manuală a fișierelor de configurare la fiecare lansare.
+2. **Vizibilitate continuă**: Versiunea activă trebuie să fie vizibilă în colțul superior al interfeței (badge de versiune) și în titlul tab-ului din browser (`Catan v2 · v1.X`).
+3. **Modal interactiv de Release Notes**: La click pe badge-ul versiunii, utilizatorul poate consulta istoricul detaliat al ultimelor modificări (hash-ul commit-ului, data lansării și mesajul explicativ asociat).
+4. **Funcționare garantată pe servere de producție fără Git**:
+   - Pe mediile de găzduire partajată (cPanel, FTP, containere minimale), directorul `.git` este adesea exclus la upload sau binarul `git` nu este accesibil în runtime.
+   - Aplicația nu trebuie să afișeze o versiune generică de eroare (ex. `v1.0-dev`) și nici un jurnal vid de modificări.
+   - Soluția constă în generarea la momentul compilării (`npm run build`) a unui artefact `version.json` în rădăcina proiectului, în directorul public al clientului web (`apps/web/public/version.json`), în `apps/web/dist` și în `apps/server/dist`.
+   - Serverul HTTP (`/api/version`) citește `version.json` ca fallback dacă `git` nu este disponibil.
+   - Clientul web include un mecanism de fallback pe client: dacă endpoint-ul `/api/version` nu răspunde sau returnează versiune implicită de dev, clientul citește direct `/version.json` servit static.
+
+## 15.2 Sistemul de Comerț și Negociere Interactivă
+
+### 15.2.1 Cerințe funcționale
+1. **Notificare clară pentru oferte primite de jucători umani**:
+   - Când un alt participant (om sau AI) propune un schimb, jucătorul destinatar trebuie să fie notificat prompt printr-un modal vizual dedicat.
+   - Modalul afișează resursele oferite și resursele cerute, alături de acțiuni clare: **Acceptă**, **Refuză** și **Contra-ofertă (Negociază)**.
+2. **Feedback în timp real pentru inițiatorul ofertei**:
+   - Inițiatorul schimbului trebuie să vadă starea fiecărui participant (dacă a refuzat sau acceptat).
+   - În caz de refuz, dacă participantul a furnizat un motiv (ex. AI explică de ce refuză: lipsă resurse sau dorința de a păstra resursa pentru o clădire viitoare), acesta este afișat în panoul ofertei.
+3. **Posibilitate de negociere / schimbare ofertă**:
+   - Opțiunea de negociere permite ajustarea rapidă a cantităților și tipurilor de resurse solicitate, relansând oferta fără reîncărcarea ecranului.
+4. **Scurtături rapide pentru comerțul maritim (Port Shortcuts)**:
+   - Dacă un jucător deține o așezare sau un oraș pe un port specializat (ex. 2:1 Lemn) și are numărul necesar de resurse (ex. >= 2 Lemn), interfața evidențiază direct opțiunea de schimb avantajos la un singur click, fără a obliga deschiderea manuală a dialogului maritim și setarea redundantă a filtrelor.
+
+## 15.3 Ergonomie Grafică și Reprezentare pe Tablă
+
+### 15.3.1 Cerințe funcționale
+1. **Scalarea proporțională a pieselor**:
+   - Clădirile de tip Oraș (castel) trebuie să fie dimensionate proporțional (`56x56` px în loc de dimensiuni supradimensionate precum `108x108` px) pentru a nu obtura jetoanele de producție numerice, literele de identificare și drumurile adiacente.
+2. **Etichete alfabetice pe jetoanele numerice**:
+   - Jetoanele numerice afișează atât numărul asociat zarurilor (și probabilitatea prin puncte), cât și litera alocată (A-R conform ordinii clasice de spiralare), permițând verificarea rapidă a generării corecte a hărții.
+3. **Dispunere compactă a panoului de cărți**:
+   - Butonul de ascundere/afișare a cărților din mână este integrat pe aceeași linie cu titlul panoului, economisind spațiu vertical prețios pe ecrane de laptop și dispozitive mobile.
+
+## 15.4 Replay și Reziliență la Sincronizare în Modul Online
+
+### 15.4.1 Cerințe funcționale
+1. **Vizualizare Replay direct din ecranul de final**:
+   - La terminarea unei partide pe serverul online, jucătorul poate deschide direct modul de Replay pentru a analiza deciziile, fără blocaje și fără erori 409.
+2. **Auto-recuperare la conflict de secvență (HTTP 409 Sequence Mismatch)**:
+   - În condiții de latență sau comenzi concurente, dacă serverul raportează o desincronizare de secvență (cod 409), clientul reîncarcă transparent starea autoritară a jocului (`fetchCurrentGameState`) și resincronizează interfața fără a deconecta utilizatorul.
+3. **Pachet de Server Independent (Standalone Node Bundle)**:
+   - Pentru evitarea execuției `tsx`/`esbuild` la pornirea serverului în producție (care cauzează depășiri de memorie pe medii cPanel/Node v22+ precum TransformError / service stopped), serverul este compilat în prealabil într-un singur fișier compact `dist/server.mjs`.

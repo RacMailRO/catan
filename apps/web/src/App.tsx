@@ -118,10 +118,34 @@ export const App: React.FC = () => {
     fetch('/api/version')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data) setVersionInfo(data);
+        if (data && typeof data.version === 'string' && data.version !== 'v1.0-dev') {
+          setVersionInfo(data);
+        } else {
+          fetch('/version.json')
+            .then((r) => (r.ok ? r.json() : null))
+            .then((staticData) => {
+              if (staticData && typeof staticData.version === 'string') {
+                setVersionInfo(staticData);
+              } else if (data) {
+                setVersionInfo(data);
+              }
+            })
+            .catch(() => {
+              if (data) setVersionInfo(data);
+            });
+        }
       })
       .catch(() => {
-        // Server not running (pure static/offline preview) — just hide the badge.
+        fetch('/version.json')
+          .then((r) => (r.ok ? r.json() : null))
+          .then((staticData) => {
+            if (staticData && typeof staticData.version === 'string') {
+              setVersionInfo(staticData);
+            }
+          })
+          .catch(() => {
+            // Pure offline preview without version.json
+          });
       });
   }, []);
 

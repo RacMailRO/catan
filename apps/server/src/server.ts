@@ -122,9 +122,43 @@ interface VersionInfo {
   releaseNotes: { hash: string; date: string; message: string }[];
 }
 
-// Version/release-notes are read live from git on every request (not baked in at build time)
-// so the number shown in the UI is always exactly the commit count as of the currently
-// checked-out HEAD — true "auto-incremented on every commit" with no separate bump step.
+function readStaticVersionFile(): VersionInfo | null {
+  const currentDir = path.dirname(fileURLToPath(import.meta.url));
+  const candidatePaths = [
+    path.resolve(REPO_ROOT, 'version.json'),
+    path.resolve(REPO_ROOT, 'apps/server/dist/version.json'),
+    path.resolve(REPO_ROOT, 'apps/web/dist/version.json'),
+    path.resolve(currentDir, 'version.json'),
+    path.resolve(currentDir, '../version.json'),
+    path.resolve(process.cwd(), 'version.json'),
+    path.resolve(process.cwd(), 'dist/version.json'),
+    path.resolve(process.cwd(), 'apps/server/dist/version.json'),
+    path.resolve(process.cwd(), 'apps/web/dist/version.json')
+  ];
+
+  for (const candidate of candidatePaths) {
+    try {
+      if (fs.existsSync(candidate)) {
+        const parsed = JSON.parse(fs.readFileSync(candidate, 'utf-8'));
+        if (parsed && typeof parsed.version === 'string' && Array.isArray(parsed.releaseNotes)) {
+          return {
+            version: parsed.version,
+            commitCount: typeof parsed.commitCount === 'number' ? parsed.commitCount : 0,
+            shortHash: typeof parsed.shortHash === 'string' ? parsed.shortHash : 'dist',
+            releaseNotes: parsed.releaseNotes
+          };
+        }
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+  return null;
+}
+
+// Version/release-notes are read live from git when available (e.g. during local dev),
+// and fallback smoothly to the pre-generated version.json artifact when deployed to production
+// environments (e.g. shared cPanel / FTP) where .git and git binary are absent.
 function getVersionInfo(): VersionInfo {
   try {
     const commitCount = parseInt(
@@ -137,7 +171,7 @@ function getVersionInfo(): VersionInfo {
     }).trim();
     const logRaw = execFileSync(
       'git',
-      ['log', '-30', '--pretty=format:%h%x1f%ad%x1f%s', '--date=short'],
+      ['log', '-50', '--pretty=format:%h%x1f%ad%x1f%s', '--date=short'],
       { cwd: REPO_ROOT, encoding: 'utf-8' }
     );
     const releaseNotes = logRaw
@@ -147,15 +181,24 @@ function getVersionInfo(): VersionInfo {
         const [hash, date, message] = line.split('\x1f');
         return { hash: hash ?? '', date: date ?? '', message: message ?? '' };
       });
-    return {
-      version: `v1.${Number.isFinite(commitCount) ? commitCount : 0}`,
-      commitCount: Number.isFinite(commitCount) ? commitCount : 0,
-      shortHash,
-      releaseNotes
-    };
+    if (Number.isFinite(commitCount) && commitCount > 0) {
+      return {
+        version: `v1.${commitCount}`,
+        commitCount,
+        shortHash,
+        releaseNotes
+      };
+    }
   } catch {
-    return { version: 'v1.0-dev', commitCount: 0, shortHash: 'n/a', releaseNotes: [] };
+    // Git is not available (e.g. production FTP deployment, container, or missing .git)
   }
+
+  const staticInfo = readStaticVersionFile();
+  if (staticInfo) {
+    return staticInfo;
+  }
+
+  return { version: 'v1.0-dev', commitCount: 0, shortHash: 'n/a', releaseNotes: [] };
 }
 
 export interface CatanServerInstance {
