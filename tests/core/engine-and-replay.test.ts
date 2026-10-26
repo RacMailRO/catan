@@ -536,4 +536,49 @@ describe('Catan Core Engine & Replay System', () => {
     expect(afterEnd.winnerId).toBe('p1');
     expect(afterEnd.phase).toBe('game_over');
   });
+  it('allows proposer to cancel a trade offer even after all players rejected it', () => {
+    let state = createGame({
+      gameId: 'trade-cancel-test',
+      participants: [
+        { id: 'p1', name: 'P1', type: 'human' },
+        { id: 'p2', name: 'P2', type: 'ai' },
+        { id: 'p3', name: 'P3', type: 'ai' }
+      ]
+    });
+    state.phase = 'main_actions';
+    state.activePlayerId = 'p1';
+    const p1 = getPlayerById(state, 'p1')!;
+    p1.resources = { wood: 2, brick: 0, sheep: 0, wheat: 0, ore: 0 };
+
+    state = applyAction(state, 'p1', {
+      type: 'propose_trade',
+      offering: { wood: 1, brick: 0, sheep: 0, wheat: 0, ore: 0 },
+      requesting: { wood: 0, brick: 1, sheep: 0, wheat: 0, ore: 0 }
+    }).state;
+
+    const offerId = state.activeTradeOffers[0]!.id;
+    expect(state.activeTradeOffers[0]!.status).toBe('open');
+
+    state = applyAction(state, 'p2', {
+      type: 'respond_trade',
+      offerId,
+      response: 'reject',
+      reason: 'No brick'
+    }).state;
+
+    state = applyAction(state, 'p3', {
+      type: 'respond_trade',
+      offerId,
+      response: 'reject',
+      reason: 'No brick either'
+    }).state;
+
+    expect(state.activeTradeOffers[0]!.status).toBe('rejected');
+
+    const validation = validateAction(state, 'p1', { type: 'cancel_trade', offerId });
+    expect(validation.valid).toBe(true);
+
+    const cancelledState = applyAction(state, 'p1', { type: 'cancel_trade', offerId }).state;
+    expect(cancelledState.activeTradeOffers[0]!.status).toBe('cancelled');
+  });
 });
