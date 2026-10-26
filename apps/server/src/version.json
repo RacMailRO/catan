@@ -1,9 +1,14 @@
 {
-  "version": "v1.104",
-  "commitCount": 104,
-  "shortHash": "579e71a",
-  "buildDate": "2026-10-26T22:52:40.196Z",
+  "version": "v1.105",
+  "commitCount": 105,
+  "shortHash": "77c648e",
+  "buildDate": "2026-10-26T22:58:34.001Z",
   "releaseNotes": [
+    {
+      "hash": "77c648e",
+      "date": "2026-10-27",
+      "message": "chore: bump build version to v1.104"
+    },
     {
       "hash": "579e71a",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "3a10e9c",
       "date": "2026-10-26",
       "message": "feat: resize city pieces, implement human trade offer & negotiation UI with rejection reasons, fix 409 sequence recovery, and enable online game replay viewer"
-    },
-    {
-      "hash": "0a2f1cb",
-      "date": "2026-10-26",
-      "message": "merge: feat/bundle-server-for-production into main"
     }
   ]
 }

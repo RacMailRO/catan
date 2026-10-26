@@ -751,7 +751,15 @@ export const App: React.FC = () => {
 
   const dismissTradeOffer = (offerId: string, reason = 'Refuzat de utilizator') => {
     setAutoRejectCountdown(null);
+    if (dismissedTradeOfferIds.has(offerId)) return;
     setDismissedTradeOfferIds((prev) => new Set(prev).add(offerId));
+
+    // Guard: only execute respond_trade if the offer actually exists and is still open!
+    const curOffer = gameState?.activeTradeOffers?.find((o) => o.id === offerId);
+    if (!curOffer || curOffer.status !== 'open') {
+      return;
+    }
+
     executeAction(viewerId, {
       type: 'respond_trade',
       offerId,
@@ -1176,6 +1184,7 @@ export const App: React.FC = () => {
       setGameVersionTick((v) => v + 1);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Mutare invalidă.');
+      setGameVersionTick((v) => v + 1);
     }
   };
 
@@ -1247,14 +1256,27 @@ export const App: React.FC = () => {
     } else {
       const openOffer = st.activeTradeOffers.find((o) => o.status === 'open');
       if (openOffer) {
-        needsBotMove = st.players.some(
+        const botResponder = st.players.find(
           (p) =>
             p.id !== openOffer.fromPlayerId &&
             p.type !== 'human' &&
+            (!openOffer.toPlayerId || openOffer.toPlayerId === p.id) &&
             !openOffer.rejectedByPlayerIds.includes(p.id)
         );
-      }
-      if (!needsBotMove) {
+        if (botResponder) {
+          needsBotMove = true;
+        } else {
+          // If offer is open and pending human response, DO NOT step AI active player! Wait for human!
+          const pendingHuman = st.players.find(
+            (p) =>
+              p.id !== openOffer.fromPlayerId &&
+              p.type === 'human' &&
+              (!openOffer.toPlayerId || openOffer.toPlayerId === p.id) &&
+              !openOffer.rejectedByPlayerIds.includes(p.id)
+          );
+          needsBotMove = !pendingHuman;
+        }
+      } else {
         const active = getPlayerById(st, st.activePlayerId);
         needsBotMove = Boolean(active && active.type !== 'human');
       }
@@ -1473,8 +1495,10 @@ export const App: React.FC = () => {
 
     // When timer expires, auto-reject and close modal
     if (autoRejectCountdown.secondsLeft <= 0) {
-      dismissTradeOffer(incomingOffer.id, 'Refuzat automat (lipsă resurse)');
       setAutoRejectCountdown(null);
+      if (!dismissedTradeOfferIds.has(incomingOffer.id)) {
+        dismissTradeOffer(incomingOffer.id, 'Refuzat automat (lipsă resurse)');
+      }
       return;
     }
 
