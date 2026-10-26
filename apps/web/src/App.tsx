@@ -2613,30 +2613,6 @@ export const App: React.FC = () => {
                         })}
                     </div>
                   )}
-
-                  {/* Scurtături rapide pentru acțiuni de cărți de dezvoltare */}
-                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginTop: '0.5rem' }}>
-                    {isHumanTurn && canPlayDevCardType(gameState, activePlayerObj, 'monopoly') && (
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                        onClick={() => setActiveModal('play_monopoly')}
-                      >
-                        👑 Joacă Monopol (Selectează Resursa)
-                      </button>
-                    )}
-                    {isHumanTurn && canPlayDevCardType(gameState, activePlayerObj, 'year_of_plenty') && (
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                        onClick={() => setActiveModal('play_year_of_plenty')}
-                      >
-                        🎁 Joacă Anul Abundenței (Alege 2 Resurse)
-                      </button>
-                    )}
-                  </div>
                 </div>
               </div>
             </div>
@@ -2735,11 +2711,30 @@ export const App: React.FC = () => {
                   </button>
                 </div>
                 <div className="modal-body">
-                  <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', marginTop: 0, marginBottom: '0.85rem' }}>
+                  <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', marginTop: 0, marginBottom: '0.6rem' }}>
                     {locale === 'ro'
                       ? 'Alege 2 resurse gratuite pe care le iei direct din bancă:'
                       : 'Choose 2 free resources to take directly from the bank:'}
                   </p>
+
+                  {/* Own hand, so the choice can factor in what's already held — e.g. no need
+                      to pick more of a resource already stockpiled. */}
+                  <div style={{ marginBottom: '0.85rem' }}>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 4, textAlign: 'center' }}>
+                      {locale === 'ro' ? '🎴 Cărțile tale în mână:' : '🎴 Your cards in hand:'}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+                      {ALL_RESOURCES.map((r) => (
+                        <ResourceCardSprite
+                          key={r}
+                          resource={r}
+                          count={activePlayerObj.resources[r]}
+                          locale={locale}
+                          size="xs"
+                        />
+                      ))}
+                    </div>
+                  </div>
 
                   <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '1rem' }}>
                     <div style={{ textAlign: 'center' }}>

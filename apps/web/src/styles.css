@@ -588,6 +588,15 @@ select:focus,
   text-overflow: ellipsis;
 }
 
+/* At 38px-wide xs cards, even the short dev-card labels ("Cavaler", "2 Drumuri") don't fit on
+   one line — wrap to 2 short lines instead of ellipsis-truncating to 3 illegible characters. */
+.sprite-card-label-xs {
+  white-space: normal;
+  font-size: 0.52rem;
+  line-height: 1.08;
+  padding: 1px 1px;
+}
+
 /* Animated Dice Widget */
 .dice-widget-box {
   pointer-events: auto;

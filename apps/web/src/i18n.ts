@@ -173,6 +173,26 @@ export const DEV_CARD_LABELS: Record<Locale, Record<DevCardType, string>> = {
   }
 };
 
+// Short form of DEV_CARD_LABELS for small card sprites (xs/sm) — the full descriptive label
+// (e.g. "Progres: Anul Abundenței") just gets CSS-ellipsised down to 3-4 illegible characters
+// at that width, which read as blank rather than translated.
+export const DEV_CARD_SHORT_LABELS: Record<Locale, Record<DevCardType, string>> = {
+  ro: {
+    knight: 'Cavaler',
+    road_building: '2 Drumuri',
+    year_of_plenty: 'Abundență',
+    monopoly: 'Monopol',
+    victory_point: '+1 PV'
+  },
+  en: {
+    knight: 'Knight',
+    road_building: '2 Roads',
+    year_of_plenty: 'Plenty',
+    monopoly: 'Monopoly',
+    victory_point: '+1 VP'
+  }
+};
+
 export const PHASE_LABELS: Record<Locale, Record<TurnPhase, string>> = {
   ro: {
     setup_settlement_1: 'Setup Runda 1: Plasează prima așezare',

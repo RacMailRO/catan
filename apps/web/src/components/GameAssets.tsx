@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { DevCardType, ResourceType } from '@catan/core';
-import { DEV_CARD_LABELS, Locale, RESOURCE_LABELS } from '../i18n';
+import { DEV_CARD_LABELS, DEV_CARD_SHORT_LABELS, Locale, RESOURCE_LABELS } from '../i18n';
 
 /**
  * Exact sprite coordinates in /cards.jpg (1612x2000, 5 columns x 4 rows).
@@ -103,7 +103,11 @@ export const DevCardSprite: React.FC<DevCardSpriteProps> = ({
       ? { width: 84, height: 126 }
       : { width: 108, height: 162 };
 
-  const label = type === 'back' ? 'Catan' : DEV_CARD_LABELS[locale][type];
+  // The full descriptive label (e.g. "Progres: Anul Abundenței") reads as blank once CSS
+  // ellipsis cuts it down to 3-4 characters at these card widths — show the short form
+  // instead, keeping the full one as the hover tooltip.
+  const fullLabel = type === 'back' ? 'Catan' : DEV_CARD_LABELS[locale][type];
+  const label = type === 'back' ? 'Catan' : DEV_CARD_SHORT_LABELS[locale][type];
 
   return (
     <div
@@ -113,7 +117,7 @@ export const DevCardSprite: React.FC<DevCardSpriteProps> = ({
       <div
         className={`sprite-card ${canPlay ? 'selected' : ''}`}
         onClick={canPlay && onPlay ? onPlay : undefined}
-        title={label}
+        title={fullLabel}
         style={{
           width: dimensions.width,
           height: dimensions.height,
@@ -144,7 +148,7 @@ export const DevCardSprite: React.FC<DevCardSpriteProps> = ({
             {locale === 'ro' ? 'NOUĂ' : 'NEW'}
           </span>
         )}
-        <span className="sprite-card-label">{label}</span>
+        <span className={`sprite-card-label ${size === 'xs' ? 'sprite-card-label-xs' : ''}`}>{label}</span>
       </div>
 
       {canPlay && onPlay && (
