@@ -60,16 +60,51 @@ interface WsClientConnection {
   sessionToken: string;
 }
 
-// Matches localhost and private LAN addresses only (RFC 1918 + loopback) — this server is
-// meant for trusted local/LAN play, never for arbitrary public-internet origins.
+// Matches localhost and private LAN addresses (RFC 1918 + loopback)
 const PRIVATE_NETWORK_HOSTNAME_RE =
   /^(localhost|127\.0\.0\.1|\[?::1\]?|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})$/;
 
-function resolveAllowedOrigin(originHeader: string | undefined): string | undefined {
+export function resolveAllowedOrigin(
+  originHeader: string | undefined,
+  hostHeader?: string
+): string | undefined {
   if (!originHeader) return undefined;
   try {
-    const hostname = new URL(originHeader).hostname;
-    return PRIVATE_NETWORK_HOSTNAME_RE.test(hostname) ? originHeader : undefined;
+    const originUrl = new URL(originHeader);
+    const originHostname = originUrl.hostname.toLowerCase();
+
+    // 1. Same-Origin check: if origin hostname matches the server's Host header
+    if (hostHeader) {
+      const hostWithoutPort = hostHeader.split(':')[0]?.trim().toLowerCase();
+      if (hostWithoutPort && originHostname === hostWithoutPort) {
+        return originHeader;
+      }
+    }
+
+    // 2. Private LAN & Localhost
+    if (PRIVATE_NETWORK_HOSTNAME_RE.test(originHostname)) {
+      return originHeader;
+    }
+
+    // 3. Known production domains & custom configured ALLOWED_ORIGINS env var
+    // Default allowed domains include catan.d10.ro and d10.ro
+    const rawAllowed = process.env.ALLOWED_ORIGINS ?? 'catan.d10.ro,d10.ro';
+    const customAllowed = rawAllowed
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+
+    for (const allowed of customAllowed) {
+      if (
+        allowed === '*' ||
+        originHostname === allowed ||
+        originHostname.endsWith(`.${allowed}`)
+      ) {
+        return originHeader;
+      }
+    }
+
+    return undefined;
   } catch {
     return undefined;
   }
@@ -323,7 +358,7 @@ export function createCatanServer(options?: {
   }
 
   const httpServer = http.createServer(async (req, res) => {
-    const allowedOrigin = resolveAllowedOrigin(req.headers.origin);
+    const allowedOrigin = resolveAllowedOrigin(req.headers.origin, req.headers.host);
     if (allowedOrigin) {
       res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
       res.setHeader('Vary', 'Origin');
@@ -1056,7 +1091,7 @@ export function createCatanServer(options?: {
     server: httpServer,
     verifyClient: (info, callback) => {
       const origin = info.req.headers.origin;
-      if (origin && !resolveAllowedOrigin(origin)) {
+      if (origin && !resolveAllowedOrigin(origin, info.req.headers.host)) {
         callback(false, 403, 'Forbidden origin');
         return;
       }
