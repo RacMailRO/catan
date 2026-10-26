@@ -666,7 +666,7 @@ export function getLegalActions(state: GameState, playerId: string): GameAction[
 
       // Cancel open trades
       for (const offer of state.activeTradeOffers) {
-        if (offer.status === 'open' && offer.fromPlayerId === playerId) {
+        if ((offer.status === 'open' || offer.status === 'rejected') && offer.fromPlayerId === playerId) {
           actions.push({ type: 'cancel_trade', offerId: offer.id });
         }
       }
@@ -1156,7 +1156,11 @@ export function validateAction(
 
     case 'cancel_trade': {
       const offer = state.activeTradeOffers.find((o) => o.id === action.offerId);
-      if (!offer || offer.status !== 'open' || offer.fromPlayerId !== playerId) {
+      if (
+        !offer ||
+        (offer.status !== 'open' && offer.status !== 'rejected') ||
+        offer.fromPlayerId !== playerId
+      ) {
         return { valid: false, code: 'INVALID_OFFER', reason: 'Oferta nu poate fi anulată.' };
       }
       return { valid: true };
