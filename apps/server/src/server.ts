@@ -1223,8 +1223,33 @@ export function createCatanServer(options?: {
         const isInsideDist = candidate === webDistDir || candidate.startsWith(webDistDir + path.sep);
 
         // 1. If static file exists, serve with correct MIME and caching
-        if (isInsideDist && fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-          const ext = path.extname(candidate).toLowerCase();
+        let resolvedCandidate =
+          isInsideDist && fs.existsSync(candidate) && fs.statSync(candidate).isFile()
+            ? candidate
+            : null;
+
+        // Fallback for case-insensitive matches (e.g. Linux server where FTP client converted filenames to lowercase)
+        if (!resolvedCandidate && isInsideDist) {
+          const dir = path.dirname(candidate);
+          if (fs.existsSync(dir)) {
+            const baseLower = path.basename(candidate).toLowerCase();
+            try {
+              const entries = fs.readdirSync(dir);
+              const matchedEntry = entries.find((e) => e.toLowerCase() === baseLower);
+              if (matchedEntry) {
+                const fullPath = path.join(dir, matchedEntry);
+                if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+                  resolvedCandidate = fullPath;
+                }
+              }
+            } catch {
+              // ignore
+            }
+          }
+        }
+
+        if (resolvedCandidate) {
+          const ext = path.extname(resolvedCandidate).toLowerCase();
           const mime = STATIC_MIME[ext] ?? 'application/octet-stream';
           res.writeHead(200, {
             'Content-Type': mime,
@@ -1232,7 +1257,7 @@ export function createCatanServer(options?: {
               ? 'public, max-age=31536000, immutable'
               : 'no-cache'
           });
-          fs.createReadStream(candidate).pipe(res);
+          fs.createReadStream(resolvedCandidate).pipe(res);
           return;
         }
 

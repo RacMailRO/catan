@@ -1,9 +1,14 @@
 {
-  "version": "v1.90",
-  "commitCount": 90,
-  "shortHash": "e5578f2",
-  "buildDate": "2026-10-26T20:50:56.529Z",
+  "version": "v1.91",
+  "commitCount": 91,
+  "shortHash": "cd7b25b",
+  "buildDate": "2026-10-26T21:11:41.472Z",
   "releaseNotes": [
+    {
+      "hash": "cd7b25b",
+      "date": "2026-10-26",
+      "message": "chore: bump build version to v1.90"
+    },
     {
       "hash": "e5578f2",
       "date": "2026-10-26",
@@ -248,11 +253,6 @@
       "hash": "9d2ce46",
       "date": "2026-10-26",
       "message": "fix: explicit steal feedback banner, correct mobile board pan speed"
-    },
-    {
-      "hash": "8a23b3d",
-      "date": "2026-10-26",
-      "message": "feat: dice roll decides starting player, trade-modal card preview, steal-target colors"
     }
   ]
 }
