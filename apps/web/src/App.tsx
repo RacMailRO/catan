@@ -20,7 +20,6 @@ import {
   TERRAIN_TO_RESOURCE,
   canPlayDevCardType,
   createEmptyResources,
-  createGame,
   createRulesConfig,
   getEligibleRobberTargetsOnHex,
   getLegalActions,
@@ -104,6 +103,13 @@ export const App: React.FC = () => {
         // Server not running (pure static/offline preview) — just hide the badge.
       });
   }, []);
+
+  // Browser tab title: version alongside the name, visible on every tab (including Lobby),
+  // not just the in-page header badge.
+  useEffect(() => {
+    document.title = versionInfo ? `Catan v2 · ${versionInfo.version}` : 'Catan v2';
+  }, [versionInfo]);
+
   const t = TRANSLATIONS[locale];
 
   // Lobby Configuration State
@@ -135,15 +141,20 @@ export const App: React.FC = () => {
     }
   ]);
 
-  const [rules, setRules] = useState<GameRulesConfig>(() => createRulesConfig());
+  const [rules, setRules] = useState<GameRulesConfig>(() =>
+    createRulesConfig({
+      startingResourcesRule: 'both_settlements',
+      knightStealRule: 'all_adjacent',
+      devCardsPerTurnRule: 'one_per_type'
+    })
+  );
   const [customSeed, setCustomSeed] = useState<string>('');
   const [serverStatusMsg, setServerStatusMsg] = useState<string | null>(null);
 
-  // 'local' = hot-seat, every participant is played from this one device/browser.
-  // 'online' = real cross-device multiplayer: human seats beyond the host stay "open" on the
-  // server lobby until someone joins them with the invite code; gameplay afterwards is driven
-  // entirely by the server (REST actions + WebSocket push), never the local ReplayRecorder.
-  const [gameMode, setGameMode] = useState<'local' | 'online'>('local');
+  // Online is the only way to actually play: human seats beyond the host stay "open" on the
+  // server lobby until someone joins them with the invite code; gameplay is driven entirely by
+  // the server (REST actions + WebSocket push), never a local ReplayRecorder — so a game can
+  // never start before every intended human has actually joined from their own device.
   const [onlineLobby, setOnlineLobby] = useState<LobbyState | null>(null);
   const [onlineSession, setOnlineSession] = useState<OnlineSession | null>(null);
   const [onlinePlayerView, setOnlinePlayerView] = useState<PlayerView | null>(null);
@@ -254,7 +265,22 @@ export const App: React.FC = () => {
   }, []);
 
   const handleShareInvite = async (codeToShare: string) => {
-    const shareUrl = `${window.location.origin}/?join=${encodeURIComponent(codeToShare)}`;
+    // "localhost" only resolves to the host's own machine — useless in a link meant for
+    // someone else's device. Swap it for this machine's real LAN address (the backend
+    // detects it via os.networkInterfaces()) so the invite actually reaches this host from
+    // elsewhere on the network.
+    let origin = window.location.origin;
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      try {
+        const res = await fetch('/api/lan-info');
+        const data = await res.json();
+        const lanIp = data.lanIps?.[0];
+        if (lanIp) origin = `${window.location.protocol}//${lanIp}:${window.location.port}`;
+      } catch {
+        // Backend unreachable — fall back to the (locally-useless, but at least honest) origin.
+      }
+    }
+    const shareUrl = `${origin}/?join=${encodeURIComponent(codeToShare)}`;
     const shareData = {
       title: 'Hai la Catan v2!',
       text: `Te invit la o partidă de Catan v2! Codul partidei: ${codeToShare}`,
@@ -300,7 +326,6 @@ export const App: React.FC = () => {
       const data = await joinOnlineLobbyByCode(joinCodeInput.trim(), joinPlayerName.trim() || 'Jucător 2');
       setCreatedInviteCode(joinCodeInput.trim());
       setServerStatusMsg(`Te-ai alăturat cu succes ca ${data.playerId}!`);
-      setGameMode('online');
       if (data.gameId) {
         await enterOnlineGame(data.gameId, data.sessionToken, data.playerId, data.lobby.lobbyId);
       } else {
@@ -784,27 +809,6 @@ export const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [autoPlayAi, recorder, gameVersionTick, activeTab]);
 
-  // Start Game from Lobby
-  // Local hot-seat only — see handleCreateOnlineLobby/handleStartOnlineLobby for real
-  // cross-device multiplayer, which never touches the local ReplayRecorder.
-  const handleStartGame = () => {
-    const seed = customSeed.trim() || `catan-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-    const initial = createGame({
-      gameId: `game_${Date.now()}`,
-      seed,
-      participants,
-      rules
-    });
-    const rec = new ReplayRecorder(initial, 15);
-    setRecorder(rec);
-    setBuildMode('none');
-    setActiveModal(initial.startingOrderRolls && initial.startingOrderRolls.length > 1 ? 'starting_order' : 'none');
-    setActionError(null);
-    setDiceRollAnimKey(`start-${Date.now()}`);
-    setGameVersionTick((v) => v + 1);
-    setActiveTab('game');
-  };
-
   // Run an instant full 4-AI simulated game, save it to history, and open it in Replay Viewer
   const handleQuick4AiSimulation = () => {
     const sim = runSimulatedGame({
@@ -1048,11 +1052,9 @@ export const App: React.FC = () => {
             type="button"
             className={`nav-btn ${activeTab === 'game' ? 'active' : ''}`}
             onClick={() => {
-              if (!recorder && !onlineSession) {
-                handleStartGame();
-              } else {
-                setActiveTab('game');
-              }
+              // No game to jump into yet — send them to the lobby to create/join an online
+              // game instead of silently starting a local one.
+              setActiveTab(recorder || onlineSession ? 'game' : 'lobby');
             }}
           >
             🎲 <span className="desktop-only">{t.navGame}</span><span className="mobile-only">Joc</span>
@@ -1146,27 +1148,6 @@ export const App: React.FC = () => {
                   ⚠️ {joinError}
                 </div>
               )}
-            </div>
-
-            <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem' }}>
-              <button
-                type="button"
-                className={`btn ${gameMode === 'local' ? 'btn-primary' : ''}`}
-                style={{ flex: 1 }}
-                onClick={() => setGameMode('local')}
-                title="Toți jucătorii umani joacă pe acest dispozitiv, pasând rândul"
-              >
-                💻 Local (hot-seat)
-              </button>
-              <button
-                type="button"
-                className={`btn ${gameMode === 'online' ? 'btn-primary' : ''}`}
-                style={{ flex: 1 }}
-                onClick={() => setGameMode('online')}
-                title="Fiecare jucător uman se alătură de pe propriul dispozitiv cu un cod"
-              >
-                🌐 Online (invitație)
-              </button>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexShrink: 0 }}>
@@ -1339,46 +1320,35 @@ export const App: React.FC = () => {
               ))}
             </div>
 
-            {/* Unified Start Buttons & Share Banner */}
+            {/* Unified Start Buttons & Share Banner — online is the only way to actually play
+                (local hot-seat was confusing: it let games start before every intended human
+                had a chance to join). "Simulare Rapidă" stays separate — it's an instant 4-AI
+                benchmark for the Replay/Analysis tools, not a way to play as a human. */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.65rem', flexShrink: 0 }}>
-              {gameMode === 'local' ? (
-                <>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-start-match"
-                    onClick={() => handleStartGame()}
-                  >
-                    🚀 {t.startGame}
-                  </button>
-
-                  <button
-                    type="button"
-                    className="btn btn-quick-sim"
-                    onClick={handleQuick4AiSimulation}
-                  >
-                    ⚡ {t.quickAiMatch} & Analiză
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-start-match"
-                    disabled={onlineBusy}
-                    onClick={handleCreateOnlineLobby}
-                  >
-                    🌐 {onlineBusy ? 'Se creează...' : 'Creează Partidă Online'}
-                  </button>
-                  <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: 0 }}>
-                    Locul 1 ești tu. Orice alt loc marcat „Om” devine un loc liber — ceilalți
-                    jucători se alătură de pe propriul dispozitiv cu codul de invitație, înainte
-                    să poată începe partida.
-                  </p>
-                  {onlineError && (
-                    <div style={{ color: '#f87171', fontSize: '0.78rem' }}>⚠️ {onlineError}</div>
-                  )}
-                </>
+              <button
+                type="button"
+                className="btn btn-primary btn-start-match"
+                disabled={onlineBusy}
+                onClick={handleCreateOnlineLobby}
+              >
+                🌐 {onlineBusy ? 'Se creează...' : 'Creează Partidă Online'}
+              </button>
+              <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: 0 }}>
+                Locul 1 ești tu. Orice alt loc marcat „Om” devine un loc liber — ceilalți
+                jucători se alătură de pe propriul dispozitiv cu codul de invitație, înainte să
+                poată începe partida.
+              </p>
+              {onlineError && (
+                <div style={{ color: '#f87171', fontSize: '0.78rem' }}>⚠️ {onlineError}</div>
               )}
+
+              <button
+                type="button"
+                className="btn btn-quick-sim"
+                onClick={handleQuick4AiSimulation}
+              >
+                ⚡ {t.quickAiMatch} & Analiză
+              </button>
 
               {serverStatusMsg && (
                 <div style={{ fontSize: '0.78rem', color: 'var(--accent-blue)', marginTop: 2 }}>
@@ -1510,11 +1480,15 @@ export const App: React.FC = () => {
                 </div>
                 <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center' }}>
                   {ALL_RESOURCES.map((r) => (
-                    <ResourceCardSprite key={r} resource={r} count={4} locale={locale} size="xs" />
+                    <ResourceCardSprite key={r} resource={r} count={19} locale={locale} size="xs" />
                   ))}
-                  <DevCardSprite type="knight" locale={locale} size="xs" />
-                  <DevCardSprite type="road_building" locale={locale} size="xs" />
-                  <DevCardSprite type="monopoly" locale={locale} size="xs" />
+                </div>
+                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', marginTop: '0.45rem' }}>
+                  <DevCardSprite type="knight" count={14} locale={locale} size="xs" />
+                  <DevCardSprite type="victory_point" count={5} locale={locale} size="xs" />
+                  <DevCardSprite type="road_building" count={2} locale={locale} size="xs" />
+                  <DevCardSprite type="year_of_plenty" count={2} locale={locale} size="xs" />
+                  <DevCardSprite type="monopoly" count={2} locale={locale} size="xs" />
                 </div>
               </div>
             </div>
@@ -2740,7 +2714,6 @@ export const App: React.FC = () => {
                   setOnlineLobby(null);
                   setOnlineSession(null);
                   setOnlineError(null);
-                  setGameMode('local');
                 }}
               >
                 ✕ Părăsește

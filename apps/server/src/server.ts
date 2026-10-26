@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
   AIDecisionRecord,
@@ -133,12 +134,17 @@ export function createCatanServer(options?: {
   dbPath?: string;
   assetsDir?: string;
   autoStepAiMaxBatch?: number;
+  /** apps/web's built output (vite build). When present, this one server also serves the
+   * frontend — so deploying just means running this process on the host, no separate static
+   * host or vite process needed. Defaults to apps/web/dist next to this file's own repo. */
+  webDistDir?: string;
 }): CatanServerInstance {
   const storage = new CatanStorage(options?.dbPath ?? ':memory:');
   const activeGames = new Map<string, ActiveGameRuntime>();
   const wsClients = new Set<WsClientConnection>();
   const rateLimits = new Map<string, { count: number; windowStartMs: number }>();
   const autoStepAiMaxBatch = options?.autoStepAiMaxBatch ?? 80;
+  const webDistDir = options?.webDistDir ?? path.resolve(REPO_ROOT, 'apps/web/dist');
 
   function checkRateLimit(key: string, maxPerWindow = 120, windowMs = 5000): boolean {
     const now = Date.now();
@@ -369,6 +375,21 @@ export function createCatanServer(options?: {
       // App version (commit count) + recent commit log, read live from git — see getVersionInfo
       if (req.method === 'GET' && pathname === '/api/version') {
         sendJson(res, 200, getVersionInfo());
+        return;
+      }
+
+      // This machine's LAN IPv4 addresses — so an invite link built on the host (who usually
+      // opens the game via http://localhost:5173) can point guests at an address that actually
+      // reaches this machine from elsewhere on the network, instead of their own "localhost".
+      if (req.method === 'GET' && pathname === '/api/lan-info') {
+        const lanIps: string[] = [];
+        for (const list of Object.values(os.networkInterfaces())) {
+          if (!list) continue;
+          for (const iface of list) {
+            if (iface.family === 'IPv4' && !iface.internal) lanIps.push(iface.address);
+          }
+        }
+        sendJson(res, 200, { lanIps });
         return;
       }
 
@@ -985,6 +1006,39 @@ export function createCatanServer(options?: {
         });
         sendJson(res, 200, { mode: 'benchmark', benchmark });
         return;
+      }
+
+      // Serve the built web app (apps/web/dist) for everything else — lets one process serve
+      // both the API/WebSocket and the frontend. Falls back to index.html for unknown paths
+      // (client-side routes like /?join=CODE, or a direct refresh) rather than 404ing them.
+      if (req.method === 'GET' && fs.existsSync(webDistDir)) {
+        const STATIC_MIME: Record<string, string> = {
+          '.html': 'text/html; charset=utf-8',
+          '.js': 'text/javascript; charset=utf-8',
+          '.css': 'text/css; charset=utf-8',
+          '.json': 'application/json; charset=utf-8',
+          '.svg': 'image/svg+xml',
+          '.png': 'image/png',
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.webp': 'image/webp',
+          '.gif': 'image/gif',
+          '.ico': 'image/x-icon',
+          '.woff2': 'font/woff2',
+          '.webmanifest': 'application/manifest+json'
+        };
+        const candidate = path.resolve(webDistDir, '.' + pathname);
+        const isInsideDist = candidate === webDistDir || candidate.startsWith(webDistDir + path.sep);
+        const filePath =
+          isInsideDist && fs.existsSync(candidate) && fs.statSync(candidate).isFile()
+            ? candidate
+            : path.join(webDistDir, 'index.html');
+        if (fs.existsSync(filePath)) {
+          const ext = path.extname(filePath).toLowerCase();
+          res.writeHead(200, { 'Content-Type': STATIC_MIME[ext] ?? 'application/octet-stream' });
+          fs.createReadStream(filePath).pipe(res);
+          return;
+        }
       }
 
       sendJson(res, 404, { error: `Route not found: ${req.method} ${pathname}` });

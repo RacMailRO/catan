@@ -13,7 +13,7 @@ export type Locale = 'ro' | 'en';
 
 export const TRANSLATIONS = {
   ro: {
-    appTitle: 'Catan v2 — Strategie, Platformă AI & Replay',
+    appTitle: 'Catan v2',
     navLobby: 'Lobby & Configurare',
     navGame: 'Partidă Activă',
     navReplay: 'Replay & Analiză AI',
@@ -58,7 +58,7 @@ export const TRANSLATIONS = {
     importReplay: 'Importă Replay (.json)'
   },
   en: {
-    appTitle: 'Catan v2 — Strategy, AI Lab & Replay',
+    appTitle: 'Catan v2',
     navLobby: 'Lobby & Setup',
     navGame: 'Active Game',
     navReplay: 'Replay & AI Analysis',

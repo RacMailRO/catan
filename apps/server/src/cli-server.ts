@@ -25,10 +25,12 @@ server.listen(port, '0.0.0.0').then(({ port: boundPort }) => {
 
   console.log('====================================================');
   console.log(` Catan Authoritative Server (LAN & Online) Started`);
+  console.log(` This single process also serves the game itself — open it directly:`);
   console.log(` Local URL : http://localhost:${boundPort}`);
   for (const ip of lanIps) {
-    console.log(` LAN URL   : http://${ip}:${boundPort}`);
+    console.log(` LAN URL   : http://${ip}:${boundPort}  <- share this with other players`);
   }
   console.log(` Database  : ${dbPath}`);
+  console.log(' (Run "npm run build --workspace=@catan/web" first if the game does not load.)');
   console.log('====================================================');
 });
