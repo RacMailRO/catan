@@ -1,9 +1,24 @@
 {
-  "version": "v1.62",
-  "commitCount": 62,
-  "shortHash": "518d840",
-  "buildDate": "2026-10-26T18:58:03.281Z",
+  "version": "v1.65",
+  "commitCount": 65,
+  "shortHash": "3f4cfe5",
+  "buildDate": "2026-10-26T19:01:05.571Z",
   "releaseNotes": [
+    {
+      "hash": "3f4cfe5",
+      "date": "2026-10-26",
+      "message": "merge: fix/allow-cancel-rejected-trade into main"
+    },
+    {
+      "hash": "e1789bc",
+      "date": "2026-10-26",
+      "message": "fix(core): allow canceling and closing trade offers that have been rejected by all players"
+    },
+    {
+      "hash": "5dd1f8c",
+      "date": "2026-10-26",
+      "message": "chore: update version to v1.62"
+    },
     {
       "hash": "518d840",
       "date": "2026-10-26",
@@ -238,21 +253,6 @@
       "hash": "76ef114",
       "date": "2026-10-25",
       "message": "merge: feat/mobile-pwa-and-responsive-board into main"
-    },
-    {
-      "hash": "00a2195",
-      "date": "2026-10-25",
-      "message": "feat(web): add mobile PWA support, pinch-to-zoom touch gestures, and responsive fullscreen board layout"
-    },
-    {
-      "hash": "95e3f15",
-      "date": "2026-10-24",
-      "message": "Merge branch 'feat/official-spiral-and-ui-refinements' into main"
-    },
-    {
-      "hash": "8fbe72b",
-      "date": "2026-10-24",
-      "message": "feat(core,web): implement official A-R clockwise spiral board generator, colored cities without circles, larger harbors, and wider single-row bank sidebar"
     }
   ]
 }
