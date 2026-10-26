@@ -125,7 +125,8 @@ export const GameActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('respond_trade'),
     offerId: z.string().min(1),
-    response: z.enum(['accept', 'reject'])
+    response: z.enum(['accept', 'reject']),
+    reason: z.string().optional()
   }),
   z.object({
     type: z.literal('cancel_trade'),

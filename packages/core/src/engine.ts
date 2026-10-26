@@ -1547,6 +1547,12 @@ export function applyAction(
         if (!offer.rejectedByPlayerIds.includes(playerId)) {
           offer.rejectedByPlayerIds.push(playerId);
         }
+        if (action.reason) {
+          if (!offer.rejectionReasons) {
+            offer.rejectionReasons = {};
+          }
+          offer.rejectionReasons[playerId] = action.reason;
+        }
         const otherPlayersCount = nextState.players.length - 1;
         if (
           (offer.toPlayerId && offer.toPlayerId === playerId) ||
