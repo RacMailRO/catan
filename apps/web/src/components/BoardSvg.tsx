@@ -274,6 +274,41 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
     return map;
   }, [board.harbors, outerSeaRing]);
 
+  // The true island outline, walked from the coastal edges (the same ones board.ts uses to
+  // place harbors) rather than drawn as 19 separate per-hex halos. Those separate halos
+  // overlapped inconsistently at corners where hexes meet, leaving small gaps/overlaps in the
+  // sandy border; one continuous loop with round joins reads as a single clean coastline.
+  const coastlineLoopPoints = useMemo(() => {
+    const coastalEdges = Object.values(board.edges).filter((e) => e.adjacentHexIds.length === 1);
+    if (coastalEdges.length === 0) return '';
+
+    const edgesByVertex = new Map<string, typeof coastalEdges>();
+    for (const e of coastalEdges) {
+      for (const vId of [e.v1, e.v2]) {
+        const list = edgesByVertex.get(vId);
+        if (list) list.push(e);
+        else edgesByVertex.set(vId, [e]);
+      }
+    }
+
+    const visited = new Set<string>();
+    const firstEdge = coastalEdges[0]!;
+    const path: string[] = [];
+    let currentVertexId = firstEdge.v1;
+    let currentEdge: (typeof coastalEdges)[number] | undefined = firstEdge;
+
+    while (currentEdge && !visited.has(currentEdge.id)) {
+      visited.add(currentEdge.id);
+      const v = board.vertices[currentVertexId];
+      if (v) path.push(`${v.x},${v.y}`);
+      const nextVertexId: string = currentEdge.v1 === currentVertexId ? currentEdge.v2 : currentEdge.v1;
+      currentVertexId = nextVertexId;
+      currentEdge = (edgesByVertex.get(nextVertexId) ?? []).find((e) => !visited.has(e.id));
+    }
+
+    return path.join(' ');
+  }, [board.edges, board.vertices]);
+
   // Native non-passive listeners for desktop mouse wheel AND mobile pinch-to-zoom + touch drag
   useEffect(() => {
     const svgEl = svgRef.current;
@@ -532,17 +567,31 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             );
           })}
 
-          {/* 0B. Sandy Shoreline Halo behind the 19 Island Hexes */}
+          {/* 0B. Sandy fill behind the 19 Island Hexes — keeps the thin seams between adjacent
+              tiles sand-colored rather than showing the sea through them. */}
           {Object.values(board.hexes).map((hex) => (
             <polygon
               key={`sand-${hex.id}`}
               points={getHexPolygonPoints(hex.x, hex.y, HEX_RADIUS + 7)}
               fill="#fde68a"
-              stroke="#d97706"
-              strokeWidth={3}
               style={{ pointerEvents: 'none' }}
             />
           ))}
+
+          {/* 0C. One continuous coastline stroke along the island's true outer boundary
+              (walked from its coastal edges), drawn over the per-hex fill above so the
+              border reads as a single smooth shoreline instead of 19 separate hex outlines
+              whose corners don't quite line up. */}
+          {coastlineLoopPoints && (
+            <polygon
+              points={coastlineLoopPoints}
+              fill="none"
+              stroke="#d97706"
+              strokeWidth={6}
+              strokeLinejoin="round"
+              style={{ pointerEvents: 'none' }}
+            />
+          )}
 
           {/* 1. Render 19 Island Hex Tiles using the per-terrain tile art & /numbers.png */}
           {Object.values(board.hexes).map((hex, hexIdx) => {
@@ -622,7 +671,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                       y={tokenRadius * 0.24}
                       textAnchor="middle"
                       fontSize={tokenRadius * 0.92}
-                      fontWeight="800"
+                      fontWeight="700"
                       fill={hex.numberToken === 6 || hex.numberToken === 8 ? '#b5432f' : '#241a0c'}
                       fontFamily="var(--font-display, Georgia, serif)"
                     >
@@ -752,7 +801,10 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
 
                 {isHighlighted && (
                   <g>
-                    {/* Generous invisible touch target line (width 32) */}
+                    {/* Generous invisible touch target line (width 32) — flat (not round) caps,
+                        so the hit area stays within the edge and doesn't bulge out over the
+                        vertex at either end (that bulge used to look like a second, misplaced
+                        marker sitting right next to the settlement/city there). */}
                     <line
                       data-interactive="true"
                       x1={edge.x1}
@@ -761,7 +813,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                       y2={edge.y2}
                       stroke="transparent"
                       strokeWidth={32}
-                      strokeLinecap="round"
+                      strokeLinecap="butt"
                     />
                     <line
                       data-interactive="true"
@@ -770,15 +822,16 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                       x2={edge.x2}
                       y2={edge.y2}
                       stroke="#38bdf8"
-                      strokeWidth={16}
-                      strokeOpacity={0.85}
-                      strokeLinecap="round"
+                      strokeWidth={10}
+                      strokeOpacity={0.75}
+                      strokeLinecap="butt"
                     />
+                    {/* The actual road marker: one clear dot at the edge's midpoint. */}
                     <circle
                       data-interactive="true"
                       cx={(edge.x1 + edge.x2) / 2}
                       cy={(edge.y1 + edge.y2) / 2}
-                      r={14}
+                      r={16}
                       fill="#38bdf8"
                       stroke="#0f172a"
                       strokeWidth={2.5}
@@ -813,11 +866,12 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 {building && building.type === 'settlement' && (
                   <image
                     href={SETTLEMENT_SVG_BY_COLOR[pColor]}
-                    x={-44}
-                    y={-44}
-                    width={88}
-                    height={88}
+                    x={-33}
+                    y={-33}
+                    width={66}
+                    height={66}
                     style={{
+                      pointerEvents: 'none',
                       filter:
                         'drop-shadow(0 2px 4px rgba(0,0,0,0.85)) drop-shadow(0 0 2px rgba(255,255,255,0.75))'
                     }}
@@ -832,6 +886,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                     width={108}
                     height={108}
                     style={{
+                      pointerEvents: 'none',
                       filter:
                         'drop-shadow(0 3px 5px rgba(0,0,0,0.9)) drop-shadow(0 0 2px rgba(255,255,255,0.8))'
                     }}
