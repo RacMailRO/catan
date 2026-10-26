@@ -1050,6 +1050,18 @@ export const App: React.FC = () => {
         }
         setActionError('Starea partidei a fost resincronizată automat cu serverul.');
       } else {
+        // If an offer rejection/cancellation failed with 400 because the offer is already closed,
+        // silently refresh the online game state so the client seamlessly catches up with the server.
+        if (action.type === 'respond_trade' || action.type === 'cancel_trade') {
+          try {
+            const fresh = await fetchGameState(onlineSession.gameId, onlineSession.sessionToken);
+            setOnlinePlayerView(fresh.playerView);
+            setOnlineLegalActions(fresh.legalActions);
+            return;
+          } catch {
+            // ignore
+          }
+        }
         setActionError(err instanceof Error ? err.message : 'Mutare invalidă.');
       }
     }

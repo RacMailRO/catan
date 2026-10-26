@@ -1,9 +1,14 @@
 {
-  "version": "v1.106",
-  "commitCount": 106,
-  "shortHash": "943204f",
-  "buildDate": "2026-10-26T22:58:45.094Z",
+  "version": "v1.107",
+  "commitCount": 107,
+  "shortHash": "9e3c666",
+  "buildDate": "2026-10-26T23:02:30.480Z",
   "releaseNotes": [
+    {
+      "hash": "9e3c666",
+      "date": "2026-10-27",
+      "message": "chore: bump build version to v1.106"
+    },
     {
       "hash": "943204f",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "4293fa5",
       "date": "2026-10-26",
       "message": "feat: pre-generate version and changelog at build time and document recent requirements in plan.md"
-    },
-    {
-      "hash": "155dfc5",
-      "date": "2026-10-26",
-      "message": "merge: feat/city-resize-trade-negotiation-online-replay-and-409-fix into main"
     }
   ]
 }
