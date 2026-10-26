@@ -493,6 +493,33 @@ export const App: React.FC = () => {
     };
   }, [onlineSession?.gameId, onlineSession?.sessionToken]);
 
+  // REST polling fallback for live sync — some hosts (shared cPanel especially) front the app
+  // with a reverse proxy that doesn't forward WebSocket upgrade requests, silently leaving the
+  // socket above disconnected with no retry. This guarantees opponents' moves still show up
+  // everywhere, just on a ~3s cadence instead of instantly; harmless where WS does work too,
+  // since a stale response (compared by sequence number) is just discarded.
+  useEffect(() => {
+    if (!onlineSession?.gameId) return;
+    const gameId = onlineSession.gameId;
+    const sessionToken = onlineSession.sessionToken;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const data = await fetchGameState(gameId, sessionToken);
+        if (cancelled) return;
+        setOnlinePlayerView((prev) => (prev && prev.sequence >= data.playerView.sequence ? prev : data.playerView));
+        setOnlineLegalActions(data.legalActions);
+      } catch {
+        // Transient network hiccup — the next tick will retry.
+      }
+    };
+    const interval = setInterval(poll, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [onlineSession?.gameId, onlineSession?.sessionToken]);
+
   const lastSavedGameIdRef = useRef<string | null>(null);
 
   // Dev card & trade sub-modals state
