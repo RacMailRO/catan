@@ -1,9 +1,24 @@
 {
-  "version": "v1.65",
-  "commitCount": 65,
-  "shortHash": "3f4cfe5",
-  "buildDate": "2026-10-26T19:01:05.571Z",
+  "version": "v1.68",
+  "commitCount": 68,
+  "shortHash": "51957f4",
+  "buildDate": "2026-10-26T19:13:45.670Z",
   "releaseNotes": [
+    {
+      "hash": "51957f4",
+      "date": "2026-10-26",
+      "message": "merge: feat/reveal-dev-card-and-victory-breakdown into main"
+    },
+    {
+      "hash": "382c3d2",
+      "date": "2026-10-26",
+      "message": "feat(ui): reveal drawn dev card in toast/journal and show victory points breakdown in game over modal"
+    },
+    {
+      "hash": "fd11b98",
+      "date": "2026-10-26",
+      "message": "chore: bump version to v1.65"
+    },
     {
       "hash": "3f4cfe5",
       "date": "2026-10-26",
@@ -238,21 +253,6 @@
       "hash": "7e38345",
       "date": "2026-10-25",
       "message": "feat(scripts): add one-click start.bat and stop.bat scripts for local gaming"
-    },
-    {
-      "hash": "6fa3648",
-      "date": "2026-10-25",
-      "message": "merge: feat/mobile-ui-ux-grid-modal-no-scroll into main"
-    },
-    {
-      "hash": "7664327",
-      "date": "2026-10-25",
-      "message": "feat(ui): eliminate scrolling, replace left hud with responsive grid modal, center map and position zoom discrete button"
-    },
-    {
-      "hash": "76ef114",
-      "date": "2026-10-25",
-      "message": "merge: feat/mobile-pwa-and-responsive-board into main"
     }
   ]
 }
