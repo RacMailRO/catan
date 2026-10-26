@@ -152,7 +152,16 @@ export async function submitOnlineAction(params: {
 
 export function wsUrlForGame(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${protocol}://${window.location.hostname}:3001`;
+  // The vite dev server (port 5173) serves the page but doesn't proxy WebSocket upgrades to
+  // the backend, so local `npm run dev:web` + a separate `npm run dev:server` needs an
+  // explicit port. Everywhere else — the backend serving itself on its own port, or a
+  // reverse-proxied production domain (e.g. cPanel's "Setup Node.js App", which maps the
+  // public domain/port 443 to an internal port chosen by the host, never 3001 publicly) —
+  // HTTP and WebSocket already terminate on the same origin the page itself loaded from.
+  if (window.location.port === '5173') {
+    return `${protocol}://${window.location.hostname}:3001`;
+  }
+  return `${protocol}://${window.location.host}`;
 }
 
 export function playerViewToGameState(view: PlayerView): GameState {
