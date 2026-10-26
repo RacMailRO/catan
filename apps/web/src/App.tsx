@@ -52,7 +52,9 @@ import {
   createOnlineLobby,
   fetchGameState,
   fetchLobby,
+  fetchSpectatorGameState,
   joinOnlineLobbyByCode,
+  listPublicLobbies,
   playerViewToGameState,
   startOnlineLobby,
   submitOnlineAction,
@@ -74,13 +76,14 @@ import {
   FULL_RULES
 } from './i18n';
 
-type ActiveTab = 'lobby' | 'game' | 'replay' | 'benchmark';
+type ActiveTab = 'lobby' | 'game' | 'replay' | 'benchmark' | 'spectate';
 
 const NAV_TAB_ICON: Record<ActiveTab, string> = {
   lobby: '⚙️',
   game: '🎲',
   replay: '🎬',
-  benchmark: '📈'
+  benchmark: '📈',
+  spectate: '👁️'
 };
 
 const NAV_TAB_LABEL = (t: {
@@ -92,7 +95,8 @@ const NAV_TAB_LABEL = (t: {
   lobby: t.navLobby,
   game: t.navGame,
   replay: t.navReplay,
-  benchmark: t.navBenchmark
+  benchmark: t.navBenchmark,
+  spectate: 'Spectator'
 });
 
 // Remembers the player's own display name per device/browser, so it doesn't need retyping
@@ -360,6 +364,56 @@ export const App: React.FC = () => {
   const [waitingRoomNewName, setWaitingRoomNewName] = useState<string>('');
   const [isRenamingInWaitingRoom, setIsRenamingInWaitingRoom] = useState<boolean>(false);
 
+  // Public (non-private) lobbies/games browser for the lobby tab — lets a visitor join a game
+  // still waiting for players, or watch one already in progress, without needing an invite code.
+  const [publicLobbies, setPublicLobbies] = useState<LobbyState[]>([]);
+  const [spectateGameId, setSpectateGameId] = useState<string | null>(null);
+  const [spectateView, setSpectateView] = useState<PlayerView | null>(null);
+  const [spectateError, setSpectateError] = useState<string | null>(null);
+
+  // Refresh the public lobby list every 5s while it's actually visible (the lobby tab).
+  useEffect(() => {
+    if (activeTab !== 'lobby') return;
+    let cancelled = false;
+    const refresh = () => {
+      listPublicLobbies()
+        .then((lobbies) => { if (!cancelled) setPublicLobbies(lobbies); })
+        .catch(() => { /* transient — next poll retries */ });
+    };
+    refresh();
+    const interval = setInterval(refresh, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [activeTab]);
+
+  // Poll the spectated game's state every 3s — read-only, so plain REST polling (no WebSocket
+  // needed) matches the same resilient fallback pattern used for the player's own online games.
+  useEffect(() => {
+    if (!spectateGameId) return;
+    let cancelled = false;
+    const refresh = () => {
+      fetchSpectatorGameState(spectateGameId)
+        .then((data) => { if (!cancelled) setSpectateView(data.playerView); })
+        .catch((err) => { if (!cancelled) setSpectateError(err instanceof Error ? err.message : String(err)); });
+    };
+    refresh();
+    const interval = setInterval(refresh, 3000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [spectateGameId]);
+
+  const handleSpectate = (gameId: string) => {
+    setSpectateError(null);
+    setSpectateView(null);
+    setSpectateGameId(gameId);
+    setActiveTab('spectate');
+  };
+
+  const handleStopSpectating = () => {
+    setSpectateGameId(null);
+    setSpectateView(null);
+    setSpectateError(null);
+    setActiveTab('lobby');
+  };
+
   const handleRenameWaitingRoomSeat = async (targetSeatIndex: number, newName: string) => {
     if (!onlineSession || !onlineLobby) return;
     const clean = newName.trim();
@@ -480,16 +534,17 @@ export const App: React.FC = () => {
     setActiveTab('game');
   };
 
-  const handleJoinWithCode = async () => {
-    if (!joinCodeInput.trim()) {
+  const handleJoinWithCode = async (codeOverride?: string) => {
+    const code = (codeOverride ?? joinCodeInput).trim();
+    if (!code) {
       setJoinError('Te rugăm să introduci codul de invitație.');
       return;
     }
     setJoinLoading(true);
     setJoinError(null);
     try {
-      const data = await joinOnlineLobbyByCode(joinCodeInput.trim(), joinPlayerName.trim() || 'Jucător 2');
-      setCreatedInviteCode(joinCodeInput.trim());
+      const data = await joinOnlineLobbyByCode(code, joinPlayerName.trim() || 'Jucător 2');
+      setCreatedInviteCode(code);
       setServerStatusMsg(`Te-ai alăturat cu succes ca ${data.playerId}!`);
       if (data.gameId) {
         await enterOnlineGame(data.gameId, data.sessionToken, data.playerId, data.lobby.lobbyId);
@@ -1619,7 +1674,7 @@ export const App: React.FC = () => {
                 <button
                   type="button"
                   className="btn btn-primary"
-                  onClick={handleJoinWithCode}
+                  onClick={() => handleJoinWithCode()}
                   disabled={joinLoading || !joinCodeInput.trim()}
                   style={{
                     width: '100%',
@@ -1640,6 +1695,71 @@ export const App: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {publicLobbies.length > 0 && (
+              <div className="join-game-box" style={{ marginBottom: '0.85rem' }}>
+                <div style={{ fontWeight: 700, color: 'var(--accent-gold)', fontSize: '0.92rem', marginBottom: 8 }}>
+                  🌐 {locale === 'ro' ? 'Partide Publice Active' : 'Active Public Games'}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {publicLobbies
+                    .filter((l) => l.status !== 'finished')
+                    .map((l) => {
+                      const filledSeats = l.seats.filter((s) => s.type !== 'open').length;
+                      const isWaiting = l.status === 'waiting';
+                      const hasOpenSeat = l.seats.some((s) => s.type === 'open');
+                      return (
+                        <div
+                          key={l.lobbyId}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '0.6rem',
+                            flexWrap: 'wrap',
+                            background: 'var(--bg-inset)',
+                            border: '1px solid var(--border-color-soft)',
+                            borderRadius: 'var(--radius-md)',
+                            padding: '0.5rem 0.65rem'
+                          }}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.86rem' }}>{l.name}</span>
+                            <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                              {isWaiting
+                                ? (locale === 'ro' ? '⏳ Așteaptă jucători' : '⏳ Waiting for players')
+                                : (locale === 'ro' ? '▶️ În desfășurare' : '▶️ In progress')}
+                              {' · '}
+                              {filledSeats}/{l.seats.length} {locale === 'ro' ? 'locuri' : 'seats'}
+                            </span>
+                          </div>
+                          {isWaiting && hasOpenSeat && l.inviteCode && (
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                              disabled={joinLoading}
+                              onClick={() => handleJoinWithCode(l.inviteCode)}
+                            >
+                              🚀 {locale === 'ro' ? 'Alătură-te' : 'Join'}
+                            </button>
+                          )}
+                          {l.status === 'in_progress' && l.gameId && (
+                            <button
+                              type="button"
+                              className="btn"
+                              style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                              onClick={() => handleSpectate(l.gameId!)}
+                            >
+                              👁️ {locale === 'ro' ? 'Spectează' : 'Spectate'}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexShrink: 0 }}>
               <h2 style={{ margin: 0, border: 'none', padding: 0 }}>👥 {t.participantsTitle}</h2>
@@ -3788,6 +3908,135 @@ export const App: React.FC = () => {
               </div>
             );
           })()}
+        </main>
+      )}
+
+      {/* SPECTATOR MODE: read-only view of someone else's public online game, entered from the
+          lobby's "Partide Publice Active" list. No action buttons anywhere — every player's
+          hand (including what would be "your own") is redacted, since getPlayerView never
+          matches the '__spectator__' viewer id against a real player. */}
+      {activeTab === 'spectate' && (
+        <main className="lobby-container">
+          <section className="panel" style={{ flex: '2 1 560px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <h2 style={{ margin: 0, border: 'none', padding: 0 }}>
+                👁️ {locale === 'ro' ? 'Mod Spectator' : 'Spectator Mode'}
+              </h2>
+              <button type="button" className="btn" onClick={handleStopSpectating}>
+                ✕ {locale === 'ro' ? 'Părăsește' : 'Leave'}
+              </button>
+            </div>
+
+            {spectateError && (
+              <div style={{ color: '#f87171', fontSize: '0.85rem', marginBottom: '0.6rem', fontWeight: 600 }}>
+                ⚠️ {spectateError}
+              </div>
+            )}
+
+            {!spectateView ? (
+              <div style={{ color: 'var(--text-muted)', padding: '1rem', textAlign: 'center' }}>
+                {locale === 'ro' ? 'Se încarcă partida...' : 'Loading game...'}
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', marginBottom: '0.6rem', flexWrap: 'wrap', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  <span>{locale === 'ro' ? 'Tura' : 'Turn'} {spectateView.turn}</span>
+                  <span>·</span>
+                  <span>{PHASE_LABELS[locale][spectateView.phase]}</span>
+                  {spectateView.lastDiceRoll && (
+                    <>
+                      <span>·</span>
+                      <span>🎲 {spectateView.lastDiceRoll.die1} + {spectateView.lastDiceRoll.die2} = {spectateView.lastDiceRoll.total}</span>
+                    </>
+                  )}
+                </div>
+                <div style={{ aspectRatio: '16 / 13', width: '100%' }}>
+                  <BoardSvg
+                    board={spectateView.board}
+                    playerColors={Object.fromEntries(spectateView.players.map((p) => [p.id, p.color]))}
+                    locale={locale}
+                  />
+                </div>
+              </>
+            )}
+          </section>
+
+          {spectateView && (
+            <section className="panel" style={{ flex: '1 1 320px' }}>
+              <h2>👥 {locale === 'ro' ? 'Jucători' : 'Players'}</h2>
+              <div className="score-bank-grid">
+                {spectateView.players.map((p) => {
+                  const isCurrent = spectateView.activePlayerId === p.id;
+                  const hasLongestRoad = spectateView.longestRoadOwnerId === p.id;
+                  const hasLargestArmy = spectateView.largestArmyOwnerId === p.id;
+                  return (
+                    <div key={p.id} className={`player-grid-card ${isCurrent ? 'active-turn' : ''}`}>
+                      {isCurrent && <span className="player-grid-turn-badge">⚡ {locale === 'ro' ? 'La rând' : 'Turn'}</span>}
+                      <div className="player-grid-header">
+                        <div className="player-grid-title">
+                          <span className="color-dot" style={{ backgroundColor: p.color, width: 12, height: 12 }} />
+                          <span className="player-grid-name">{p.name}</span>
+                          <span className="player-grid-type">{p.type.toUpperCase()}</span>
+                        </div>
+                        <span className="player-grid-score">
+                          {p.totalScore !== undefined ? `${p.totalScore} VP` : `${p.publicScore} VP`}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.2rem 0' }}>
+                        🎴 {p.resourceCount} {locale === 'ro' ? 'resurse' : 'cards'} · 🃏 {p.devCardCount} {locale === 'ro' ? 'dezvoltare' : 'dev'}
+                      </div>
+                      <div className="player-grid-stats">
+                        <div className="player-grid-pieces">
+                          {(
+                            [
+                              ['settlements', '🏠'],
+                              ['cities', '🏰'],
+                              ['roads', '🛣️']
+                            ] as const
+                          ).map(([key, icon]) => {
+                            const total = INITIAL_PLAYER_PIECES[key];
+                            const used = total - p.remainingPieces[key];
+                            const exhausted = used >= total;
+                            return (
+                              <span key={key} className={`piece-count-pill ${exhausted ? 'exhausted' : ''}`}>
+                                {icon} {used}/{total}
+                              </span>
+                            );
+                          })}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>🏆 {locale === 'ro' ? 'Drum' : 'Road'}: {p.longestRoadLength}</span>
+                          <span>⚔️ {p.knightsPlayed}</span>
+                        </div>
+                        {(hasLongestRoad || hasLargestArmy) && (
+                          <div className="player-grid-badges">
+                            {hasLongestRoad && <span className="achievement-badge">🏅 +2</span>}
+                            {hasLargestArmy && <span className="achievement-badge">🛡️ +2</span>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ background: '#0d1a29', padding: '0.5rem', borderRadius: 8, border: '1px solid var(--border-color)', marginTop: '0.65rem' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '0.3rem' }}>
+                  🏦 {locale === 'ro' ? 'Stoc Bancă' : 'Bank Stock'}
+                </div>
+                <div className="bank-single-row" style={{ margin: 0 }}>
+                  {ALL_RESOURCES.map((r) => (
+                    <span key={r} className="res-badge" title={RESOURCE_LABELS[locale][r]}>
+                      {RESOURCE_ICONS[r]} {spectateView.bank[r]}
+                    </span>
+                  ))}
+                  <span className="res-badge" title={locale === 'ro' ? 'Cărți de dezvoltare în pachet' : 'Dev cards left in deck'}>
+                    🃏 {spectateView.devCardDeckCount}
+                  </span>
+                </div>
+              </div>
+            </section>
+          )}
         </main>
       )}
 

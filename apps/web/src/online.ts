@@ -114,6 +114,26 @@ export async function fetchLobby(lobbyId: string): Promise<LobbyState> {
   return data.lobby;
 }
 
+// Public (non-private) lobbies, for the lobby tab's "active games" browser — lets a visitor
+// see who's waiting for players (and join) or already mid-game (and spectate), without an
+// invite code.
+export async function listPublicLobbies(): Promise<LobbyState[]> {
+  const res = await fetch('/api/lobbies');
+  const data = await parseJsonResponse(res);
+  if (!res.ok) throw new Error(data.error ?? 'Nu s-au putut încărca partidele active.');
+  return data.lobbies ?? [];
+}
+
+// Read-only game state for a spectator: no sessionToken, so the server never attributes any
+// resources/dev cards to a real player — getPlayerView(state, '__spectator__') redacts every
+// player's hand exactly as it would for an opponent, since no player id ever matches.
+export async function fetchSpectatorGameState(gameId: string): Promise<GameSyncPayload> {
+  const res = await fetch(`/api/games/${gameId}/state?viewerId=__spectator__`);
+  const data = await parseJsonResponse(res);
+  if (!res.ok) throw new Error(data.error ?? 'Nu s-a putut încărca partida.');
+  return data;
+}
+
 export async function startOnlineLobby(lobbyId: string): Promise<GameSyncPayload & { lobby: LobbyState }> {
   const res = await fetch(`/api/lobbies/${lobbyId}/start`, { method: 'POST' });
   const data = await parseJsonResponse(res);

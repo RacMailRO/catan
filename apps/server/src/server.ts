@@ -288,6 +288,17 @@ export function createCatanServer(options?: {
       }
     }
     storage.saveGameAndReplay(runtime.state, runtime.replay, runtime.lobbyId);
+
+    // Mark the lobby finished once the game ends, so the public lobby/spectator list (which
+    // otherwise only ever sees 'waiting' -> 'in_progress') stops offering a dead game to join
+    // or watch.
+    if (runtime.state.phase === 'game_over' && runtime.lobbyId) {
+      const lobby = storage.getLobby(runtime.lobbyId);
+      if (lobby && lobby.status !== 'finished') {
+        lobby.status = 'finished';
+        storage.saveLobby(lobby);
+      }
+    }
   }
 
   function executeBotStepsUntilHumanNeeded(

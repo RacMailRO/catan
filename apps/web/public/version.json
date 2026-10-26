@@ -1,9 +1,54 @@
 {
-  "version": "v1.92",
-  "commitCount": 92,
-  "shortHash": "0c3da92",
-  "buildDate": "2026-10-26T21:11:53.683Z",
+  "version": "v1.101",
+  "commitCount": 101,
+  "shortHash": "edab830",
+  "buildDate": "2026-10-26T22:31:34.410Z",
   "releaseNotes": [
+    {
+      "hash": "edab830",
+      "date": "2026-10-27",
+      "message": "fix(start.bat): launch servers via hidden Start-Process, not broken start/cmd spawn"
+    },
+    {
+      "hash": "75c0b39",
+      "date": "2026-10-27",
+      "message": "feat(lobby): enlarge card gallery with rule text, add Longest Road/Largest Army cards and a full rules modal"
+    },
+    {
+      "hash": "cdb749a",
+      "date": "2026-10-27",
+      "message": "fix(start.bat): wait for backend+web readiness instead of a fixed 2s sleep"
+    },
+    {
+      "hash": "17d9c1b",
+      "date": "2026-10-26",
+      "message": "feat: show pieces used/total on each leaderboard card"
+    },
+    {
+      "hash": "f82d5ff",
+      "date": "2026-10-26",
+      "message": "redesign: leaderboard player cards — spacing, same-row VP, top-pinned turn badge"
+    },
+    {
+      "hash": "04ec0d1",
+      "date": "2026-10-26",
+      "message": "fix(dev-cards): remove duplicate play buttons, show own hand for Year of Plenty, readable small-card labels"
+    },
+    {
+      "hash": "5a6df62",
+      "date": "2026-10-26",
+      "message": "feat: remember player name per device, classic board hex mask + tight water ring"
+    },
+    {
+      "hash": "2b8741b",
+      "date": "2026-10-26",
+      "message": "test(core): cover Road Building dev card and AI trade negotiation"
+    },
+    {
+      "hash": "0368be5",
+      "date": "2026-10-26",
+      "message": "chore: bump build version to v1.92"
+    },
     {
       "hash": "0c3da92",
       "date": "2026-10-26",
@@ -208,51 +253,6 @@
       "hash": "662f6a1",
       "date": "2026-10-26",
       "message": "fix(server,web): enable live websocket for catan.d10.ro and same-origin, add auto-reconnect and status indicator"
-    },
-    {
-      "hash": "ec0c6bb",
-      "date": "2026-10-26",
-      "message": "fix: poll game state as a sync fallback when WebSocket is unreachable"
-    },
-    {
-      "hash": "c9f8424",
-      "date": "2026-10-26",
-      "message": "feat: keep the screen awake during an active game"
-    },
-    {
-      "hash": "5363566",
-      "date": "2026-10-26",
-      "message": "fix: don't hardcode WebSocket port 3001 behind a reverse proxy"
-    },
-    {
-      "hash": "8ee563d",
-      "date": "2026-10-26",
-      "message": "fix: move tsx to a real dependency so production installs include it"
-    },
-    {
-      "hash": "bf0cffe",
-      "date": "2026-10-26",
-      "message": "feat: collapse header nav into a hamburger dropdown, add a plain-node entry file"
-    },
-    {
-      "hash": "af81d8b",
-      "date": "2026-10-26",
-      "message": "feat: single-process deployment, online-only play, house-rule defaults"
-    },
-    {
-      "hash": "3b5b519",
-      "date": "2026-10-26",
-      "message": "feat: real cross-device multiplayer with a gated waiting room"
-    },
-    {
-      "hash": "0fd30f6",
-      "date": "2026-10-26",
-      "message": "feat: auto-incrementing version badge with release notes"
-    },
-    {
-      "hash": "9b91395",
-      "date": "2026-10-26",
-      "message": "fix: match plain sea tile color to harbor tiles, vary their rotation"
     }
   ]
 }
