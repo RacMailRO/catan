@@ -2414,16 +2414,15 @@ export const App: React.FC = () => {
                       key={p.id}
                       className={`player-grid-card ${isCurrent ? 'active-turn' : ''}`}
                     >
+                      {isCurrent && <span className="player-grid-turn-badge">⚡ La rând</span>}
                       <div className="player-grid-header">
                         <div className="player-grid-title">
                           <span
                             className="color-dot"
                             style={{ backgroundColor: p.color, width: 12, height: 12 }}
                           />
-                          <span>{p.name}</span>
-                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                            [{p.type.toUpperCase()}]
-                          </span>
+                          <span className="player-grid-name">{p.name}</span>
+                          <span className="player-grid-type">{p.type.toUpperCase()}</span>
                         </div>
                         <span className="player-grid-score">
                           {p.totalScore !== undefined ? `${p.totalScore} VP` : `${p.publicScore} VP`}
@@ -2453,23 +2452,12 @@ export const App: React.FC = () => {
                           <span>🛣️ Drum: {p.longestRoadLength}</span>
                           <span>⚔️ Cavaleri: {p.knightsPlayed}</span>
                         </div>
-                        <div className="player-grid-badges">
-                          {hasLongestRoad && (
-                            <span style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>
-                              🏅 +2 Drum
-                            </span>
-                          )}
-                          {hasLargestArmy && (
-                            <span style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>
-                              🛡️ +2 Armată
-                            </span>
-                          )}
-                          {isCurrent && (
-                            <span style={{ color: '#38bdf8', fontWeight: 700 }}>
-                              ⚡ La rând
-                            </span>
-                          )}
-                        </div>
+                        {(hasLongestRoad || hasLargestArmy) && (
+                          <div className="player-grid-badges">
+                            {hasLongestRoad && <span className="achievement-badge">🏅 +2 Drum</span>}
+                            {hasLargestArmy && <span className="achievement-badge">🛡️ +2 Armată</span>}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

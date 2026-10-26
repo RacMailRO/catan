@@ -763,6 +763,121 @@ select:focus,
   display: block;
 }
 
+/* Score & Bank leaderboard grid — one card per player. */
+.score-bank-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.6rem;
+}
+
+.player-grid-card {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color-soft);
+  border-radius: var(--radius-md);
+  padding: 0.65rem 0.7rem 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+/* Active player's card: a gold ring + warm wash, with the turn flag below pinned to its
+   top edge — replaces the old "⚡ La rând" text that used to sit as its own row among the
+   achievement badges, easy to miss next to +2 Drum / +2 Armată. */
+.player-grid-card.active-turn {
+  border-color: var(--accent-gold);
+  background: linear-gradient(180deg, rgba(184, 134, 63, 0.16), var(--bg-card) 60%);
+  box-shadow: 0 0 0 1px rgba(184, 134, 63, 0.4), 0 4px 14px rgba(184, 134, 63, 0.2);
+}
+
+.player-grid-turn-badge {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent-gold);
+  color: var(--bg-dark);
+  font-size: 0.66rem;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+
+.player-grid-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+/* Dot, name and type badge on one row, with real space between them — previously ran
+   together with no gap at all. */
+.player-grid-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.player-grid-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-grid-type {
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color-soft);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* Victory points, same row as the name (was its own line below) */
+.player-grid-score {
+  flex-shrink: 0;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--accent-gold-bright);
+}
+
+.player-grid-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.player-grid-badges {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.achievement-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent-gold-bright);
+  background: rgba(184, 134, 63, 0.16);
+  border: 1px solid rgba(184, 134, 63, 0.4);
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
 /* Mobile & Tablet Responsive Layout (< 960px) */
 @media (max-width: 960px) {
   .mobile-only {
@@ -874,9 +989,10 @@ select:focus,
     font-size: 0.74rem;
   }
 
-  /* Responsive Score & Bank Modal Grid on Mobile */
+  /* Responsive Score & Bank Modal Grid on Mobile — auto-fit rather than a hard 2 columns, so
+     a narrow phone gets 1 column (room for the full resource-card row) and a tablet gets 2+. */
   .score-bank-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
     gap: 0.45rem;
   }
 
@@ -896,7 +1012,7 @@ select:focus,
 /* Landscape mobile optimization */
 @media (max-width: 960px) and (orientation: landscape) {
   .score-bank-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: 0.35rem;
   }
 
