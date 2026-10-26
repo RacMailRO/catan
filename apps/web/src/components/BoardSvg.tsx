@@ -241,6 +241,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
 
     return () => ro.disconnect();
   }, []);
+  const hasMovedRef = useRef<boolean>(false);
   const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number }>({
     x: 0,
     y: 0,
@@ -350,10 +351,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
     };
 
     const handleTouchStart = (e: TouchEvent) => {
-      const target = e.target as HTMLElement;
-      if (target && target.dataset && target.dataset.interactive === 'true') {
-        return;
-      }
+      hasMovedRef.current = false;
       if (e.touches.length === 2) {
         e.preventDefault();
         const t1 = e.touches[0]!;
@@ -397,15 +395,18 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
           setZoom(nextZoom);
         }
       } else if (touchStateRef.current.mode === 'drag' && e.touches.length === 1) {
-        e.preventDefault();
         const t = e.touches[0]!;
         const dx = t.clientX - touchStateRef.current.startX;
         const dy = t.clientY - touchStateRef.current.startY;
-        const scale = getDragScale();
-        setPan({
-          x: touchStateRef.current.startPanX + dx * scale.x,
-          y: touchStateRef.current.startPanY + dy * scale.y
-        });
+        if (Math.hypot(dx, dy) > 5) {
+          hasMovedRef.current = true;
+          e.preventDefault();
+          const scale = getDragScale();
+          setPan({
+            x: touchStateRef.current.startPanX + dx * scale.x,
+            y: touchStateRef.current.startPanY + dy * scale.y
+          });
+        }
       }
     };
 
@@ -431,8 +432,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
   // Desktop Mouse Drag Fallback
   const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     if (e.pointerType === 'touch') return;
-    const target = e.target as HTMLElement;
-    if (target.dataset.interactive === 'true') return;
+    hasMovedRef.current = false;
     setIsDragging(true);
     dragStartRef.current = {
       x: e.clientX,
@@ -446,6 +446,9 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
     if (e.pointerType === 'touch' || !isDragging) return;
     const dx = e.clientX - dragStartRef.current.x;
     const dy = e.clientY - dragStartRef.current.y;
+    if (Math.hypot(dx, dy) > 5) {
+      hasMovedRef.current = true;
+    }
     const scale = getDragScale();
     setPan({
       x: dragStartRef.current.panX + dx * scale.x,
@@ -640,6 +643,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 key={hex.id}
                 data-hex-id={hex.id}
                 onClick={() => {
+                  if (hasMovedRef.current) return;
                   if (isHighlighted && onSelectHex) {
                     onSelectHex(hex.id);
                   }
@@ -648,7 +652,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
               >
                 {/* Fallback polygon + interactive hit target */}
                 <polygon
-                  data-interactive={isHighlighted ? 'true' : undefined}
+                  
                   points={getHexPolygonPoints(hex.x, hex.y, HEX_RADIUS - 1)}
                   fill={TERRAIN_FALLBACK_FILL[hex.terrain]}
                 />
@@ -667,7 +671,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
 
                 {/* Sandy Hexagon Border (or glowing blue if selectable for Robber) */}
                 <polygon
-                  data-interactive={isHighlighted ? 'true' : undefined}
+                  
                   points={getHexPolygonPoints(hex.x, hex.y, HEX_RADIUS - 1.5)}
                   fill={isHighlighted ? 'rgba(56, 189, 248, 0.2)' : 'none'}
                   stroke={isHighlighted ? '#38bdf8' : '#fde68a'}
@@ -815,6 +819,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
               <g
                 key={edge.id}
                 onClick={() => {
+                  if (hasMovedRef.current) return;
                   if (isHighlighted && onSelectEdge) {
                     onSelectEdge(edge.id);
                   }
@@ -893,6 +898,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 key={vertex.id}
                 transform={`translate(${vertex.x}, ${vertex.y})`}
                 onClick={() => {
+                  if (hasMovedRef.current) return;
                   if (isHighlighted && onSelectVertex) {
                     onSelectVertex(vertex.id);
                   }

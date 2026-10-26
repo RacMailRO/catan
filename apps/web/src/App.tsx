@@ -603,6 +603,7 @@ export const App: React.FC = () => {
   const [bankReceiveRes, setBankReceiveRes] = useState<ResourceType>('ore');
   const [p2pOffer, setP2pOffer] = useState<ResourceCount>(createEmptyResources());
   const [dismissedTradeOfferIds, setDismissedTradeOfferIds] = useState<Set<string>>(new Set());
+  const [minimizedDiscard, setMinimizedDiscard] = useState<boolean>(false);
 
   const dismissTradeOffer = (offerId: string, reason = 'Refuzat de utilizator') => {
     setDismissedTradeOfferIds((prev) => new Set(prev).add(offerId));
@@ -2145,7 +2146,7 @@ export const App: React.FC = () => {
                         }
                         onClick={() => executeAction(activePlayerObj.id, { type: 'buy_dev_card' })}
                       >
-                        🃏 +Dezvoltare
+                        🃏 {t.buyDevCard}
                       </button>
 
                       <button
@@ -2842,13 +2843,57 @@ export const App: React.FC = () => {
               if (onlineSession && discardPid !== viewerId) return null;
               const needed = gameState.pendingDiscards[discardPid] ?? 0;
               const currentSelected = totalResourceCount(discardSelection);
+              if (minimizedDiscard) {
+                return (
+                  <div
+                    key={discardPid}
+                    style={{
+                      position: 'fixed',
+                      top: 56,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      zIndex: 100,
+                      background: 'var(--bg-panel)',
+                      border: '1.5px solid var(--accent-red)',
+                      borderRadius: 8,
+                      padding: '0.45rem 0.85rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.65rem',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.6)'
+                    }}
+                  >
+                    <span style={{ color: 'var(--accent-red)', fontWeight: 700, fontSize: '0.85rem' }}>
+                      ⚠️ S-a dat 7! {p.name}: Decartează {needed} cărți ({currentSelected}/{needed})
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ padding: '0.2rem 0.55rem', fontSize: '0.8rem' }}
+                      onClick={() => setMinimizedDiscard(false)}
+                    >
+                      Alege Cărți
+                    </button>
+                  </div>
+                );
+              }
+
               return (
                 <div key={discardPid} className="modal-backdrop">
                   <div className="modal-dialog" style={{ borderColor: 'var(--accent-red)' }}>
-                    <div className="modal-header">
-                      <h3 style={{ color: 'var(--accent-red)' }}>
+                    <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <h3 style={{ color: 'var(--accent-red)', margin: 0, fontSize: '0.98rem' }}>
                         ⚠️ S-a dat 7! {p.name} trebuie să decarteze {needed} cărți ({currentSelected}/{needed})
                       </h3>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ padding: '0.2rem 0.55rem', fontSize: '0.78rem' }}
+                        title="Minimizează pentru a analiza harta"
+                        onClick={() => setMinimizedDiscard(true)}
+                      >
+                        👁️ Vezi Harta
+                      </button>
                     </div>
                     <div className="modal-body">
                       <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
