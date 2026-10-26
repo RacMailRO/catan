@@ -7,10 +7,12 @@ import {
   DevCardType,
   GameAction,
   GameRulesConfig,
+  GameState,
   PLAYER_COLORS,
   ParticipantConfig,
   ParticipantType,
   PlayerColor,
+  PlayerView,
   ReplayFile,
   ReplayRecorder,
   ResourceCount,
@@ -42,6 +44,18 @@ import {
 } from './components/GameAssets';
 import { ReplayAndAnalysisView } from './components/ReplayAndAnalysisView';
 import { saveReplayToHistory } from './storage';
+import {
+  LobbyState,
+  OnlineSession,
+  createOnlineLobby,
+  fetchGameState,
+  fetchLobby,
+  joinOnlineLobbyByCode,
+  playerViewToGameState,
+  startOnlineLobby,
+  submitOnlineAction,
+  wsUrlForGame
+} from './online';
 import {
   AI_DIFFICULTY_LABELS,
   AI_STYLE_LABELS,
@@ -124,6 +138,19 @@ export const App: React.FC = () => {
   const [rules, setRules] = useState<GameRulesConfig>(() => createRulesConfig());
   const [customSeed, setCustomSeed] = useState<string>('');
   const [serverStatusMsg, setServerStatusMsg] = useState<string | null>(null);
+
+  // 'local' = hot-seat, every participant is played from this one device/browser.
+  // 'online' = real cross-device multiplayer: human seats beyond the host stay "open" on the
+  // server lobby until someone joins them with the invite code; gameplay afterwards is driven
+  // entirely by the server (REST actions + WebSocket push), never the local ReplayRecorder.
+  const [gameMode, setGameMode] = useState<'local' | 'online'>('local');
+  const [onlineLobby, setOnlineLobby] = useState<LobbyState | null>(null);
+  const [onlineSession, setOnlineSession] = useState<OnlineSession | null>(null);
+  const [onlinePlayerView, setOnlinePlayerView] = useState<PlayerView | null>(null);
+  const [onlineLegalActions, setOnlineLegalActions] = useState<GameAction[]>([]);
+  const [onlineError, setOnlineError] = useState<string | null>(null);
+  const [onlineBusy, setOnlineBusy] = useState<boolean>(false);
+  const onlineWsRef = useRef<WebSocket | null>(null);
 
   // Active Game & Replay Recorder State
   const [recorder, setRecorder] = useState<ReplayRecorder | null>(null);
@@ -251,6 +278,17 @@ export const App: React.FC = () => {
     }
   };
 
+  // Fetches this player's own game state and switches into live online play, driven from here
+  // on by the server (REST submit + WebSocket push) rather than the local ReplayRecorder.
+  const enterOnlineGame = async (gameId: string, sessionToken: string, playerId: string, lobbyId: string) => {
+    const data = await fetchGameState(gameId, sessionToken);
+    setOnlineSession({ lobbyId, gameId, sessionToken, playerId });
+    setOnlinePlayerView(data.playerView);
+    setOnlineLegalActions(data.legalActions as GameAction[]);
+    setOnlineLobby(null);
+    setActiveTab('game');
+  };
+
   const handleJoinWithCode = async () => {
     if (!joinCodeInput.trim()) {
       setJoinError('Te rugăm să introduci codul de invitație.');
@@ -259,31 +297,129 @@ export const App: React.FC = () => {
     setJoinLoading(true);
     setJoinError(null);
     try {
-      const res = await fetch('/api/lobbies/join-by-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          inviteCode: joinCodeInput.trim(),
-          playerName: joinPlayerName.trim() || 'Jucător 2'
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setJoinError(data.error || 'Nu s-a putut realiza conectarea la partidă.');
-        setJoinLoading(false);
-        return;
-      }
-
+      const data = await joinOnlineLobbyByCode(joinCodeInput.trim(), joinPlayerName.trim() || 'Jucător 2');
       setCreatedInviteCode(joinCodeInput.trim());
       setServerStatusMsg(`Te-ai alăturat cu succes ca ${data.playerId}!`);
-      // Start/sync local state
-      handleStartGame(true);
-    } catch {
-      setJoinError('Nu s-a putut contacta serverul. Verifică dacă este pornit.');
+      setGameMode('online');
+      if (data.gameId) {
+        await enterOnlineGame(data.gameId, data.sessionToken, data.playerId, data.lobby.lobbyId);
+      } else {
+        // Game hasn't started yet — show the waiting room until the host starts it.
+        setOnlineSession({ lobbyId: data.lobby.lobbyId, gameId: null, sessionToken: data.sessionToken, playerId: data.playerId });
+        setOnlineLobby(data.lobby);
+        setActiveTab('lobby');
+      }
+    } catch (err) {
+      setJoinError(err instanceof Error ? err.message : 'Nu s-a putut contacta serverul. Verifică dacă este pornit.');
     } finally {
       setJoinLoading(false);
     }
   };
+
+  // Host creates a real server-backed lobby: own seat (0) stays human, any OTHER configured
+  // "human" seat becomes an open slot for someone to claim with the invite code (online play
+  // is one person per device, unlike local hot-seat where every human seat is this browser).
+  const handleCreateOnlineLobby = async () => {
+    setOnlineBusy(true);
+    setOnlineError(null);
+    try {
+      const hostName = participants[0]?.name?.trim() || 'Gazdă';
+      const seats = participants.map((p, idx) => ({
+        seatIndex: idx,
+        name: idx === 0 ? hostName : p.name,
+        type: idx === 0 ? 'human' : p.type === 'human' ? 'open' : p.type,
+        color: p.color,
+        aiDifficulty: p.aiDifficulty,
+        aiStyle: p.aiStyle
+      }));
+      const data = await createOnlineLobby({
+        hostName,
+        seats,
+        rules,
+        seed: customSeed.trim() || undefined
+      });
+      setOnlineLobby(data.lobby);
+      setOnlineSession({ lobbyId: data.lobby.lobbyId, gameId: null, sessionToken: data.sessionToken, playerId: data.playerId });
+      setCreatedInviteCode(data.inviteCode);
+    } catch (err) {
+      setOnlineError(err instanceof Error ? err.message : 'Nu s-a putut crea lobby-ul online.');
+    } finally {
+      setOnlineBusy(false);
+    }
+  };
+
+  // Host-only: starts the game once every "human" seat has been claimed (the Start button
+  // itself is disabled while any seat is still 'open' — see the waiting-room UI).
+  const handleStartOnlineLobby = async () => {
+    if (!onlineSession) return;
+    setOnlineBusy(true);
+    setOnlineError(null);
+    try {
+      const data = await startOnlineLobby(onlineSession.lobbyId);
+      await enterOnlineGame(data.gameId, onlineSession.sessionToken, onlineSession.playerId, onlineSession.lobbyId);
+    } catch (err) {
+      setOnlineError(err instanceof Error ? err.message : 'Nu s-a putut porni partida.');
+    } finally {
+      setOnlineBusy(false);
+    }
+  };
+
+  // Poll the lobby roster while in the waiting room (no server-push for lobby updates yet),
+  // and auto-enter the game the moment ANY client — including another guest, or the host from
+  // their own device — starts it.
+  useEffect(() => {
+    if (!onlineSession || onlineSession.gameId || !onlineLobby) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const lobby = await fetchLobby(onlineSession.lobbyId);
+        if (cancelled) return;
+        setOnlineLobby(lobby);
+        if (lobby.gameId) {
+          await enterOnlineGame(lobby.gameId, onlineSession.sessionToken, onlineSession.playerId, onlineSession.lobbyId);
+        }
+      } catch {
+        // Transient network hiccup — keep polling.
+      }
+    };
+    const interval = setInterval(poll, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [onlineSession?.lobbyId, onlineSession?.gameId, Boolean(onlineLobby)]);
+
+  // Live game sync over WebSocket — authenticates with this player's session, then applies
+  // every state_sync push (caused by ANY player's action, including bots the server stepped
+  // through automatically) so opponents' moves show up here without polling.
+  useEffect(() => {
+    if (!onlineSession?.gameId) return;
+    const ws = new WebSocket(wsUrlForGame());
+    onlineWsRef.current = ws;
+    const gameId = onlineSession.gameId;
+    const sessionToken = onlineSession.sessionToken;
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'authenticate', gameId, sessionToken }));
+    };
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data as string);
+        if (msg.type === 'state_sync') {
+          setOnlinePlayerView(msg.playerView);
+          setOnlineLegalActions(msg.legalActions);
+        } else if (msg.type === 'action_rejected') {
+          setOnlineError(msg.reason ?? 'Mutare respinsă de server.');
+        }
+      } catch {
+        // Ignore malformed packets.
+      }
+    };
+    return () => {
+      ws.close();
+      if (onlineWsRef.current === ws) onlineWsRef.current = null;
+    };
+  }, [onlineSession?.gameId, onlineSession?.sessionToken]);
+
   const lastSavedGameIdRef = useRef<string | null>(null);
 
   // Dev card & trade sub-modals state
@@ -302,11 +438,21 @@ export const App: React.FC = () => {
   const [benchmarkGamesCount, setBenchmarkGamesCount] = useState<number>(8);
   const [benchmarkReport, setBenchmarkReport] = useState<BenchmarkReport | null>(null);
 
-  const gameState = recorder ? recorder.getState() : null;
+  // Online games are never driven by the local ReplayRecorder — their GameState-shaped view is
+  // adapted from the server's redacted PlayerView (see playerViewToGameState in online.ts), so
+  // the rest of this component's rendering code works unchanged for both modes.
+  const gameState: GameState | null = onlineSession
+    ? onlinePlayerView
+      ? playerViewToGameState(onlinePlayerView)
+      : null
+    : recorder
+      ? recorder.getState()
+      : null;
 
-  // Automatically save finished games for later analysis
+  // Automatically save finished games for later analysis (local hot-seat games only — online
+  // games are already persisted server-side).
   useEffect(() => {
-    if (!recorder || !gameState) return;
+    if (onlineSession || !recorder || !gameState) return;
     if (gameState.phase === 'game_over' && gameState.winnerId) {
       if (lastSavedGameIdRef.current !== gameState.gameId) {
         lastSavedGameIdRef.current = gameState.gameId;
@@ -317,8 +463,11 @@ export const App: React.FC = () => {
     }
   }, [recorder, gameState?.phase, gameState?.winnerId, gameVersionTick]);
 
-  // Determine the current human viewer (or active player if spectating 4 AIs)
+  // Determine the current human viewer (or active player if spectating 4 AIs). Online: always
+  // fixed to the local player's own seat — unlike local hot-seat, where every human seat is
+  // played from this one device, an online player only ever sees/acts as themselves.
   const viewerId = useMemo(() => {
+    if (onlineSession) return onlineSession.playerId;
     if (!gameState) return 'p1';
     if (gameState.phase === 'discard_resources') {
       const pendingHuman = gameState.players.find(
@@ -330,21 +479,27 @@ export const App: React.FC = () => {
     if (activePlayer?.type === 'human') return activePlayer.id;
     const firstHuman = gameState.players.find((p) => p.type === 'human');
     return firstHuman ? firstHuman.id : gameState.activePlayerId;
-  }, [gameState, gameVersionTick]);
+  }, [gameState, gameVersionTick, onlineSession]);
 
+  // Online: use the server's own redacted PlayerView directly rather than re-deriving one from
+  // the already-adapted gameState (which would double-redact — opponents' resources were
+  // already zero-filled by the adapter, so re-running getPlayerView on it would show a fake
+  // resourceCount of 0 instead of the real count the server gave us).
   const playerView = useMemo(() => {
+    if (onlineSession) return onlinePlayerView;
     if (!gameState) return null;
     return getPlayerView(gameState, viewerId);
-  }, [gameState, viewerId, gameVersionTick]);
+  }, [gameState, viewerId, gameVersionTick, onlineSession, onlinePlayerView]);
 
   const legalActionsForActive = useMemo(() => {
+    if (onlineSession) return onlineLegalActions;
     if (!gameState) return [];
     let actorId = gameState.activePlayerId;
     if (gameState.phase === 'discard_resources') {
       actorId = Object.keys(gameState.pendingDiscards)[0] ?? actorId;
     }
     return getLegalActions(gameState, actorId);
-  }, [gameState, gameVersionTick]);
+  }, [gameState, gameVersionTick, onlineSession, onlineLegalActions]);
 
   // Execute a single action (human or AI) and update recorder
   const showActionFeedback = (text: string) => {
@@ -353,7 +508,114 @@ export const App: React.FC = () => {
     actionFeedbackTimeoutRef.current = setTimeout(() => setActionFeedback(null), 1600);
   };
 
+  // Applies a server sync payload (from either the REST action response or a WebSocket
+  // state_sync push) to local state, and — only when it's the result of OUR OWN just-submitted
+  // action (action/actingPlayerId/prevView given) — triggers the same action-feedback banner,
+  // resource-gain flash and flying-card animation the local hot-seat path has. A push caused by
+  // another player's move updates state silently; we don't know enough about their hand to
+  // animate it honestly anyway.
+  const applyOnlineSync = (
+    data: { playerView: PlayerView; legalActions: GameAction[]; recentEvents?: { action: GameAction; details: Record<string, unknown> }[] },
+    action?: GameAction,
+    actingPlayerId?: string,
+    prevView?: PlayerView | null
+  ) => {
+    const newView = data.playerView;
+    setOnlinePlayerView(newView);
+    setOnlineLegalActions(data.legalActions);
+
+    const myId = onlineSession?.playerId;
+
+    if (action && actingPlayerId) {
+      if (action.type === 'roll_dice') {
+        setDiceRollAnimKey(`roll-${Date.now()}-${Math.random()}`);
+        if (newView.lastDiceRoll) {
+          showActionFeedback(
+            `🎲 ${newView.lastDiceRoll.die1} + ${newView.lastDiceRoll.die2} = ${newView.lastDiceRoll.total}`
+          );
+        }
+      } else if (action.type === 'end_turn') {
+        showActionFeedback('⏭️ Tură încheiată');
+      } else if (action.type === 'steal_from_player') {
+        const lastEvent = data.recentEvents?.[data.recentEvents.length - 1];
+        const stolenResource = lastEvent?.details?.stolenResource as ResourceType | undefined;
+        const thief = newView.players.find((p) => p.id === actingPlayerId);
+        const victim = newView.players.find((p) => p.id === action.targetPlayerId);
+        if (stolenResource) {
+          const resText = `${RESOURCE_ICONS[stolenResource]} ${RESOURCE_LABELS[locale][stolenResource]}`;
+          if (actingPlayerId === myId) {
+            showActionFeedback(`🥷 Ai furat 1 ${resText} de la ${victim?.name ?? action.targetPlayerId}!`);
+          } else if (action.targetPlayerId === myId) {
+            showActionFeedback(`🥷 ${thief?.name ?? actingPlayerId} ți-a furat 1 ${resText}!`);
+          }
+        }
+      }
+    }
+
+    if (prevView && myId) {
+      const prevMine = prevView.players.find((p) => p.id === myId)?.resources;
+      const newMine = newView.players.find((p) => p.id === myId)?.resources;
+      if (prevMine && newMine) {
+        const gains: Partial<Record<ResourceType, number>> = {};
+        for (const r of ALL_RESOURCES) {
+          const delta = newMine[r] - prevMine[r];
+          if (delta > 0) gains[r] = delta;
+        }
+        if (Object.keys(gains).length > 0) {
+          setResourceGainFlash({ [myId]: gains });
+          if (gainFlashTimeoutRef.current) clearTimeout(gainFlashTimeoutRef.current);
+          gainFlashTimeoutRef.current = setTimeout(() => setResourceGainFlash({}), 1800);
+
+          if (newView.lastDiceRoll && newView.lastDiceRoll.total !== 7) {
+            const total = newView.lastDiceRoll.total;
+            const hexByResource: Partial<Record<ResourceType, string>> = {};
+            for (const hex of Object.values(newView.board.hexes)) {
+              if (hex.numberToken !== total || hex.id === newView.board.robberHexId) continue;
+              const res = TERRAIN_TO_RESOURCE[hex.terrain];
+              if (res && !hexByResource[res]) hexByResource[res] = hex.id;
+            }
+            const requests: { playerId: string; resource: ResourceType; hexId: string }[] = [];
+            for (const r of ALL_RESOURCES) {
+              const hexId = hexByResource[r];
+              if (hexId && (gains[r] ?? 0) > 0) {
+                requests.push({ playerId: myId, resource: r, hexId });
+              }
+            }
+            if (requests.length > 0) {
+              requestAnimationFrame(() => launchFlyingCards(requests));
+            }
+          }
+        }
+      }
+    }
+
+    setBuildMode('none');
+    setDiscardSelection(createEmptyResources());
+  };
+
+  const executeOnlineAction = async (playerId: string, action: GameAction) => {
+    if (!onlineSession?.gameId) return;
+    setActionError(null);
+    const prevView = onlinePlayerView;
+    try {
+      const data = await submitOnlineAction({
+        gameId: onlineSession.gameId,
+        sessionToken: onlineSession.sessionToken,
+        playerId,
+        expectedSequence: prevView?.sequence,
+        action
+      });
+      applyOnlineSync(data, action, playerId, prevView);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Mutare invalidă.');
+    }
+  };
+
   const executeAction = (playerId: string, action: GameAction) => {
+    if (onlineSession) {
+      void executeOnlineAction(playerId, action);
+      return;
+    }
     if (!recorder) return;
     try {
       setActionError(null);
@@ -523,7 +785,9 @@ export const App: React.FC = () => {
   }, [autoPlayAi, recorder, gameVersionTick, activeTab]);
 
   // Start Game from Lobby
-  const handleStartGame = async (syncWithServer = false) => {
+  // Local hot-seat only — see handleCreateOnlineLobby/handleStartOnlineLobby for real
+  // cross-device multiplayer, which never touches the local ReplayRecorder.
+  const handleStartGame = () => {
     const seed = customSeed.trim() || `catan-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
     const initial = createGame({
       gameId: `game_${Date.now()}`,
@@ -539,43 +803,6 @@ export const App: React.FC = () => {
     setDiceRollAnimKey(`start-${Date.now()}`);
     setGameVersionTick((v) => v + 1);
     setActiveTab('game');
-
-    if (syncWithServer) {
-      try {
-        const res = await fetch('/api/lobbies', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: 'Partidă LAN/Online',
-            hostName: participants[0]?.name ?? 'Gazdă',
-            mode: 'lan',
-            isPrivate: true,
-            seed,
-            rules,
-            seats: participants.map((p, idx) => ({
-              seatIndex: idx,
-              name: p.name,
-              type: p.type,
-              color: p.color,
-              aiDifficulty: p.aiDifficulty,
-              aiStyle: p.aiStyle
-            }))
-          })
-        });
-        if (res.ok) {
-          const data = (await res.json()) as {
-            lobby: { lobbyId: string };
-            inviteCode: string;
-          };
-          setServerStatusMsg(
-            `Lobby sincronizat pe server (${data.lobby.lobbyId}) · Cod invitație: ${data.inviteCode}`
-          );
-          await fetch(`/api/lobbies/${data.lobby.lobbyId}/start`, { method: 'POST' });
-        }
-      } catch {
-        setServerStatusMsg('Mod local în browser activ (serverul LAN nu este pornit pe :3001).');
-      }
-    }
   };
 
   // Run an instant full 4-AI simulated game, save it to history, and open it in Replay Viewer
@@ -704,7 +931,11 @@ export const App: React.FC = () => {
 
   const activePlayerObj = gameState ? getPlayerById(gameState, gameState.activePlayerId) : undefined;
   const viewerPlayerObj = gameState ? getPlayerById(gameState, viewerId) : undefined;
-  const isHumanTurn = activePlayerObj?.type === 'human';
+  // Online: "my turn" means literally mine — other human seats are on other devices, so seeing
+  // that *a* human is active (the local hot-seat definition) isn't enough to let me act.
+  const isHumanTurn = onlineSession
+    ? gameState?.activePlayerId === viewerId
+    : activePlayerObj?.type === 'human';
 
   // Reset the countdown only when a genuinely new turn starts for a human player (not on every
   // phase change within the same turn — rolling the dice shouldn't hand them another full minute).
@@ -817,8 +1048,8 @@ export const App: React.FC = () => {
             type="button"
             className={`nav-btn ${activeTab === 'game' ? 'active' : ''}`}
             onClick={() => {
-              if (!recorder) {
-                handleStartGame(false);
+              if (!recorder && !onlineSession) {
+                handleStartGame();
               } else {
                 setActiveTab('game');
               }
@@ -915,6 +1146,27 @@ export const App: React.FC = () => {
                   ⚠️ {joinError}
                 </div>
               )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem' }}>
+              <button
+                type="button"
+                className={`btn ${gameMode === 'local' ? 'btn-primary' : ''}`}
+                style={{ flex: 1 }}
+                onClick={() => setGameMode('local')}
+                title="Toți jucătorii umani joacă pe acest dispozitiv, pasând rândul"
+              >
+                💻 Local (hot-seat)
+              </button>
+              <button
+                type="button"
+                className={`btn ${gameMode === 'online' ? 'btn-primary' : ''}`}
+                style={{ flex: 1 }}
+                onClick={() => setGameMode('online')}
+                title="Fiecare jucător uman se alătură de pe propriul dispozitiv cu un cod"
+              >
+                🌐 Online (invitație)
+              </button>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexShrink: 0 }}>
@@ -1089,38 +1341,43 @@ export const App: React.FC = () => {
 
             {/* Unified Start Buttons & Share Banner */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.65rem', flexShrink: 0 }}>
-              <button
-                type="button"
-                className="btn btn-primary btn-start-match"
-                onClick={() => handleStartGame(true)}
-              >
-                🚀 {t.startGame}
-              </button>
+              {gameMode === 'local' ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-start-match"
+                    onClick={() => handleStartGame()}
+                  >
+                    🚀 {t.startGame}
+                  </button>
 
-              <button
-                type="button"
-                className="btn btn-quick-sim"
-                onClick={handleQuick4AiSimulation}
-              >
-                ⚡ {t.quickAiMatch} & Analiză
-              </button>
-
-              {createdInviteCode && (
-                <div className="invite-banner">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
-                    <span>
-                      Cod Partidă: <strong style={{ color: 'var(--accent-gold)', fontSize: '0.95rem' }}>{createdInviteCode}</strong>
-                    </span>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      style={{ padding: '0.3rem 0.6rem', fontSize: '0.78rem' }}
-                      onClick={() => handleShareInvite(createdInviteCode)}
-                    >
-                      📲 Trimite Link / Invită Prieteni
-                    </button>
-                  </div>
-                </div>
+                  <button
+                    type="button"
+                    className="btn btn-quick-sim"
+                    onClick={handleQuick4AiSimulation}
+                  >
+                    ⚡ {t.quickAiMatch} & Analiză
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-start-match"
+                    disabled={onlineBusy}
+                    onClick={handleCreateOnlineLobby}
+                  >
+                    🌐 {onlineBusy ? 'Se creează...' : 'Creează Partidă Online'}
+                  </button>
+                  <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: 0 }}>
+                    Locul 1 ești tu. Orice alt loc marcat „Om” devine un loc liber — ceilalți
+                    jucători se alătură de pe propriul dispozitiv cu codul de invitație, înainte
+                    să poată începe partida.
+                  </p>
+                  {onlineError && (
+                    <div style={{ color: '#f87171', fontSize: '0.78rem' }}>⚠️ {onlineError}</div>
+                  )}
+                </>
               )}
 
               {serverStatusMsg && (
@@ -2224,6 +2481,9 @@ export const App: React.FC = () => {
             Object.keys(gameState.pendingDiscards).map((discardPid) => {
               const p = getPlayerById(gameState, discardPid);
               if (!p || p.type !== 'human') return null;
+              // Online: only ever show MY OWN discard prompt — other humans' hands aren't
+              // known here, and they discard from their own device anyway.
+              if (onlineSession && discardPid !== viewerId) return null;
               const needed = gameState.pendingDiscards[discardPid] ?? 0;
               const currentSelected = totalResourceCount(discardSelection);
               return (
@@ -2462,6 +2722,111 @@ export const App: React.FC = () => {
             </div>
           </section>
         </main>
+      )}
+
+      {/* Online Waiting Room — shown from the moment a lobby is created/joined until the game
+          actually starts. The roster here is polled live (no lobby push yet), and the Start
+          button stays disabled while any seat is still "open" — the game cannot begin until
+          every intended human has actually joined from their own device. */}
+      {onlineLobby && onlineSession && (
+        <div className="modal-backdrop">
+          <div className="modal-dialog" style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h3>🌐 Sală de Așteptare</h3>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setOnlineLobby(null);
+                  setOnlineSession(null);
+                  setOnlineError(null);
+                  setGameMode('local');
+                }}
+              >
+                ✕ Părăsește
+              </button>
+            </div>
+            <div className="modal-body">
+              {onlineLobby.inviteCode && (
+                <div className="invite-banner" style={{ marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+                    <span>
+                      Cod Partidă:{' '}
+                      <strong style={{ color: 'var(--accent-gold)', fontSize: '0.95rem' }}>
+                        {onlineLobby.inviteCode}
+                      </strong>
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ padding: '0.3rem 0.6rem', fontSize: '0.78rem' }}
+                      onClick={() => handleShareInvite(onlineLobby.inviteCode!)}
+                    >
+                      📲 Trimite Link / Invită Prieteni
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.85rem' }}>
+                {onlineLobby.seats.map((seat) => (
+                  <div
+                    key={seat.seatIndex}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '0.4rem 0.6rem',
+                      borderRadius: 6,
+                      border: '1px solid var(--border-color)',
+                      background: seat.type === 'open' ? 'rgba(248, 113, 113, 0.08)' : 'transparent'
+                    }}
+                  >
+                    <span className="color-dot" style={{ backgroundColor: seat.color, width: 11, height: 11 }} />
+                    <strong style={{ flex: 1 }}>{seat.name}</strong>
+                    {seat.type === 'open' ? (
+                      <span style={{ color: 'var(--accent-red, #f87171)', fontSize: '0.78rem' }}>
+                        ⏳ Așteaptă jucător...
+                      </span>
+                    ) : seat.type === 'human' ? (
+                      <span style={{ color: 'var(--accent-green)', fontSize: '0.78rem' }}>✅ Conectat</span>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                        🤖 {seat.type.toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {onlineError && (
+                <div style={{ color: '#f87171', fontSize: '0.78rem', marginBottom: '0.5rem' }}>
+                  ⚠️ {onlineError}
+                </div>
+              )}
+
+              {onlineSession.playerId === onlineLobby.hostPlayerId ? (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ width: '100%' }}
+                  disabled={onlineBusy || onlineLobby.seats.some((s) => s.type === 'open')}
+                  onClick={handleStartOnlineLobby}
+                >
+                  {onlineBusy
+                    ? 'Se pornește...'
+                    : onlineLobby.seats.some((s) => s.type === 'open')
+                      ? '⏳ Se așteaptă jucătorii...'
+                      : '🚀 Pornește Partida'}
+                </button>
+              ) : (
+                <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                  ⏳ Așteptăm ca gazda să înceapă partida...
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Release Notes — commit log read live from the server, opened by clicking the version
