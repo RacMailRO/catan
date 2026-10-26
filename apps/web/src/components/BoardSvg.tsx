@@ -121,6 +121,30 @@ function getHexPolygonPoints(cx: number, cy: number, radius = HEX_RADIUS): strin
   return pts.join(' ');
 }
 
+// Andrew's monotone-chain convex hull — used to derive the board's outer hexagon mask from
+// every outer-sea-hex corner, rather than hand-deriving the exact geometry for this hex
+// grid's orientation (foolproof regardless of pointy-top vs flat-top conventions).
+function convexHull(points: { x: number; y: number }[]): { x: number; y: number }[] {
+  const pts = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
+  if (pts.length < 3) return pts;
+  const cross = (o: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) =>
+    (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower: { x: number; y: number }[] = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2]!, lower[lower.length - 1]!, p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper: { x: number; y: number }[] = [];
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i]!;
+    while (upper.length >= 2 && cross(upper[upper.length - 2]!, upper[upper.length - 1]!, p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  lower.pop();
+  upper.pop();
+  return [...lower, ...upper];
+}
+
 interface OuterSeaHex {
   id: string;
   x: number;
@@ -129,10 +153,10 @@ interface OuterSeaHex {
   r: number;
 }
 
-// Rings 4-6 beyond the island's immediate ring-3 sea border exist so a portrait phone has
-// real sea tiles to show instead of empty background when the viewBox below stretches
-// taller to fit the screen — not just decoration.
-const OUTER_SEA_MAX_RING = 6;
+// Classic board: just one ring of open sea/harbor hexes around the island, matching the
+// physical game's own footprint (and the reference box art) — not padded out with extra
+// rings of plain water.
+const OUTER_SEA_MAX_RING = 3;
 
 function generateOuterSeaRing(): OuterSeaHex[] {
   const ring: OuterSeaHex[] = [];
@@ -190,57 +214,12 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState<boolean>(false);
 
-  // The island + its immediate ring-3 sea border needs at least this much space (half-extents)
-  // to render fully — this is the board's natural, landscape-ish footprint (aspect ~1.1).
-  // On a narrower/taller container (a phone in portrait), fitting that fixed footprint by
-  // width used to leave most of the height as empty background. Rings 4-6 (see
-  // generateOuterSeaRing) exist so there's real sea to show when we stretch the viewBox
-  // taller to use more of a portrait screen — capped at MIN_ASPECT so we never stretch past
-  // what that extra sea ring can actually cover with tiles.
-  const BOARD_HALF_W = 640;
-  const BOARD_HALF_H = 580;
-  const BOARD_MAX_HALF_W = 1120;
-  const BOARD_MAX_HALF_H = 995;
-  const BOARD_MIN_ASPECT = 0.65;
-  const [viewBoxHalfExtent, setViewBoxHalfExtent] = useState({ w: BOARD_HALF_W, h: BOARD_HALF_H });
-
-  useEffect(() => {
-    const svgEl = svgRef.current;
-    if (!svgEl) return;
-    const container = svgEl.parentElement;
-    if (!container) return;
-
-    const applySize = (width: number, height: number) => {
-      if (width <= 0 || height <= 0) return;
-      const containerAspect = width / height;
-      const contentAspect = BOARD_HALF_W / BOARD_HALF_H;
-      if (containerAspect >= contentAspect) {
-        // Wide/landscape container: stretch width to match, height stays at its natural size.
-        setViewBoxHalfExtent({
-          w: Math.min(BOARD_MAX_HALF_W, BOARD_HALF_H * containerAspect),
-          h: BOARD_HALF_H
-        });
-      } else {
-        // Portrait container: stretch height, but never past MIN_ASPECT (beyond that, the
-        // extra sea ring runs out and we'd just be showing empty background instead of tiles).
-        const targetAspect = Math.max(containerAspect, BOARD_MIN_ASPECT);
-        setViewBoxHalfExtent({
-          w: BOARD_HALF_W,
-          h: Math.min(BOARD_MAX_HALF_H, BOARD_HALF_W / targetAspect)
-        });
-      }
-    };
-
-    const ro = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      applySize(entry.contentRect.width, entry.contentRect.height);
-    });
-    ro.observe(container);
-    applySize(container.clientWidth, container.clientHeight);
-
-    return () => ro.disconnect();
-  }, []);
+  // Fixed viewBox sized to the island + its one ring of sea/harbor hexes (the board's natural
+  // footprint). The outer hex clip-path (see outerHexMaskPoints) keeps this a clean hexagon
+  // silhouette; the SVG's own default preserveAspectRatio ("xMidYMid meet") scales it to fit
+  // any container — letterboxed on the non-matching axis — so the hexagon is always as large
+  // as the container allows without distortion, with no resize-tracking JS needed.
+  const viewBoxHalfExtent = { w: 640, h: 580 };
   const hasMovedRef = useRef<boolean>(false);
   const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number }>({
     x: 0,
@@ -267,23 +246,55 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
     startZoom: 1
   });
 
-  // Touch/mouse drag deltas arrive in CSS pixels, but `pan` is in viewBox units — and on a
-  // phone the viewBox (1280-2240 units) is rendered into a much smaller CSS width (e.g.
-  // ~380px), so adding raw pixel deltas to pan moved the board at a fraction of finger speed.
-  // Convert each delta through the current viewBox-units-per-CSS-pixel ratio so a drag tracks
-  // the finger 1:1 regardless of zoom or screen size.
+  // Touch/mouse drag deltas arrive in CSS pixels, but `pan` is in viewBox units. The fixed
+  // viewBox is scaled to fit the SVG element via the default "xMidYMid meet" behavior, which
+  // scales both axes by the SAME factor (whichever axis is tighter) and letterboxes the other
+  // — so both x and y here must use that one uniform factor, not independent per-axis ratios
+  // (which would only be correct if the viewBox were stretched to exactly fill the element,
+  // which it no longer is).
   const getDragScale = () => {
     const svgEl = svgRef.current;
     if (!svgEl) return { x: 1, y: 1 };
     const rect = svgEl.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return { x: 1, y: 1 };
-    return {
-      x: (viewBoxHalfExtent.w * 2) / rect.width,
-      y: (viewBoxHalfExtent.h * 2) / rect.height
-    };
+    const viewBoxW = viewBoxHalfExtent.w * 2;
+    const viewBoxH = viewBoxHalfExtent.h * 2;
+    const renderScale = Math.min(rect.width / viewBoxW, rect.height / viewBoxH);
+    const unitsPerPx = renderScale > 0 ? 1 / renderScale : 1;
+    return { x: unitsPerPx, y: unitsPerPx };
   };
 
   const outerSeaRing = useMemo(() => generateOuterSeaRing(), []);
+
+  // Outer hexagon mask: the convex hull of every outer-sea-hex corner, pushed out a couple px
+  // so the clip edge sits just past the tile art (no hairline gap at the border). Everything
+  // outside this hexagon — any surplus from the viewBox below not matching the content's own
+  // aspect ratio — is clipped to transparent instead of showing a hard rectangular cutoff.
+  const outerHexMaskPoints = useMemo(() => {
+    const corners: { x: number; y: number }[] = [];
+    for (const sea of outerSeaRing) {
+      for (let k = 0; k < 6; k++) {
+        const angleRad = ((60 * k - 90) * Math.PI) / 180;
+        corners.push({
+          x: sea.x + HEX_RADIUS * Math.cos(angleRad),
+          y: sea.y + HEX_RADIUS * Math.sin(angleRad)
+        });
+      }
+    }
+    const hull = convexHull(corners);
+    if (hull.length === 0) return '';
+    const cx = hull.reduce((s, p) => s + p.x, 0) / hull.length;
+    const cy = hull.reduce((s, p) => s + p.y, 0) / hull.length;
+    const pad = 3;
+    return hull
+      .map((p) => {
+        const dx = p.x - cx;
+        const dy = p.y - cy;
+        const len = Math.hypot(dx, dy) || 1;
+        return `${(p.x + (dx / len) * pad).toFixed(2)},${(p.y + (dy / len) * pad).toFixed(2)}`;
+      })
+      .join(' ');
+  }, [outerSeaRing]);
 
   // Each harbor sits on whichever outer sea hex is nearest to its dock position.
   const harborBySeaHexId = useMemo(() => {
@@ -558,9 +569,18 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             <stop offset="65%" stopColor="#f5e7c4" />
             <stop offset="100%" stopColor="#dcc294" />
           </radialGradient>
+
+          {/* Outer hexagon silhouette — see outerHexMaskPoints. Applied to the content group
+              below (same space as pan/zoom) so it tracks the board, not the viewport. */}
+          <clipPath id="board-outer-hex-mask">
+            <polygon points={outerHexMaskPoints} />
+          </clipPath>
         </defs>
 
-        <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
+        <g
+          transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}
+          clipPath="url(#board-outer-hex-mask)"
+        >
           {/* 0A. Render 18 Outer Sea Hexes using the original port-tile artwork: the 9 hexes
               with a harbor get that harbor's 2:1/3:1 tile (cropped from /porturi-2.jpg or
               /porturi-3.jpg), rotated to face the island; the rest get the plain open-sea

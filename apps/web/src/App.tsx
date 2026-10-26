@@ -92,6 +92,27 @@ const NAV_TAB_LABEL = (t: {
   benchmark: t.navBenchmark
 });
 
+// Remembers the player's own display name per device/browser, so it doesn't need retyping
+// every time — used both for the host's own seat and the "join by code" guest name field.
+const PLAYER_NAME_STORAGE_KEY = 'catan_player_name';
+
+function loadSavedPlayerName(): string | null {
+  try {
+    const saved = localStorage.getItem(PLAYER_NAME_STORAGE_KEY);
+    return saved && saved.trim() ? saved.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function savePlayerName(name: string): void {
+  try {
+    if (name.trim()) localStorage.setItem(PLAYER_NAME_STORAGE_KEY, name.trim());
+  } catch {
+    // Private browsing / storage disabled — just skip persisting, nothing else to do.
+  }
+}
+
 type BuildSelectionMode = 'none' | 'road' | 'settlement' | 'city' | 'knight';
 type GameModalType =
   | 'none'
@@ -164,7 +185,7 @@ export const App: React.FC = () => {
 
   // Lobby Configuration State
   const [participants, setParticipants] = useState<ParticipantConfig[]>([
-    { id: 'p1', name: 'Jucător 1 (Om)', type: 'human', color: 'red' },
+    { id: 'p1', name: loadSavedPlayerName() ?? 'Jucător 1 (Om)', type: 'human', color: 'red' },
     {
       id: 'p2',
       name: 'Adversar Tactic',
@@ -329,7 +350,7 @@ export const App: React.FC = () => {
 
   const [createdInviteCode, setCreatedInviteCode] = useState<string | null>(null);
   const [joinCodeInput, setJoinCodeInput] = useState<string>('');
-  const [joinPlayerName, setJoinPlayerName] = useState<string>('Jucător 2');
+  const [joinPlayerName, setJoinPlayerName] = useState<string>(() => loadSavedPlayerName() ?? 'Jucător 2');
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joinLoading, setJoinLoading] = useState<boolean>(false);
   const [waitingRoomNewName, setWaitingRoomNewName] = useState<string>('');
@@ -1577,7 +1598,10 @@ export const App: React.FC = () => {
                     type="text"
                     placeholder="Introdu numele tău (ex: Andrei)"
                     value={joinPlayerName}
-                    onChange={(e) => setJoinPlayerName(e.target.value)}
+                    onChange={(e) => {
+                      setJoinPlayerName(e.target.value);
+                      savePlayerName(e.target.value);
+                    }}
                     style={{
                       width: '100%',
                       boxSizing: 'border-box',
@@ -1675,6 +1699,7 @@ export const App: React.FC = () => {
                         const next = [...participants];
                         next[idx] = { ...p, name: e.target.value };
                         setParticipants(next);
+                        if (idx === 0) savePlayerName(e.target.value);
                       }}
                       style={{ flex: 1, minWidth: 0, width: '100%' }}
                     />
