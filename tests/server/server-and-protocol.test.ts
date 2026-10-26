@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
-import { CatanServerInstance, createCatanServer } from '../../apps/server/src/server';
+import { CatanServerInstance, createCatanServer, resolveAllowedOrigin } from '../../apps/server/src/server';
 import { ServerToClientWsMessage } from '@catan/protocol';
 
 describe('Authoritative LAN/Online Server, Protocol Validation & WebSocket Sync', () => {
@@ -234,5 +234,48 @@ describe('Authoritative LAN/Online Server, Protocol Validation & WebSocket Sync'
 
     expect(wsMessages[0]!.type).toBe('state_sync');
     ws.close();
+  });
+  it('allows WebSocket connections with catan.d10.ro, same-origin, LAN, and rejects untrusted origins', async () => {
+    // 1. Verify unit logic of resolveAllowedOrigin
+    expect(resolveAllowedOrigin('https://catan.d10.ro', 'catan.d10.ro')).toBe('https://catan.d10.ro');
+    expect(resolveAllowedOrigin('https://catan.d10.ro', 'any-host.com')).toBe('https://catan.d10.ro');
+    expect(resolveAllowedOrigin('https://test.d10.ro', 'test.d10.ro')).toBe('https://test.d10.ro');
+    expect(resolveAllowedOrigin('http://localhost:5173', 'localhost:3001')).toBe('http://localhost:5173');
+    expect(resolveAllowedOrigin('http://192.168.1.150:3001', '192.168.1.150:3001')).toBe('http://192.168.1.150:3001');
+    expect(resolveAllowedOrigin('https://my-custom-domain.com', 'my-custom-domain.com')).toBe('https://my-custom-domain.com');
+    expect(resolveAllowedOrigin('https://evil-untrusted-site.com', 'catan.d10.ro')).toBeUndefined();
+
+    // 2. Real WebSocket connection to our test server with Origin: https://catan.d10.ro -> Must connect!
+    const validWs = new WebSocket(wsUrl, {
+      headers: { Origin: 'https://catan.d10.ro' }
+    });
+    await new Promise<void>((resolve, reject) => {
+      validWs.on('open', () => {
+        validWs.close();
+        resolve();
+      });
+      validWs.on('error', reject);
+      validWs.on('unexpected-response', (_, res) => {
+        reject(new Error(`Unexpected response ${res.statusCode}`));
+      });
+    });
+
+    // 3. Real WebSocket connection with an untrusted origin -> Must be rejected with 403 Forbidden!
+    const untrustedWs = new WebSocket(wsUrl, {
+      headers: { Origin: 'https://evil-phishing-domain.com' }
+    });
+    const rejected = await new Promise<boolean>((resolve) => {
+      untrustedWs.on('unexpected-response', (_, res) => {
+        resolve(res.statusCode === 403);
+      });
+      untrustedWs.on('open', () => {
+        untrustedWs.close();
+        resolve(false);
+      });
+      untrustedWs.on('error', () => {
+        resolve(true);
+      });
+    });
+    expect(rejected).toBe(true);
   });
 });

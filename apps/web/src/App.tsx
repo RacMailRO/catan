@@ -182,6 +182,7 @@ export const App: React.FC = () => {
   const [onlineError, setOnlineError] = useState<string | null>(null);
   const [onlineBusy, setOnlineBusy] = useState<boolean>(false);
   const onlineWsRef = useRef<WebSocket | null>(null);
+  const [wsConnected, setWsConnected] = useState<boolean>(false);
 
   // Active Game & Replay Recorder State
   const [recorder, setRecorder] = useState<ReplayRecorder | null>(null);
@@ -466,30 +467,75 @@ export const App: React.FC = () => {
   // every state_sync push (caused by ANY player's action, including bots the server stepped
   // through automatically) so opponents' moves show up here without polling.
   useEffect(() => {
-    if (!onlineSession?.gameId) return;
-    const ws = new WebSocket(wsUrlForGame());
-    onlineWsRef.current = ws;
+    if (!onlineSession?.gameId) {
+      setWsConnected(false);
+      return;
+    }
     const gameId = onlineSession.gameId;
     const sessionToken = onlineSession.sessionToken;
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'authenticate', gameId, sessionToken }));
-    };
-    ws.onmessage = (ev) => {
+    let isDisposed = false;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    let currentWs: WebSocket | null = null;
+
+    const connect = () => {
+      if (isDisposed) return;
       try {
-        const msg = JSON.parse(ev.data as string);
-        if (msg.type === 'state_sync') {
-          setOnlinePlayerView(msg.playerView);
-          setOnlineLegalActions(msg.legalActions);
-        } else if (msg.type === 'action_rejected') {
-          setOnlineError(msg.reason ?? 'Mutare respinsă de server.');
-        }
+        const ws = new WebSocket(wsUrlForGame());
+        currentWs = ws;
+        onlineWsRef.current = ws;
+
+        ws.onopen = () => {
+          if (isDisposed) {
+            ws.close();
+            return;
+          }
+          setWsConnected(true);
+          ws.send(JSON.stringify({ type: 'authenticate', gameId, sessionToken }));
+        };
+
+        ws.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data as string);
+            if (msg.type === 'state_sync') {
+              setOnlinePlayerView(msg.playerView);
+              setOnlineLegalActions(msg.legalActions);
+            } else if (msg.type === 'action_rejected') {
+              setOnlineError(msg.reason ?? 'Mutare respinsă de server.');
+            }
+          } catch {
+            // Ignore malformed packets.
+          }
+        };
+
+        ws.onclose = () => {
+          setWsConnected(false);
+          if (onlineWsRef.current === ws) {
+            onlineWsRef.current = null;
+          }
+          if (!isDisposed) {
+            reconnectTimeout = setTimeout(connect, 2000);
+          }
+        };
+
+        ws.onerror = () => {
+          setWsConnected(false);
+        };
       } catch {
-        // Ignore malformed packets.
+        setWsConnected(false);
+        if (!isDisposed) {
+          reconnectTimeout = setTimeout(connect, 3000);
+        }
       }
     };
+
+    connect();
+
     return () => {
-      ws.close();
-      if (onlineWsRef.current === ws) onlineWsRef.current = null;
+      isDisposed = true;
+      setWsConnected(false);
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (currentWs) currentWs.close();
+      if (onlineWsRef.current === currentWs) onlineWsRef.current = null;
     };
   }, [onlineSession?.gameId, onlineSession?.sessionToken]);
 
@@ -1107,6 +1153,23 @@ export const App: React.FC = () => {
             <span className="phase-label">
               {PHASE_LABELS[locale][gameState.phase]}
             </span>
+            {Boolean(onlineSession?.gameId) && (
+              <span
+                style={{
+                  fontSize: '0.68rem',
+                  padding: '1px 5px',
+                  borderRadius: 4,
+                  fontWeight: 600,
+                  marginLeft: 4,
+                  background: wsConnected ? 'rgba(34, 197, 94, 0.18)' : 'rgba(234, 179, 8, 0.18)',
+                  color: wsConnected ? '#4ade80' : '#fde047',
+                  border: `1px solid ${wsConnected ? '#22c55e' : '#eab308'}`
+                }}
+                title={wsConnected ? 'Conectat în timp real prin WebSocket' : 'Sincronizare de rezervă prin REST Polling'}
+              >
+                {wsConnected ? '● Live' : '○ Polling'}
+              </span>
+            )}
             {buildMode !== 'none' && (
               <span className="build-indicator">
                 👉 {buildMode.toUpperCase()}
