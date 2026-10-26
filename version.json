@@ -1,9 +1,24 @@
 {
-  "version": "v1.71",
-  "commitCount": 71,
-  "shortHash": "8512c6b",
-  "buildDate": "2026-10-26T19:41:56.709Z",
+  "version": "v1.74",
+  "commitCount": 74,
+  "shortHash": "e99d22c",
+  "buildDate": "2026-10-26T20:12:22.178Z",
   "releaseNotes": [
+    {
+      "hash": "e99d22c",
+      "date": "2026-10-26",
+      "message": "merge: fix/map-panning-on-7-and-short-building-labels into main"
+    },
+    {
+      "hash": "930f2a3",
+      "date": "2026-10-26",
+      "message": "fix(ui): enable smooth map panning during robber placement on 7, add discard minimize button, and shorten construction button labels for mobile"
+    },
+    {
+      "hash": "953a5b4",
+      "date": "2026-10-26",
+      "message": "chore: bump version to v1.71"
+    },
     {
       "hash": "8512c6b",
       "date": "2026-10-26",
@@ -238,21 +253,6 @@
       "hash": "9ceddf7",
       "date": "2026-10-25",
       "message": "fix(web): resolve vite hmr websocket network connection and eliminate horizontal overflow cutting off mobile lobby"
-    },
-    {
-      "hash": "e60c246",
-      "date": "2026-10-25",
-      "message": "merge: feat/lobby-mobile-optimization-invite-code-and-sw-fix into main"
-    },
-    {
-      "hash": "f926b0e",
-      "date": "2026-10-25",
-      "message": "feat(lobby): unify match start, add invite code & share link, optimize mobile lobby with vertical scroll, fix service worker extension scheme error"
-    },
-    {
-      "hash": "8741e21",
-      "date": "2026-10-25",
-      "message": "merge: feat/mobile-perfect-layout-header-status-grid-cards into main"
     }
   ]
 }
