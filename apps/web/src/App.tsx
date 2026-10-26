@@ -3084,6 +3084,109 @@ export const App: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Resursele din mână ale jucătorului receptor */}
+                    <div
+                      style={{
+                        background: "rgba(255, 255, 255, 0.04)",
+                        border: "1px solid rgba(255, 255, 255, 0.12)",
+                        borderRadius: 8,
+                        padding: "0.6rem 0.65rem",
+                        marginBottom: "0.85rem"
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: "0.45rem"
+                        }}
+                      >
+                        <h4 style={{ fontSize: "0.82rem", color: "var(--text-muted)", margin: 0 }}>
+                          {locale === "ro" ? "🎴 Cărțile tale în mână:" : "🎴 Your cards in hand:"}
+                        </h4>
+                        <span style={{ fontSize: "0.78rem", opacity: 0.75 }}>
+                          {Object.values(myRes).reduce((a, b) => a + b, 0)}{" "}
+                          {locale === "ro" ? "cărți în total" : "cards total"}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 6,
+                          justifyContent: "center",
+                          flexWrap: "wrap"
+                        }}
+                      >
+                        {ALL_RESOURCES.map((r) => {
+                          const count = myRes[r] ?? 0;
+                          const req = incomingOffer.requesting[r] ?? 0;
+                          const off = incomingOffer.offering[r] ?? 0;
+                          const isRequested = req > 0;
+                          const isOffered = off > 0;
+                          const hasEnough = count >= req;
+
+                          return (
+                            <div
+                              key={r}
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                position: "relative"
+                              }}
+                            >
+                              <ResourceCardSprite
+                                resource={r}
+                                count={count}
+                                locale={locale}
+                                size="sm"
+                                selected={isRequested}
+                              />
+                              {isRequested && (
+                                <span
+                                  style={{
+                                    fontSize: "0.68rem",
+                                    fontWeight: 700,
+                                    marginTop: 3,
+                                    padding: "1px 4px",
+                                    borderRadius: 4,
+                                    background: hasEnough
+                                      ? "rgba(34, 197, 94, 0.22)"
+                                      : "rgba(239, 68, 68, 0.25)",
+                                    color: hasEnough ? "#4ade80" : "#f87171",
+                                    border: `1px solid ${hasEnough ? "rgba(34, 197, 94, 0.45)" : "rgba(239, 68, 68, 0.5)"}`,
+                                    whiteSpace: "nowrap"
+                                  }}
+                                  title={hasEnough ? `Deții ${count} din ${req} cerute` : `Îți lipsesc ${req - count} resurse`}
+                                >
+                                  {hasEnough ? (req === 1 ? "cere 1" : `cere ${req}`) : `lipsesc ${req - count}`}
+                                </span>
+                              )}
+                              {isOffered && !isRequested && (
+                                <span
+                                  style={{
+                                    fontSize: "0.68rem",
+                                    fontWeight: 700,
+                                    marginTop: 3,
+                                    padding: "1px 4px",
+                                    borderRadius: 4,
+                                    background: "rgba(59, 130, 246, 0.2)",
+                                    color: "#60a5fa",
+                                    border: "1px solid rgba(59, 130, 246, 0.4)",
+                                    whiteSpace: "nowrap"
+                                  }}
+                                  title={`Vei primi +${off}`}
+                                >
+                                  +{off}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
                     {!canAfford && (
                       <div
                         style={{

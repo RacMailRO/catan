@@ -1077,6 +1077,13 @@ Această secțiune documentează cerințele practice apărute în cursul utiliz�
    - Opțiunea de negociere permite ajustarea rapidă a cantităților și tipurilor de resurse solicitate, relansând oferta fără reîncărcarea ecranului.
 4. **Scurtături rapide pentru comerțul maritim (Port Shortcuts)**:
    - Dacă un jucător deține o așezare sau un oraș pe un port specializat (ex. 2:1 Lemn) și are numărul necesar de resurse (ex. >= 2 Lemn), interfața evidențiază direct opțiunea de schimb avantajos la un singur click, fără a obliga deschiderea manuală a dialogului maritim și setarea redundantă a filtrelor.
+5. **Afișarea cărților proprii în dialogul ofertei de schimb primite**:
+   - Când un alt jucător trimite o ofertă de schimb, modalul primitorului afișează direct și compact mâna proprie de resurse (toate cele 5 cărți cu cantitățile deținute).
+   - Resursele solicitate sunt evidențiate vizual cu badge-uri informative clare:
+     - Verde (`cere X (ai Y)`): jucătorul are suficiente cărți pentru a satisface cererea.
+     - Roșu (`lipsesc Z`): jucătorul nu deține cantitatea necesară.
+     - Albastru (`+N`): resursa pe care o primește din partea propunătorului.
+   - Permite evaluarea imediată a ofertei și luarea unei decizii rapide (Acceptare, Refuz sau Contra-ofertă) fără a fi nevoie de închiderea dialogului sau consultarea altor panouri.
 
 ## 15.3 Ergonomie Grafică și Reprezentare pe Tablă
 
