@@ -350,6 +350,24 @@ export const App: React.FC = () => {
         }
       } else if (action.type === 'end_turn') {
         showActionFeedback('⏭️ Tură încheiată');
+      } else if (action.type === 'steal_from_player') {
+        const stealEvents = recorder.getEvents();
+        const stealEvent = stealEvents[stealEvents.length - 1];
+        const stolenResource = stealEvent?.details?.stolenResource as ResourceType | undefined;
+        const thief = getPlayerById(newState, playerId);
+        const victim = getPlayerById(newState, action.targetPlayerId);
+        if (stolenResource) {
+          const resText = `${RESOURCE_ICONS[stolenResource]} ${RESOURCE_LABELS[locale][stolenResource]}`;
+          if (playerId === viewerId) {
+            showActionFeedback(`🥷 Ai furat 1 ${resText} de la ${victim?.name ?? action.targetPlayerId}!`);
+          } else if (action.targetPlayerId === viewerId) {
+            showActionFeedback(`🥷 ${thief?.name ?? playerId} ți-a furat 1 ${resText}!`);
+          } else {
+            showActionFeedback(`🥷 ${thief?.name ?? playerId} a furat 1 ${resText} de la ${victim?.name ?? action.targetPlayerId}!`);
+          }
+        } else {
+          showActionFeedback(`🥷 ${victim?.name ?? action.targetPlayerId} nu avea nicio carte de furat.`);
+        }
       }
 
       // Flash "+N" on whichever resources any player just gained (dice production, etc.)

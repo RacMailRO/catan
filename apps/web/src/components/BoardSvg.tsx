@@ -254,6 +254,22 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
     startZoom: 1
   });
 
+  // Touch/mouse drag deltas arrive in CSS pixels, but `pan` is in viewBox units — and on a
+  // phone the viewBox (1280-2240 units) is rendered into a much smaller CSS width (e.g.
+  // ~380px), so adding raw pixel deltas to pan moved the board at a fraction of finger speed.
+  // Convert each delta through the current viewBox-units-per-CSS-pixel ratio so a drag tracks
+  // the finger 1:1 regardless of zoom or screen size.
+  const getDragScale = () => {
+    const svgEl = svgRef.current;
+    if (!svgEl) return { x: 1, y: 1 };
+    const rect = svgEl.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return { x: 1, y: 1 };
+    return {
+      x: (viewBoxHalfExtent.w * 2) / rect.width,
+      y: (viewBoxHalfExtent.h * 2) / rect.height
+    };
+  };
+
   const outerSeaRing = useMemo(() => generateOuterSeaRing(), []);
 
   // Each harbor sits on whichever outer sea hex is nearest to its dock position.
@@ -373,9 +389,10 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
         const t = e.touches[0]!;
         const dx = t.clientX - touchStateRef.current.startX;
         const dy = t.clientY - touchStateRef.current.startY;
+        const scale = getDragScale();
         setPan({
-          x: touchStateRef.current.startPanX + dx,
-          y: touchStateRef.current.startPanY + dy
+          x: touchStateRef.current.startPanX + dx * scale.x,
+          y: touchStateRef.current.startPanY + dy * scale.y
         });
       }
     };
@@ -417,9 +434,10 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
     if (e.pointerType === 'touch' || !isDragging) return;
     const dx = e.clientX - dragStartRef.current.x;
     const dy = e.clientY - dragStartRef.current.y;
+    const scale = getDragScale();
     setPan({
-      x: dragStartRef.current.panX + dx,
-      y: dragStartRef.current.panY + dy
+      x: dragStartRef.current.panX + dx * scale.x,
+      y: dragStartRef.current.panY + dy * scale.y
     });
   };
 
