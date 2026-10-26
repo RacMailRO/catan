@@ -202,6 +202,33 @@ export const App: React.FC = () => {
       document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
     }
   };
+
+  // Keep the screen from locking/dimming mid-game (long dev-card/trade decisions, or just
+  // watching bots play, shouldn't get interrupted by the phone going to standby). The Wake
+  // Lock API auto-releases when the tab is hidden, so re-acquire it on visibilitychange too;
+  // unsupported browsers (no navigator.wakeLock, e.g. older iOS Safari) just no-op.
+  useEffect(() => {
+    if (activeTab !== 'game') return;
+    let sentinel: { release: () => Promise<void> } | null = null;
+    const nav = navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> } };
+    const requestLock = async () => {
+      try {
+        sentinel = (await nav.wakeLock?.request('screen')) ?? null;
+      } catch {
+        // Unsupported or denied — the screen will dim normally, nothing else to do.
+      }
+    };
+    requestLock();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && !sentinel) requestLock();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      sentinel?.release().catch(() => {});
+    };
+  }, [activeTab]);
+
   const [diceRollAnimKey, setDiceRollAnimKey] = useState<string>('init');
 
   // Per-turn countdown (client-side comfort timer, not a core game rule)
