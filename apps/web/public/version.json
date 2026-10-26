@@ -1,9 +1,24 @@
 {
-  "version": "v1.68",
-  "commitCount": 68,
-  "shortHash": "51957f4",
-  "buildDate": "2026-10-26T19:13:45.670Z",
+  "version": "v1.71",
+  "commitCount": 71,
+  "shortHash": "8512c6b",
+  "buildDate": "2026-10-26T19:41:56.709Z",
   "releaseNotes": [
+    {
+      "hash": "8512c6b",
+      "date": "2026-10-26",
+      "message": "merge: fix/strict-mime-and-web-dist-bundling into main"
+    },
+    {
+      "hash": "1c1587f",
+      "date": "2026-10-26",
+      "message": "fix(server): copy web dist to server public, guard webDistDir with index.html check, and return 404 for missing static assets instead of text/html index.html"
+    },
+    {
+      "hash": "61d0e4d",
+      "date": "2026-10-26",
+      "message": "chore: bump version to v1.68"
+    },
     {
       "hash": "51957f4",
       "date": "2026-10-26",
@@ -238,21 +253,6 @@
       "hash": "8741e21",
       "date": "2026-10-25",
       "message": "merge: feat/mobile-perfect-layout-header-status-grid-cards into main"
-    },
-    {
-      "hash": "b4598da",
-      "date": "2026-10-25",
-      "message": "feat(ui): eliminate left sidebar gap, move turn status to top header, and arrange cards in compact 6-column grid"
-    },
-    {
-      "hash": "ae76012",
-      "date": "2026-10-25",
-      "message": "merge: feat/local-launch-scripts into main"
-    },
-    {
-      "hash": "7e38345",
-      "date": "2026-10-25",
-      "message": "feat(scripts): add one-click start.bat and stop.bat scripts for local gaming"
     }
   ]
 }
