@@ -1,9 +1,24 @@
 {
-  "version": "v1.74",
-  "commitCount": 74,
-  "shortHash": "e99d22c",
-  "buildDate": "2026-10-26T20:12:22.178Z",
+  "version": "v1.77",
+  "commitCount": 77,
+  "shortHash": "0b174a2",
+  "buildDate": "2026-10-26T20:16:14.288Z",
   "releaseNotes": [
+    {
+      "hash": "0b174a2",
+      "date": "2026-10-26",
+      "message": "merge: feat(web) display player hand in trade modal"
+    },
+    {
+      "hash": "8e1832f",
+      "date": "2026-10-26",
+      "message": "feat(web): display viewer's resource cards in incoming trade offer modal"
+    },
+    {
+      "hash": "129ccc9",
+      "date": "2026-10-26",
+      "message": "chore: bump version to v1.74"
+    },
     {
       "hash": "e99d22c",
       "date": "2026-10-26",
@@ -238,21 +253,6 @@
       "hash": "4e6b82b",
       "date": "2026-10-25",
       "message": "merge: feat/fix-lobby-button-overlap-sw-and-dock-toggle into main"
-    },
-    {
-      "hash": "a4e9341",
-      "date": "2026-10-25",
-      "message": "fix(ui): eliminate lobby button overlap, fix service worker network errors, resolve vite hmr, and keep bottom dock toggle button in title bar"
-    },
-    {
-      "hash": "97c99f3",
-      "date": "2026-10-25",
-      "message": "merge: feat/fix-vite-hmr-and-mobile-lobby-responsiveness into main"
-    },
-    {
-      "hash": "9ceddf7",
-      "date": "2026-10-25",
-      "message": "fix(web): resolve vite hmr websocket network connection and eliminate horizontal overflow cutting off mobile lobby"
     }
   ]
 }
