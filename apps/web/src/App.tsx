@@ -69,7 +69,9 @@ import {
   TRANSLATIONS,
   formatActionDescription,
   DEV_CARD_ICONS,
-  DEV_CARD_LABELS
+  DEV_CARD_LABELS,
+  DEV_CARD_RULE_TEXT,
+  FULL_RULES
 } from './i18n';
 
 type ActiveTab = 'lobby' | 'game' | 'replay' | 'benchmark';
@@ -123,6 +125,7 @@ type GameModalType =
   | 'play_year_of_plenty'
   | 'event_log'
   | 'costs_help'
+  | 'full_rules'
   | 'score_bank'
   | 'starting_order';
 
@@ -1964,20 +1967,69 @@ export const App: React.FC = () => {
               </div>
 
               <div style={{ marginTop: '0.85rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.65rem' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.45rem', color: 'var(--accent-gold)' }}>
-                  Cărți de Resurse & Dezvoltare (Asset-uri grafice din <code>poze/cards.jpg</code>):
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-gold)' }}>
+                    {locale === 'ro' ? 'Cărțile Jocului & Ce Fac' : 'Game Cards & What They Do'}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem' }}
+                    onClick={() => setActiveModal('full_rules')}
+                  >
+                    📖 {locale === 'ro' ? 'Regulile Jocului' : 'Full Rules'}
+                  </button>
                 </div>
-                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center' }}>
+
+                <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
+                  {locale === 'ro' ? 'Resurse' : 'Resources'}
+                </div>
+                <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', marginBottom: '0.75rem' }}>
                   {ALL_RESOURCES.map((r) => (
-                    <ResourceCardSprite key={r} resource={r} count={19} locale={locale} size="xs" />
+                    <ResourceCardSprite key={r} resource={r} count={19} locale={locale} size="sm" />
                   ))}
                 </div>
-                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', marginTop: '0.45rem' }}>
-                  <DevCardSprite type="knight" count={14} locale={locale} size="xs" />
-                  <DevCardSprite type="victory_point" count={5} locale={locale} size="xs" />
-                  <DevCardSprite type="road_building" count={2} locale={locale} size="xs" />
-                  <DevCardSprite type="year_of_plenty" count={2} locale={locale} size="xs" />
-                  <DevCardSprite type="monopoly" count={2} locale={locale} size="xs" />
+
+                <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
+                  {locale === 'ro' ? 'Cărți de Dezvoltare' : 'Development Cards'}
+                </div>
+                <div className="card-gallery-grid">
+                  {(['knight', 'victory_point', 'road_building', 'year_of_plenty', 'monopoly'] as const).map((t) => (
+                    <div key={t} className="card-gallery-item">
+                      <DevCardSprite type={t} locale={locale} size="sm" />
+                      <p className="card-gallery-rule-text">{DEV_CARD_RULE_TEXT[locale][t]}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', margin: '0.75rem 0 0.4rem' }}>
+                  {locale === 'ro' ? 'Carduri Speciale (fără carte fizică în pachet)' : 'Special Cards (no physical card in the deck)'}
+                </div>
+                <div className="card-gallery-grid">
+                  <div className="card-gallery-item">
+                    <div className="special-card-tile">
+                      <span className="special-card-icon">🏆</span>
+                      <span className="special-card-title">{locale === 'ro' ? 'Drumul cel mai Lung' : 'Longest Road'}</span>
+                      <span className="special-card-vp">+2 PV</span>
+                    </div>
+                    <p className="card-gallery-rule-text">
+                      {locale === 'ro'
+                        ? 'Primul jucător cu un lanț neîntrerupt de minim 5 drumuri conectate. Trece la alt jucător dacă acesta construiește un lanț mai lung.'
+                        : 'The first player with an unbroken chain of at least 5 connected roads. Transfers if someone else builds a longer chain.'}
+                    </p>
+                  </div>
+                  <div className="card-gallery-item">
+                    <div className="special-card-tile special-card-tile-army">
+                      <span className="special-card-icon">🛡️</span>
+                      <span className="special-card-title">{locale === 'ro' ? 'Armata cea mai Mare' : 'Largest Army'}</span>
+                      <span className="special-card-vp">+2 PV</span>
+                    </div>
+                    <p className="card-gallery-rule-text">
+                      {locale === 'ro'
+                        ? 'Primul jucător care joacă 3 cărți Cavaler. Trece la alt jucător dacă acesta joacă mai multe.'
+                        : 'The first player to play 3 Knight cards. Transfers if someone else plays more.'}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -4017,6 +4069,37 @@ export const App: React.FC = () => {
                   </li>
                 ))}
               </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full rulebook — reachable from the lobby's card gallery button, for players who have
+          never played Catan and want to learn the game before (or during) their first game. */}
+      {activeModal === 'full_rules' && (
+        <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
+          <div
+            className="modal-dialog"
+            style={{ maxWidth: 640, maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3>📖 {locale === 'ro' ? 'Regulile Jocului' : 'Full Rules'}</h3>
+              <button type="button" className="btn" onClick={() => setActiveModal('none')}>
+                ✕ {locale === 'ro' ? 'Închide' : 'Close'}
+              </button>
+            </div>
+            <div className="modal-body" style={{ overflowY: 'auto' }}>
+              {FULL_RULES[locale].map((section) => (
+                <div key={section.title} className="rules-section">
+                  <h4>{section.title}</h4>
+                  <ul>
+                    {section.body.map((line, idx) => (
+                      <li key={idx}>{line}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
           </div>
         </div>

@@ -193,6 +193,152 @@ export const DEV_CARD_SHORT_LABELS: Record<Locale, Record<DevCardType, string>> 
   }
 };
 
+// One-line, action-oriented explanation of what each dev card actually does when played —
+// shown next to the enlarged card art in the lobby gallery, for players learning the game.
+export const DEV_CARD_RULE_TEXT: Record<Locale, Record<DevCardType, string>> = {
+  ro: {
+    knight: 'Mută hoțul pe un hexagon nou și furi 1 carte la întâmplare de la un adversar de pe acel hexagon. Joacă 3 cavaleri pentru a câștiga Armata cea mai Mare (+2 PV).',
+    road_building: 'Construiește imediat 2 drumuri gratuite (fără a consuma lemn/cărămidă), oriunde ai putea construi drumuri normal.',
+    year_of_plenty: 'Alege 2 resurse, de orice tip, direct din banca jocului, gratuit.',
+    monopoly: 'Declară un tip de resursă — toți ceilalți jucători trebuie să îți dea toate cărțile lor de acel tip.',
+    victory_point: 'Valorează +1 Punct de Victorie. Rămâne ascunsă adversarilor — se dezvăluie doar la finalul partidei sau când decizi s-o joci.'
+  },
+  en: {
+    knight: 'Move the robber to a new hex and steal 1 random card from an opponent on that hex. Play 3 knights to claim Largest Army (+2 VP).',
+    road_building: 'Immediately build 2 free roads (no wood/brick cost), anywhere you could normally build a road.',
+    year_of_plenty: 'Take any 2 resource cards, of any type, straight from the bank, for free.',
+    monopoly: 'Name one resource type — every other player must hand over all their cards of that type.',
+    victory_point: 'Worth +1 Victory Point. Stays hidden from opponents — only revealed at game end or when you choose to play it.'
+  }
+};
+
+// Full, beginner-friendly rulebook shown in the "Regulile Jocului" modal, organized by section.
+export interface RuleSection {
+  title: string;
+  body: string[];
+}
+
+export const FULL_RULES: Record<Locale, RuleSection[]> = {
+  ro: [
+    {
+      title: '🎯 Scopul Jocului',
+      body: [
+        'Primul jucător care atinge 10 Puncte de Victorie (configurabil) câștigă imediat.',
+        'Punctele de Victorie se obțin din: Așezări (1 PV fiecare), Orașe (2 PV fiecare), cărți de Punct de Victorie ascunse, Drumul cel mai Lung (+2 PV) și Armata cea mai Mare (+2 PV).'
+      ]
+    },
+    {
+      title: '🏗️ Pregătire & Plasare Inițială',
+      body: [
+        'Harta e formată din 19 hexagoane de teren (producând resurse) plus hexagoane de ocean cu porturi.',
+        'Pe rând, fiecare jucător plasează 2 așezări și 2 drumuri conectate la ele, în ordine normală, apoi inversă (jucătorul 4, 3, 2, 1, 1, 2, 3, 4).',
+        'La a 2-a așezare primești imediat resursele hexagoanelor adiacente — acesta este singurul moment din joc în care primești resurse fără să arunci zarul.'
+      ]
+    },
+    {
+      title: '🔄 Structura unei Ture',
+      body: [
+        '1. Aruncă 2 zaruri — suma determină ce hexagoane produc resurse în acea tură.',
+        'Dacă suma e 7, nimeni nu primește resurse: toți jucătorii cu peste 7 cărți în mână trebuie să renunțe la jumătate, iar tu muți Hoțul și furi o carte.',
+        '2. Faza principală — poți construi, cumpăra cărți de dezvoltare, comercializa cu banca/porturile sau cu ceilalți jucători, în orice ordine, de câte ori ai resurse.',
+        '3. Încheie tura — rândul trece la jucătorul următor.'
+      ]
+    },
+    {
+      title: '🏠 Construcții & Costuri',
+      body: [
+        'Drum: 1 Lemn + 1 Cărămidă — conectează așezări, extinde teritoriul. Max 15 drumuri.',
+        'Așezare: 1 Lemn + 1 Cărămidă + 1 Lână + 1 Grâu — trebuie plasată la cel puțin 2 intersecții distanță de orice altă așezare/oraș. Max 5 așezări (valorează 1 PV fiecare).',
+        'Oraș: 2 Grâu + 3 Minereu — construit prin upgrade-ul unei așezări existente, dublează producția acelui loc. Max 4 orașe (valorează 2 PV fiecare).',
+        'Carte de Dezvoltare: 1 Lână + 1 Grâu + 1 Minereu — tragi o carte aleatorie din pachet (Cavaler, Progres sau Punct de Victorie).'
+      ]
+    },
+    {
+      title: '🤝 Comerț',
+      body: [
+        'Cu banca: 4 cărți identice → 1 carte la alegere, oricând în faza ta principală.',
+        'Cu un port generic (3:1): 3 cărți identice → 1 carte la alegere, dacă ai o așezare/oraș pe acel port.',
+        'Cu un port specializat (2:1): 2 cărți din resursa portului → 1 carte la alegere.',
+        'Cu alți jucători: propune un schimb liber (orice combinație) — ei pot accepta, respinge sau contra-propune.'
+      ]
+    },
+    {
+      title: '🥷 Hoțul (Robber)',
+      body: [
+        'Activat de orice 7 aruncat, sau de o carte Cavaler jucată.',
+        'Blochează complet producția hexagonului pe care stă — nimeni nu primește resurse de acolo cât timp e Hoțul prezent.',
+        'Când îl plasezi, furi 1 carte aleatorie de la un jucător cu o așezare/oraș adiacent hexagonului (dacă are cărți).'
+      ]
+    },
+    {
+      title: '🏆 Carduri Speciale (Drumul cel mai Lung & Armata cea mai Mare)',
+      body: [
+        'Drumul cel mai Lung (+2 PV): primul jucător cu un lanț neîntrerupt de minim 5 drumuri conectate. Dacă altcineva construiește un lanț mai lung, cardul trece la el.',
+        'Armata cea mai Mare (+2 PV): primul jucător care joacă 3 cărți Cavaler. Dacă altcineva joacă mai multe, cardul trece la el.'
+      ]
+    }
+  ],
+  en: [
+    {
+      title: '🎯 Goal of the Game',
+      body: [
+        'The first player to reach 10 Victory Points (configurable) wins immediately.',
+        'Victory Points come from: Settlements (1 VP each), Cities (2 VP each), hidden Victory Point cards, Longest Road (+2 VP) and Largest Army (+2 VP).'
+      ]
+    },
+    {
+      title: '🏗️ Setup & Initial Placement',
+      body: [
+        'The board is made of 19 terrain hexes (each producing a resource) plus ocean hexes with harbors.',
+        'In turn order, each player places 2 settlements and 2 connected roads — forward order, then reversed (player 4, 3, 2, 1, 1, 2, 3, 4).',
+        'Your 2nd settlement immediately grants the resources of its adjacent hexes — the only time in the game you get resources without rolling.'
+      ]
+    },
+    {
+      title: '🔄 Turn Structure',
+      body: [
+        '1. Roll 2 dice — the total decides which hexes produce resources this turn.',
+        'On a 7, nobody produces: every player holding more than 7 cards must discard half, and you move the Robber and steal a card.',
+        '2. Main phase — build, buy development cards, trade with the bank/harbors or other players, in any order, as many times as your resources allow.',
+        '3. End turn — play passes to the next player.'
+      ]
+    },
+    {
+      title: '🏠 Buildings & Costs',
+      body: [
+        'Road: 1 Wood + 1 Brick — connects settlements, extends your territory. Max 15 roads.',
+        'Settlement: 1 Wood + 1 Brick + 1 Sheep + 1 Wheat — must be placed at least 2 intersections away from any other settlement/city. Max 5 settlements (worth 1 VP each).',
+        'City: 2 Wheat + 3 Ore — built by upgrading an existing settlement, doubling that spot\'s production. Max 4 cities (worth 2 VP each).',
+        'Development Card: 1 Sheep + 1 Wheat + 1 Ore — draws a random card from the deck (Knight, Progress, or Victory Point).'
+      ]
+    },
+    {
+      title: '🤝 Trading',
+      body: [
+        'With the bank: 4 identical cards → 1 card of your choice, anytime during your main phase.',
+        'At a generic harbor (3:1): 3 identical cards → 1 card of your choice, if you have a settlement/city on that harbor.',
+        'At a specialized harbor (2:1): 2 cards of that harbor\'s resource → 1 card of your choice.',
+        'With other players: propose any trade you like — they can accept, reject, or counter-offer.'
+      ]
+    },
+    {
+      title: '🥷 The Robber',
+      body: [
+        'Triggered by any roll of 7, or by playing a Knight card.',
+        'Completely blocks production on the hex it sits on — nobody gets resources from there while the Robber is present.',
+        'When you place it, you steal 1 random card from a player with a settlement/city adjacent to that hex (if they have any).'
+      ]
+    },
+    {
+      title: '🏆 Special Cards (Longest Road & Largest Army)',
+      body: [
+        'Longest Road (+2 VP): the first player with an unbroken chain of at least 5 connected roads. If someone else builds a longer chain, the card transfers to them.',
+        'Largest Army (+2 VP): the first player to play 3 Knight cards. If someone else plays more, the card transfers to them.'
+      ]
+    }
+  ]
+};
+
 export const PHASE_LABELS: Record<Locale, Record<TurnPhase, string>> = {
   ro: {
     setup_settlement_1: 'Setup Runda 1: Plasează prima așezare',

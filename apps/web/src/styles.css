@@ -597,6 +597,96 @@ select:focus,
   padding: 1px 1px;
 }
 
+/* Lobby card gallery: enlarged card art paired with a one-line rule explanation, for players
+   learning the game. One grid for dev cards, reused for the Longest Road / Largest Army tiles. */
+.card-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.6rem;
+}
+
+.card-gallery-item {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-color-soft);
+  border-radius: var(--radius-md);
+  padding: 0.5rem;
+}
+
+.card-gallery-rule-text {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+/* Longest Road / Largest Army — no sprite art exists for these in cards.jpg (they're a
+   special oversized card in the physical game), so render them as plain icon tiles that
+   match the card-sprite footprint instead of faking sprite art that doesn't exist. */
+.special-card-tile {
+  flex-shrink: 0;
+  width: 50px;
+  height: 74px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: linear-gradient(160deg, var(--bg-card), var(--bg-inset));
+  border: 1.5px solid var(--accent-gold);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  padding: 3px;
+}
+
+.special-card-tile-army {
+  border-color: var(--accent-red);
+}
+
+.special-card-icon {
+  font-size: 1.3rem;
+}
+
+.special-card-title {
+  font-size: 0.5rem;
+  line-height: 1.1;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.special-card-vp {
+  font-size: 0.56rem;
+  font-weight: 700;
+  color: var(--accent-gold-bright);
+}
+
+/* Full rules modal */
+.rules-section {
+  margin-bottom: 1rem;
+}
+
+.rules-section h4 {
+  margin: 0 0 0.4rem;
+  color: var(--accent-gold);
+  font-size: 0.92rem;
+}
+
+.rules-section ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.rules-section li {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-main);
+}
+
 /* Animated Dice Widget */
 .dice-widget-box {
   pointer-events: auto;
