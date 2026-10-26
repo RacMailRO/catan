@@ -813,10 +813,10 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 {building && building.type === 'settlement' && (
                   <image
                     href={SETTLEMENT_SVG_BY_COLOR[pColor]}
-                    x={-22}
-                    y={-22}
-                    width={44}
-                    height={44}
+                    x={-44}
+                    y={-44}
+                    width={88}
+                    height={88}
                     style={{
                       filter:
                         'drop-shadow(0 2px 4px rgba(0,0,0,0.85)) drop-shadow(0 0 2px rgba(255,255,255,0.75))'
@@ -827,10 +827,10 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 {building && building.type === 'city' && (
                   <image
                     href={CITY_SVG_BY_COLOR[pColor]}
-                    x={-27}
-                    y={-27}
-                    width={54}
-                    height={54}
+                    x={-54}
+                    y={-54}
+                    width={108}
+                    height={108}
                     style={{
                       filter:
                         'drop-shadow(0 3px 5px rgba(0,0,0,0.9)) drop-shadow(0 0 2px rgba(255,255,255,0.8))'
