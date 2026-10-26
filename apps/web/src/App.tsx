@@ -114,6 +114,22 @@ export const App: React.FC = () => {
     }
   };
   const [diceRollAnimKey, setDiceRollAnimKey] = useState<string>('init');
+
+  // Per-turn countdown (client-side comfort timer, not a core game rule)
+  const [turnTimerEnabled, setTurnTimerEnabled] = useState<boolean>(false);
+  const [turnTimerSec, setTurnTimerSec] = useState<number>(60);
+  const [turnTimeLeft, setTurnTimeLeft] = useState<number | null>(null);
+  const lastTimedTurnKeyRef = useRef<string>('');
+
+  // Big, brief banner confirming the action the active player just took
+  const [actionFeedback, setActionFeedback] = useState<{ key: string; text: string } | null>(null);
+  const actionFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Which resources a player just received, for a brief "+N" flash on their cards
+  const [resourceGainFlash, setResourceGainFlash] = useState<
+    Record<string, Partial<Record<ResourceType, number>>>
+  >({});
+  const gainFlashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [createdInviteCode, setCreatedInviteCode] = useState<string | null>(null);
   const [joinCodeInput, setJoinCodeInput] = useState<string>('');
   const [joinPlayerName, setJoinPlayerName] = useState<string>('Jucător 2');
@@ -251,14 +267,51 @@ export const App: React.FC = () => {
   }, [gameState, gameVersionTick]);
 
   // Execute a single action (human or AI) and update recorder
+  const showActionFeedback = (text: string) => {
+    if (actionFeedbackTimeoutRef.current) clearTimeout(actionFeedbackTimeoutRef.current);
+    setActionFeedback({ key: `fb-${Date.now()}-${Math.random()}`, text });
+    actionFeedbackTimeoutRef.current = setTimeout(() => setActionFeedback(null), 1600);
+  };
+
   const executeAction = (playerId: string, action: GameAction) => {
     if (!recorder) return;
     try {
       setActionError(null);
+      const prevResourcesByPlayer = new Map(
+        recorder.getState().players.map((p) => [p.id, { ...p.resources }])
+      );
       recorder.recordAndApply(playerId, action);
+      const newState = recorder.getState();
+
       if (action.type === 'roll_dice') {
         setDiceRollAnimKey(`roll-${Date.now()}-${Math.random()}`);
+        if (newState.lastDiceRoll) {
+          showActionFeedback(
+            `🎲 ${newState.lastDiceRoll.die1} + ${newState.lastDiceRoll.die2} = ${newState.lastDiceRoll.total}`
+          );
+        }
+      } else if (action.type === 'end_turn') {
+        showActionFeedback('⏭️ Tură încheiată');
       }
+
+      // Flash "+N" on whichever resources any player just gained (dice production, etc.)
+      const gains: Record<string, Partial<Record<ResourceType, number>>> = {};
+      for (const p of newState.players) {
+        const prev = prevResourcesByPlayer.get(p.id);
+        if (!prev) continue;
+        for (const r of ALL_RESOURCES) {
+          const delta = p.resources[r] - prev[r];
+          if (delta > 0) {
+            gains[p.id] = { ...gains[p.id], [r]: delta };
+          }
+        }
+      }
+      if (Object.keys(gains).length > 0) {
+        setResourceGainFlash(gains);
+        if (gainFlashTimeoutRef.current) clearTimeout(gainFlashTimeoutRef.current);
+        gainFlashTimeoutRef.current = setTimeout(() => setResourceGainFlash({}), 1800);
+      }
+
       setBuildMode('none');
       setDiscardSelection(createEmptyResources());
       setGameVersionTick((v) => v + 1);
@@ -530,6 +583,39 @@ export const App: React.FC = () => {
   const activePlayerObj = gameState ? getPlayerById(gameState, gameState.activePlayerId) : undefined;
   const viewerPlayerObj = gameState ? getPlayerById(gameState, viewerId) : undefined;
   const isHumanTurn = activePlayerObj?.type === 'human';
+
+  // Reset the countdown only when a genuinely new turn starts for a human player (not on every
+  // phase change within the same turn — rolling the dice shouldn't hand them another full minute).
+  const turnKey = gameState ? `${gameState.turn}-${gameState.activePlayerId}` : '';
+  useEffect(() => {
+    if (turnKey === lastTimedTurnKeyRef.current) return;
+    lastTimedTurnKeyRef.current = turnKey;
+    const isRegularTurnPhase = gameState?.phase === 'turn_start' || gameState?.phase === 'main_actions';
+    if (turnTimerEnabled && gameState && isHumanTurn && activeTab === 'game' && isRegularTurnPhase) {
+      setTurnTimeLeft(turnTimerSec);
+    } else {
+      setTurnTimeLeft(null);
+    }
+  }, [turnKey, turnTimerEnabled, isHumanTurn, activeTab, gameState?.phase, turnTimerSec]);
+
+  // Tick the countdown down; when it runs out, act on the player's behalf (end the turn if
+  // that's legal right now, otherwise roll the dice) so a slow/away player doesn't stall the table.
+  useEffect(() => {
+    if (turnTimeLeft === null) return;
+    if (turnTimeLeft <= 0) {
+      if (activePlayerObj) {
+        if (legalActionsForActive.some((a) => a.type === 'end_turn')) {
+          executeAction(activePlayerObj.id, { type: 'end_turn' });
+        } else if (legalActionsForActive.some((a) => a.type === 'roll_dice')) {
+          executeAction(activePlayerObj.id, { type: 'roll_dice' });
+        }
+      }
+      setTurnTimeLeft(null);
+      return;
+    }
+    const id = setTimeout(() => setTurnTimeLeft((t) => (t !== null ? t - 1 : null)), 1000);
+    return () => clearTimeout(id);
+  }, [turnTimeLeft]);
 
   // Count unplayed development cards by type for the viewer/active player
   const unplayedDevCards = (viewerPlayerObj ?? activePlayerObj)?.devCards.filter((c) => !c.played) ?? [];
@@ -994,6 +1080,27 @@ export const App: React.FC = () => {
                     placeholder="Aleatoriu (lasă liber sau introdu seed fix)"
                   />
                 </div>
+
+                <div className="form-field">
+                  <label>⏱️ Cronometru per Tură</label>
+                  <select
+                    value={turnTimerEnabled ? String(turnTimerSec) : 'off'}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === 'off') {
+                        setTurnTimerEnabled(false);
+                      } else {
+                        setTurnTimerEnabled(true);
+                        setTurnTimerSec(Number(v));
+                      }
+                    }}
+                  >
+                    <option value="off">Dezactivat</option>
+                    <option value="30">30 secunde</option>
+                    <option value="45">45 secunde</option>
+                    <option value="60">60 secunde (maxim)</option>
+                  </select>
+                </div>
               </div>
 
               <div style={{ marginTop: '0.85rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.65rem' }}>
@@ -1069,15 +1176,15 @@ export const App: React.FC = () => {
 
                       {p.resources ? (
                         <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                          {ALL_RESOURCES.map((r) => (
-                            <ResourceCardSprite
-                              key={r}
-                              resource={r}
-                              count={p.resources![r]}
-                              locale={locale}
-                              size="xs"
-                            />
-                          ))}
+                          {ALL_RESOURCES.map((r) => {
+                            const gain = resourceGainFlash[p.id]?.[r];
+                            return (
+                              <div key={r} style={{ position: 'relative' }}>
+                                <ResourceCardSprite resource={r} count={p.resources![r]} locale={locale} size="xs" />
+                                {gain ? <span className="resource-gain-flash">+{gain}</span> : null}
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : (
                         <div style={{ fontSize: '0.76rem', marginTop: 3, color: 'var(--text-muted)' }}>
@@ -1163,6 +1270,19 @@ export const App: React.FC = () => {
                 👥 {locale === 'ro' ? 'Scor & Bancă' : 'Scores & Bank'}
               </button>
 
+              {turnTimeLeft !== null && (
+                <div
+                  className="turn-timer-badge"
+                  style={{
+                    pointerEvents: 'auto',
+                    borderColor: turnTimeLeft <= 10 ? 'var(--accent-red)' : 'var(--accent-gold)',
+                    color: turnTimeLeft <= 10 ? 'var(--accent-red)' : 'var(--accent-gold-bright)'
+                  }}
+                >
+                  ⏱️ {turnTimeLeft}s
+                </div>
+              )}
+
               {/* Animated Dice Roll Widget in Top-Right of the Board */}
               <AnimatedDiceWidget
                 die1={gameState.lastDiceRoll?.die1}
@@ -1195,6 +1315,12 @@ export const App: React.FC = () => {
                 }}
               >
                 ⚠️ {actionError}
+              </div>
+            )}
+
+            {actionFeedback && (
+              <div key={actionFeedback.key} className="action-feedback-banner">
+                {actionFeedback.text}
               </div>
             )}
 
@@ -1235,15 +1361,20 @@ export const App: React.FC = () => {
               <>
                 {/* Cards Row: All 5 resources + dev card in ONE ROW, ZERO SCROLL */}
                 <div className="dock-cards-row">
-                  {ALL_RESOURCES.map((r) => (
-                    <ResourceCardSprite
-                      key={r}
-                      resource={r}
-                      count={(viewerPlayerObj ?? activePlayerObj)?.resources[r] ?? 0}
-                      locale={locale}
-                      size="xs"
-                    />
-                  ))}
+                  {ALL_RESOURCES.map((r) => {
+                    const gain = resourceGainFlash[(viewerPlayerObj ?? activePlayerObj)?.id ?? '']?.[r];
+                    return (
+                      <div key={r} style={{ position: 'relative' }}>
+                        <ResourceCardSprite
+                          resource={r}
+                          count={(viewerPlayerObj ?? activePlayerObj)?.resources[r] ?? 0}
+                          locale={locale}
+                          size="xs"
+                        />
+                        {gain ? <span className="resource-gain-flash">+{gain}</span> : null}
+                      </div>
+                    );
+                  })}
 
                   <div
                     onClick={() => setActiveModal('dev_cards')}
@@ -1397,15 +1528,15 @@ export const App: React.FC = () => {
 
                       {p.resources ? (
                         <div style={{ display: 'flex', gap: 3, justifyContent: 'center', marginTop: 2 }}>
-                          {ALL_RESOURCES.map((r) => (
-                            <ResourceCardSprite
-                              key={r}
-                              resource={r}
-                              count={p.resources![r]}
-                              locale={locale}
-                              size="xs"
-                            />
-                          ))}
+                          {ALL_RESOURCES.map((r) => {
+                            const gain = resourceGainFlash[p.id]?.[r];
+                            return (
+                              <div key={r} style={{ position: 'relative' }}>
+                                <ResourceCardSprite resource={r} count={p.resources![r]} locale={locale} size="xs" />
+                                {gain ? <span className="resource-gain-flash">+{gain}</span> : null}
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : (
                         <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.2rem 0' }}>
@@ -1733,7 +1864,11 @@ export const App: React.FC = () => {
                         {ALL_RESOURCES.map((r) => (
                           <div key={r} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                             <span style={{ fontSize: '0.8rem' }}>
-                              {RESOURCE_ICONS[r]} {RESOURCE_LABELS[locale][r]}: <strong>{p2pOffer[r]}</strong>
+                              {RESOURCE_ICONS[r]} {RESOURCE_LABELS[locale][r]}{' '}
+                              <span style={{ color: 'var(--text-muted)' }}>
+                                (ai {activePlayerObj.resources[r]})
+                              </span>
+                              : <strong>{p2pOffer[r]}</strong>
                             </span>
                             <div style={{ display: 'flex', gap: 4 }}>
                               <button
