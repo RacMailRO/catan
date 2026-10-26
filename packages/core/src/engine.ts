@@ -664,6 +664,23 @@ export function getLegalActions(state: GameState, playerId: string): GameAction[
         }
       }
 
+      // Player-to-player trade proposals (allowed during main_actions if no trade is currently open and at most 2 proposals initiated this turn)
+      const offersFromMe = state.activeTradeOffers.filter((o) => o.fromPlayerId === playerId);
+      if (state.activeTradeOffers.every((o) => o.status !== 'open') && offersFromMe.length < 2) {
+        for (const give of ALL_RESOURCES) {
+          if (player.resources[give] >= 1) {
+            for (const receive of ALL_RESOURCES) {
+              if (receive === give) continue;
+              actions.push({
+                type: 'propose_trade',
+                offering: { ...createEmptyResources(), [give]: 1 },
+                requesting: { ...createEmptyResources(), [receive]: 1 }
+              });
+            }
+          }
+        }
+      }
+
       // Cancel open trades
       for (const offer of state.activeTradeOffers) {
         if ((offer.status === 'open' || offer.status === 'rejected') && offer.fromPlayerId === playerId) {
@@ -1794,7 +1811,14 @@ export function expireStaleTradesInPlace(state: GameState, nowMs = Date.now()): 
 export function getPlayerView(state: GameState, viewerId: string): PlayerView {
   const isGameOver = state.phase === 'game_over';
 
-  const players: PublicPlayerInfo[] = state.players.map((p) => {
+  // Order public players according to the established turn/setup order (playerOrder) rather than initial color registration
+  const playersMap = new Map(state.players.map((p) => [p.id, p]));
+  const orderedPlayerStates =
+    state.playerOrder && state.playerOrder.length === state.players.length
+      ? state.playerOrder.map((id) => playersMap.get(id)!).filter(Boolean)
+      : state.players;
+
+  const players: PublicPlayerInfo[] = orderedPlayerStates.map((p) => {
     const isSelf = p.id === viewerId;
     const score = calculateScore(state, p.id);
 

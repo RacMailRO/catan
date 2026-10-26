@@ -581,4 +581,30 @@ describe('Catan Core Engine & Replay System', () => {
     const cancelledState = applyAction(state, 'p1', { type: 'cancel_trade', offerId }).state;
     expect(cancelledState.activeTradeOffers[0]!.status).toBe('cancelled');
   });
+
+  it('aligns getPlayerView.players strictly with playerOrder and includes propose_trade actions in getLegalActions', () => {
+    const state = createGame({
+      gameId: 'order-and-trade-test',
+      seed: 'seed-order-123',
+      participants: [
+        { id: 'p1', name: 'Player 1', type: 'human', color: 'red' },
+        { id: 'p2', name: 'Player 2', type: 'human', color: 'blue' },
+        { id: 'p3', name: 'Player 3', type: 'human', color: 'orange' },
+        { id: 'p4', name: 'Player 4', type: 'human', color: 'green' }
+      ]
+    });
+
+    // Verify getPlayerView follows playerOrder
+    const view = getPlayerView(state, 'p1');
+    const viewPlayerIds = view.players.map((p) => p.id);
+    expect(viewPlayerIds).toEqual(state.playerOrder);
+
+    // In main_actions, player with resources should have propose_trade in legal actions
+    const mainState = { ...state, phase: 'main_actions' as const, activePlayerId: 'p1' };
+    mainState.players[0]!.resources.wood = 2;
+    const legal = getLegalActions(mainState, 'p1');
+    const tradeProposals = legal.filter((a) => a.type === 'propose_trade');
+    expect(tradeProposals.length).toBeGreaterThan(0);
+    expect(tradeProposals.some((a) => a.type === 'propose_trade' && a.offering.wood === 1)).toBe(true);
+  });
 });
