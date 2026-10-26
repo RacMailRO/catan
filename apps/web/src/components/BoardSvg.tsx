@@ -125,6 +125,8 @@ interface OuterSeaHex {
   id: string;
   x: number;
   y: number;
+  q: number;
+  r: number;
 }
 
 // Rings 4-6 beyond the island's immediate ring-3 sea border exist so a portrait phone has
@@ -140,11 +142,21 @@ function generateOuterSeaRing(): OuterSeaHex[] {
       const dist = Math.max(Math.abs(q), Math.abs(r), Math.abs(s));
       if (dist >= 3 && dist <= OUTER_SEA_MAX_RING) {
         const { x, y } = axialToPixel(q, r, HEX_RADIUS);
-        ring.push({ id: `sea_${q}_${r}`, x, y });
+        ring.push({ id: `sea_${q}_${r}`, x, y, q, r });
       }
     }
   }
   return ring;
+}
+
+// Plain open-sea tiles were all rendered at a fixed 0° rotation, so the same wave-crest
+// line in sea_tile.png lined up across every hex in the ring — reading as a repeating grid
+// pattern instead of open water. This picks one of 6 rotations per tile, deterministically
+// from its axial coordinates (stable across re-renders, no per-frame randomness).
+const SEA_TILE_ROTATIONS = [0, 60, 120, 180, 240, 300];
+function seaTileRotationDeg(q: number, r: number): number {
+  const hash = Math.abs((q * 374761393 + r * 668265263) ^ (q * 2654435761));
+  return SEA_TILE_ROTATIONS[hash % SEA_TILE_ROTATIONS.length]!;
 }
 
 // Angle from this outer sea hex to the midpoint of its harbor's two coastal vertices —
@@ -524,6 +536,19 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             </clipPath>
           ))}
 
+          {/* sea_tile.png (the plain open-sea hex) is a noticeably lighter, more saturated
+              blue than the water painted into the harbor tiles cropped from porturi-2/3.jpg —
+              sampling a pure-water patch from each gives sea_tile ~(63,119,180) vs harbor
+              water ~(33,90,147), consistent across all 6 harbor crops. This per-channel scale
+              brings sea_tile's water color in line with the harbor tiles it sits beside in the
+              outer ring, without touching the source art file. */}
+          <filter id="seaTileColorMatch" colorInterpolationFilters="sRGB">
+            <feColorMatrix
+              type="matrix"
+              values="0.523 0 0 0 0  0 0.750 0 0 0  0 0 0.821 0 0  0 0 0 1 0"
+            />
+          </filter>
+
           {/* Beveled ivory face for number tokens */}
           <radialGradient id="tokenFaceGrad" cx="35%" cy="30%" r="75%">
             <stop offset="0%" stopColor="#fffdf5" />
@@ -542,11 +567,13 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             const href = harbor ? PORT_HARBOR_IMAGE[harbor.type] : SEA_TILE_IMAGE;
             const rotationDeg = harbor
               ? harborFacingAngleDeg(sea, harbor, board.vertices) - PORT_ART_DEFAULT_ANGLE_DEG
-              : 0;
+              : seaTileRotationDeg(sea.q, sea.r);
             // A rotated image must be oversized (a square at least as wide as the hex is
             // tall) so its corners still cover the hex's own corners at every angle —
             // the tightly-fit hexCellW x hexCellH box used for unrotated tiles would clip.
-            const imgSize = harbor ? hexCellH * 1.1 : 0;
+            // Plain sea tiles are rotated too now (see seaTileRotationDeg), so they need the
+            // same oversized square as harbor tiles.
+            const imgSize = hexCellH * 1.1;
 
             return (
               <g key={sea.id}>
@@ -554,25 +581,15 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                   clipPath={`url(#clip-${sea.id})`}
                   transform={`rotate(${rotationDeg}, ${sea.x}, ${sea.y})`}
                 >
-                  {harbor ? (
-                    <image
-                      href={href}
-                      x={sea.x - imgSize / 2}
-                      y={sea.y - imgSize / 2}
-                      width={imgSize}
-                      height={imgSize}
-                      preserveAspectRatio="none"
-                    />
-                  ) : (
-                    <image
-                      href={href}
-                      x={sea.x - hexCellW / 2}
-                      y={sea.y - hexCellH / 2}
-                      width={hexCellW}
-                      height={hexCellH}
-                      preserveAspectRatio="none"
-                    />
-                  )}
+                  <image
+                    href={href}
+                    x={sea.x - imgSize / 2}
+                    y={sea.y - imgSize / 2}
+                    width={imgSize}
+                    height={imgSize}
+                    preserveAspectRatio="none"
+                    filter={harbor ? undefined : 'url(#seaTileColorMatch)'}
+                  />
                 </g>
                 <polygon
                   points={getHexPolygonPoints(sea.x, sea.y, HEX_RADIUS - 0.5)}
