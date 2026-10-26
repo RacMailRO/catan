@@ -422,6 +422,18 @@ select:focus,
   100% { opacity: 0; transform: translate(-50%, -22px) scale(1); }
 }
 
+/* A resource icon flying from the hex that produced it to the player who received it */
+.flying-resource-card {
+  position: fixed;
+  z-index: 300;
+  transform: translate(-50%, -50%);
+  transition: left 0.85s cubic-bezier(0.3, 0.6, 0.35, 1), top 0.85s cubic-bezier(0.3, 0.6, 0.35, 1);
+  font-size: 1.7rem;
+  line-height: 1;
+  pointer-events: none;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.65));
+}
+
 .zoom-controls {
   pointer-events: auto;
   display: flex;

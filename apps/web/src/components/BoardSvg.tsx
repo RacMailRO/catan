@@ -603,6 +603,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             return (
               <g
                 key={hex.id}
+                data-hex-id={hex.id}
                 onClick={() => {
                   if (isHighlighted && onSelectHex) {
                     onSelectHex(hex.id);

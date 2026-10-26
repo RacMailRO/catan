@@ -15,6 +15,7 @@ import {
   ReplayRecorder,
   ResourceCount,
   ResourceType,
+  TERRAIN_TO_RESOURCE,
   canPlayDevCardType,
   createEmptyResources,
   createGame,
@@ -130,6 +131,56 @@ export const App: React.FC = () => {
     Record<string, Partial<Record<ResourceType, number>>>
   >({});
   const gainFlashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Resource cards animating from the hex that produced them to the player who received them
+  interface FlyingResourceCard {
+    key: string;
+    resource: ResourceType;
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
+    launched: boolean;
+  }
+  const [flyingCards, setFlyingCards] = useState<FlyingResourceCard[]>([]);
+
+  const launchFlyingCards = (
+    requests: { playerId: string; resource: ResourceType; hexId: string }[]
+  ) => {
+    const newCards: FlyingResourceCard[] = [];
+    for (const req of requests) {
+      const hexEl = document.querySelector(`[data-hex-id="${req.hexId}"]`);
+      const destEl = document.querySelector(
+        `[data-player-id="${req.playerId}"][data-resource="${req.resource}"]`
+      );
+      if (!hexEl || !destEl) continue;
+      const hexRect = hexEl.getBoundingClientRect();
+      const destRect = destEl.getBoundingClientRect();
+      newCards.push({
+        key: `fly-${Date.now()}-${Math.random()}-${req.playerId}-${req.resource}`,
+        resource: req.resource,
+        startX: hexRect.left + hexRect.width / 2,
+        startY: hexRect.top + hexRect.height / 2,
+        endX: destRect.left + destRect.width / 2,
+        endY: destRect.top + destRect.height / 2,
+        launched: false
+      });
+    }
+    if (newCards.length === 0) return;
+    const keys = new Set(newCards.map((c) => c.key));
+    setFlyingCards((prev) => [...prev, ...newCards]);
+    // Start each card at the hex, then flip to its destination on the next frame so the
+    // left/top CSS transition actually animates the move instead of snapping there.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setFlyingCards((prev) => prev.map((c) => (keys.has(c.key) ? { ...c, launched: true } : c)));
+      });
+    });
+    setTimeout(() => {
+      setFlyingCards((prev) => prev.filter((c) => !keys.has(c.key)));
+    }, 950);
+  };
+
   const [createdInviteCode, setCreatedInviteCode] = useState<string | null>(null);
   const [joinCodeInput, setJoinCodeInput] = useState<string>('');
   const [joinPlayerName, setJoinPlayerName] = useState<string>('Jucător 2');
@@ -310,6 +361,30 @@ export const App: React.FC = () => {
         setResourceGainFlash(gains);
         if (gainFlashTimeoutRef.current) clearTimeout(gainFlashTimeoutRef.current);
         gainFlashTimeoutRef.current = setTimeout(() => setResourceGainFlash({}), 1800);
+      }
+
+      // On a production roll, fly a card from the hex that produced each gained resource
+      // toward the player who received it.
+      if (action.type === 'roll_dice' && newState.lastDiceRoll && newState.lastDiceRoll.total !== 7) {
+        const total = newState.lastDiceRoll.total;
+        const hexByResource: Partial<Record<ResourceType, string>> = {};
+        for (const hex of Object.values(newState.board.hexes)) {
+          if (hex.numberToken !== total || hex.id === newState.board.robberHexId) continue;
+          const res = TERRAIN_TO_RESOURCE[hex.terrain];
+          if (res && !hexByResource[res]) hexByResource[res] = hex.id;
+        }
+        const requests: { playerId: string; resource: ResourceType; hexId: string }[] = [];
+        for (const [gPlayerId, resMap] of Object.entries(gains)) {
+          for (const r of ALL_RESOURCES) {
+            const hexId = hexByResource[r];
+            if (hexId && (resMap[r] ?? 0) > 0) {
+              requests.push({ playerId: gPlayerId, resource: r, hexId });
+            }
+          }
+        }
+        if (requests.length > 0) {
+          requestAnimationFrame(() => launchFlyingCards(requests));
+        }
       }
 
       setBuildMode('none');
@@ -632,6 +707,18 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-shell">
+      {/* Resource cards animating from the producing hex to the receiving player — fixed
+          positioning so it escapes the board/sidebar's own overflow clipping. */}
+      {flyingCards.map((c) => (
+        <div
+          key={c.key}
+          className="flying-resource-card"
+          style={{ left: c.launched ? c.endX : c.startX, top: c.launched ? c.endY : c.startY }}
+        >
+          {RESOURCE_ICONS[c.resource]}
+        </div>
+      ))}
+
       {/* Top Navigation Header (Fixed 52px height) */}
       <header className="app-header">
         <div className="brand-title">
@@ -1179,7 +1266,7 @@ export const App: React.FC = () => {
                           {ALL_RESOURCES.map((r) => {
                             const gain = resourceGainFlash[p.id]?.[r];
                             return (
-                              <div key={r} style={{ position: 'relative' }}>
+                              <div key={r} data-player-id={p.id} data-resource={r} style={{ position: 'relative' }}>
                                 <ResourceCardSprite resource={r} count={p.resources![r]} locale={locale} size="xs" />
                                 {gain ? <span className="resource-gain-flash">+{gain}</span> : null}
                               </div>
@@ -1364,7 +1451,12 @@ export const App: React.FC = () => {
                   {ALL_RESOURCES.map((r) => {
                     const gain = resourceGainFlash[(viewerPlayerObj ?? activePlayerObj)?.id ?? '']?.[r];
                     return (
-                      <div key={r} style={{ position: 'relative' }}>
+                      <div
+                        key={r}
+                        data-player-id={(viewerPlayerObj ?? activePlayerObj)?.id}
+                        data-resource={r}
+                        style={{ position: 'relative' }}
+                      >
                         <ResourceCardSprite
                           resource={r}
                           count={(viewerPlayerObj ?? activePlayerObj)?.resources[r] ?? 0}
