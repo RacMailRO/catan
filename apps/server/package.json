@@ -4,7 +4,9 @@
   "type": "module",
   "main": "./src/index.ts",
   "scripts": {
+    "build": "node build-server.mjs",
     "dev": "tsx src/cli-server.ts",
+    "start": "node dist/server.mjs",
     "simulate": "tsx src/cli-simulate.ts"
   },
   "dependencies": {

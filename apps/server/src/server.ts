@@ -179,7 +179,16 @@ export function createCatanServer(options?: {
   const wsClients = new Set<WsClientConnection>();
   const rateLimits = new Map<string, { count: number; windowStartMs: number }>();
   const autoStepAiMaxBatch = options?.autoStepAiMaxBatch ?? 80;
-  const webDistDir = options?.webDistDir ?? path.resolve(REPO_ROOT, 'apps/web/dist');
+  const candidateWebDistDirs = [
+    options?.webDistDir,
+    path.resolve(REPO_ROOT, 'apps/web/dist'),
+    path.resolve(process.cwd(), 'apps/web/dist'),
+    path.resolve(process.cwd(), 'web/dist'),
+    path.resolve(process.cwd(), 'dist'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/dist'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../web/dist')
+  ].filter((d): d is string => Boolean(d && fs.existsSync(d)));
+  const webDistDir = candidateWebDistDirs[0] ?? path.resolve(REPO_ROOT, 'apps/web/dist');
 
   function checkRateLimit(key: string, maxPerWindow = 120, windowMs = 5000): boolean {
     const now = Date.now();

@@ -1,12 +1,20 @@
-// Startup file for hosts that run this app with plain `node` (e.g. cPanel's "Setup Node.js
-// App", which uses Phusion Passenger to run `node <startup file>` and reverse-proxies the
-// public domain/port 80 to whatever internal port this process listens on via PORT).
+// Startup entry for hosts that run this app with plain `node` (e.g. cPanel's "Setup Node.js App",
+// Phusion Passenger, LiteSpeed, or systemd/PM2).
 //
-// The server itself is TypeScript, run everywhere else via tsx (see package.json's "dev"
-// script) — this registers tsx's loader first so the same source runs here too, with no
-// separate compile step. cli-server.ts already reads process.env.PORT, which is exactly what
-// Passenger sets.
-import { register } from 'tsx/esm/api';
+// Automatically uses the pre-bundled production server (dist/server.mjs) when available,
+// running directly with native Node.js and zero dependencies on runtime compilers (tsx / esbuild).
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-register();
-await import('./src/cli-server.ts');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const distBundle = path.resolve(__dirname, 'dist/server.mjs');
+
+if (fs.existsSync(distBundle)) {
+  await import('./dist/server.mjs');
+} else {
+  // Development fallback via tsx
+  const { register } = await import('tsx/esm/api');
+  register();
+  await import('./src/cli-server.ts');
+}
