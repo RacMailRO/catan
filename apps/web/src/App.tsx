@@ -599,6 +599,25 @@ export const App: React.FC = () => {
   const [bankGiveRes, setBankGiveRes] = useState<ResourceType>('wood');
   const [bankReceiveRes, setBankReceiveRes] = useState<ResourceType>('ore');
   const [p2pOffer, setP2pOffer] = useState<ResourceCount>(createEmptyResources());
+  const [dismissedTradeOfferIds, setDismissedTradeOfferIds] = useState<Set<string>>(new Set());
+
+  const dismissTradeOffer = (offerId: string, reason = 'Refuzat de utilizator') => {
+    setDismissedTradeOfferIds((prev) => new Set(prev).add(offerId));
+    executeAction(viewerId, {
+      type: 'respond_trade',
+      offerId,
+      response: 'reject',
+      reason
+    });
+  };
+
+  const cancelMyTradeOffer = (offerId: string) => {
+    setDismissedTradeOfferIds((prev) => new Set(prev).add(offerId));
+    executeAction(viewerId, {
+      type: 'cancel_trade',
+      offerId
+    });
+  };
   const [p2pRequest, setP2pRequest] = useState<ResourceCount>(createEmptyResources());
   const [discardSelection, setDiscardSelection] = useState<ResourceCount>(createEmptyResources());
 
@@ -808,6 +827,22 @@ export const App: React.FC = () => {
     } catch (err: any) {
       if (err?.statusCode === 409 && err?.data?.playerView) {
         applyOnlineSync(err.data as GameSyncPayload, action, playerId, prevView);
+        if (action.type === 'respond_trade' || action.type === 'cancel_trade') {
+          try {
+            const nextSeq = err.data.currentSequence ?? err.data.playerView?.sequence;
+            const retryData = await submitOnlineAction({
+              gameId: onlineSession.gameId,
+              sessionToken: onlineSession.sessionToken,
+              playerId,
+              expectedSequence: nextSeq,
+              action
+            });
+            applyOnlineSync(retryData, action, playerId, err.data.playerView);
+            return;
+          } catch {
+            // ignore retry failure
+          }
+        }
         setActionError('Starea partidei a fost resincronizată automat cu serverul.');
       } else {
         setActionError(err instanceof Error ? err.message : 'Mutare invalidă.');
@@ -2881,7 +2916,8 @@ export const App: React.FC = () => {
                 o.status === 'open' &&
                 o.fromPlayerId !== viewerId &&
                 (!o.toPlayerId || o.toPlayerId === viewerId) &&
-                !o.rejectedByPlayerIds.includes(viewerId)
+                !o.rejectedByPlayerIds.includes(viewerId) &&
+                !dismissedTradeOfferIds.has(o.id)
             );
             if (!incomingOffer) return null;
             const proposer = getPlayerById(gameState, incomingOffer.fromPlayerId);
@@ -2889,26 +2925,72 @@ export const App: React.FC = () => {
             const canAfford = hasResources(myRes, incomingOffer.requesting);
 
             return (
-              <div className="modal-backdrop">
-                <div className="modal-dialog" style={{ maxWidth: 480, borderColor: 'var(--accent-gold)' }}>
-                  <div className="modal-header">
-                    <h3>
+              <div
+                className="modal-backdrop"
+                onClick={() => dismissTradeOffer(incomingOffer.id, 'Fereastră închisă')}
+              >
+                <div
+                  className="modal-dialog"
+                  style={{ maxWidth: 500, borderColor: 'var(--accent-gold)' }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div
+                    className="modal-header"
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  >
+                    <h3 style={{ margin: 0, fontSize: '1.05rem' }}>
                       🤝 Ofertă de Schimb de la{' '}
-                      <strong style={{ color: 'var(--accent-gold)' }}>{proposer?.name ?? incomingOffer.fromPlayerId}</strong>
+                      <strong style={{ color: 'var(--accent-gold)' }}>
+                        {proposer?.name ?? incomingOffer.fromPlayerId}
+                      </strong>
                     </h3>
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ padding: '0.2rem 0.55rem', fontSize: '0.82rem' }}
+                      title="Închide / Refuză oferta"
+                      onClick={() => dismissTradeOffer(incomingOffer.id, 'Fereastră închisă')}
+                    >
+                      ✕ Închide
+                    </button>
                   </div>
                   <div className="modal-body">
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem', marginBottom: '1rem' }}>
-                      <div style={{ background: 'rgba(34, 197, 94, 0.12)', padding: '0.6rem', borderRadius: 8, border: '1px solid rgba(34, 197, 94, 0.3)' }}>
-                        <h4 style={{ color: '#4ade80', fontSize: '0.84rem', margin: '0 0 0.4rem 0' }}>Primești (îți oferă):</h4>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '0.85rem',
+                        marginBottom: '1rem'
+                      }}
+                    >
+                      <div
+                        style={{
+                          background: 'rgba(34, 197, 94, 0.12)',
+                          padding: '0.6rem',
+                          borderRadius: 8,
+                          border: '1px solid rgba(34, 197, 94, 0.3)'
+                        }}
+                      >
+                        <h4 style={{ color: '#4ade80', fontSize: '0.84rem', margin: '0 0 0.4rem 0' }}>
+                          Primești (îți oferă):
+                        </h4>
                         {ALL_RESOURCES.filter((r) => incomingOffer.offering[r] > 0).map((r) => (
                           <div key={r} style={{ fontSize: '0.84rem', fontWeight: 600, marginTop: 2 }}>
                             {RESOURCE_ICONS[r]} {incomingOffer.offering[r]}x {RESOURCE_LABELS[locale][r]}
                           </div>
                         ))}
                       </div>
-                      <div style={{ background: 'rgba(239, 68, 68, 0.12)', padding: '0.6rem', borderRadius: 8, border: '1px solid rgba(239, 68, 68, 0.3)' }}>
-                        <h4 style={{ color: '#f87171', fontSize: '0.84rem', margin: '0 0 0.4rem 0' }}>Dai (îți cere):</h4>
+                      <div
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.12)',
+                          padding: '0.6rem',
+                          borderRadius: 8,
+                          border: '1px solid rgba(239, 68, 68, 0.3)'
+                        }}
+                      >
+                        <h4 style={{ color: '#f87171', fontSize: '0.84rem', margin: '0 0 0.4rem 0' }}>
+                          Dai (îți cere):
+                        </h4>
                         {ALL_RESOURCES.filter((r) => incomingOffer.requesting[r] > 0).map((r) => (
                           <div key={r} style={{ fontSize: '0.84rem', fontWeight: 600, marginTop: 2 }}>
                             {RESOURCE_ICONS[r]} {incomingOffer.requesting[r]}x {RESOURCE_LABELS[locale][r]}
@@ -2918,8 +3000,15 @@ export const App: React.FC = () => {
                     </div>
 
                     {!canAfford && (
-                      <div style={{ color: '#f87171', fontSize: '0.8rem', textAlign: 'center', marginBottom: '0.6rem' }}>
-                        ⚠️ Nu ai în mână toate resursele cerute pentru a accepta.
+                      <div
+                        style={{
+                          color: '#f87171',
+                          fontSize: '0.82rem',
+                          textAlign: 'center',
+                          marginBottom: '0.65rem'
+                        }}
+                      >
+                        ⚠️ Nu ai în mână toate resursele cerute pentru a accepta acest schimb.
                       </div>
                     )}
 
@@ -2929,6 +3018,7 @@ export const App: React.FC = () => {
                         className="btn btn-primary"
                         disabled={!canAfford}
                         onClick={() => {
+                          setDismissedTradeOfferIds((prev) => new Set(prev).add(incomingOffer.id));
                           executeAction(viewerId, {
                             type: 'respond_trade',
                             offerId: incomingOffer.id,
@@ -2941,14 +3031,12 @@ export const App: React.FC = () => {
                       <button
                         type="button"
                         className="btn"
-                        onClick={() => {
-                          executeAction(viewerId, {
-                            type: 'respond_trade',
-                            offerId: incomingOffer.id,
-                            response: 'reject',
-                            reason: 'Nu doresc acest schimb'
-                          });
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.15)',
+                          borderColor: 'rgba(239, 68, 68, 0.5)',
+                          color: '#fca5a5'
                         }}
+                        onClick={() => dismissTradeOffer(incomingOffer.id, 'Nu doresc acest schimb')}
                       >
                         ❌ Refuză
                       </button>
@@ -2957,16 +3045,14 @@ export const App: React.FC = () => {
                         className="btn"
                         style={{ borderColor: 'var(--accent-gold)', color: 'var(--accent-gold)' }}
                         onClick={() => {
-                          // Swap resources for counter-offer
-                          setP2pOffer({ ...incomingOffer.requesting });
-                          setP2pRequest({ ...incomingOffer.offering });
-                          executeAction(viewerId, {
-                            type: 'respond_trade',
-                            offerId: incomingOffer.id,
-                            response: 'reject',
-                            reason: 'Propune o contra-ofertă'
-                          });
-                          setActiveModal('trade');
+                          dismissTradeOffer(incomingOffer.id, 'Dorește să negocieze altă combinație');
+                          if (viewerId === gameState.activePlayerId) {
+                            setP2pOffer({ ...incomingOffer.requesting });
+                            setP2pRequest({ ...incomingOffer.offering });
+                            setActiveModal('trade');
+                          } else {
+                            showActionFeedback('Ai transmis refuzul cu cerere de renegociere!');
+                          }
                         }}
                       >
                         🔄 Negociază / Contra-ofertă
@@ -2981,7 +3067,10 @@ export const App: React.FC = () => {
           {/* TRADE PROPOSER STATUS BANNER (Real-time Rejections & Negotiation Feedback) */}
           {(() => {
             const myOpenOffer = gameState.activeTradeOffers.find(
-              (o) => o.fromPlayerId === viewerId && (o.status === 'open' || o.status === 'rejected')
+              (o) =>
+                o.fromPlayerId === viewerId &&
+                (o.status === 'open' || o.status === 'rejected') &&
+                !dismissedTradeOfferIds.has(o.id)
             );
             if (!myOpenOffer) return null;
 
@@ -3025,7 +3114,7 @@ export const App: React.FC = () => {
                     className="btn"
                     style={{ fontSize: '0.76rem', padding: '0.2rem 0.55rem', borderColor: 'var(--accent-gold)', color: 'var(--accent-gold)' }}
                     onClick={() => {
-                      executeAction(viewerId, { type: 'cancel_trade', offerId: myOpenOffer.id });
+                      cancelMyTradeOffer(myOpenOffer.id);
                       setActiveModal('trade');
                     }}
                   >
@@ -3036,7 +3125,7 @@ export const App: React.FC = () => {
                     className="btn"
                     style={{ fontSize: '0.76rem', padding: '0.2rem 0.55rem' }}
                     onClick={() => {
-                      executeAction(viewerId, { type: 'cancel_trade', offerId: myOpenOffer.id });
+                      cancelMyTradeOffer(myOpenOffer.id);
                     }}
                   >
                     ✕ Închide
