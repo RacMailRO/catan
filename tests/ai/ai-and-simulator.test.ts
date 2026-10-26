@@ -99,6 +99,9 @@ describe('Catan AI Opponents, Strategic Analysis, LLM Fallback & Simulator', () 
         { id: 'p3', name: 'AI 3', type: 'ai' }
       ]
     });
+    // This test exercises the LLM participant (p1) specifically, not turn order fairness —
+    // play order is now decided by each player's opening dice roll, so force p1 active here.
+    state.activePlayerId = 'p1';
 
     // 1. Valid LLM proposal
     const validRes = await chooseActionWithLLMOrFallback(state, 'p1', {
@@ -184,6 +187,9 @@ describe('Catan AI Opponents, Strategic Analysis, LLM Fallback & Simulator', () 
         { id: 'e3', name: 'Beg', type: 'ai', aiDifficulty: 'beginner', aiStyle: 'balanced' }
       ]
     });
+    // This checks the Expert AI's decision for e1 specifically, so force it active — play
+    // order is now decided by each player's opening dice roll rather than seat order.
+    g.activePlayerId = 'e1';
     const expDecision = chooseAIAction(g, 'e1', { difficulty: 'expert', maxRollouts: 2 });
     expect(expDecision.decisionRecord.simulationsRun).toBeGreaterThan(0);
   });

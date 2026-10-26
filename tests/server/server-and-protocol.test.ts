@@ -29,6 +29,10 @@ describe('Authoritative LAN/Online Server, Protocol Validation & WebSocket Sync'
         hostName: 'Andrei',
         mode: 'online',
         isPrivate: true,
+        // Play order is now decided by each player's opening dice roll rather than seat
+        // order; this seed is verified to put the host (p1) first, which the rest of this
+        // test's narrative (host acts, then guest, then AI) depends on.
+        seed: 'server-test-seed-0',
         rules: {
           victoryPointsToWin: 12,
           knightStealRule: 'all_adjacent',

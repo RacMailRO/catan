@@ -332,8 +332,10 @@ describe('Catan Core Engine & Replay System', () => {
       state = applyAction(state, pId, getLegalActions(state, pId)[0]!).state;
     }
 
-    // Move to main_actions
+    // Move to main_actions, with p1 as actor — play order is now decided by each player's
+    // opening dice roll rather than seat order, so force it rather than assume p1 is active.
     state.phase = 'main_actions';
+    state.activePlayerId = 'p1';
     const p1 = getPlayerById(state, 'p1')!;
     const p2 = getPlayerById(state, 'p2')!;
     p1.resources = { wood: 6, brick: 2, sheep: 2, wheat: 2, ore: 2 };

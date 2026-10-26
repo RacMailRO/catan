@@ -185,6 +185,9 @@ export interface GameState {
   setupStepIndex: number;
   lastPlacedSettlementVertexId?: string;
   lastDiceRoll?: { die1: number; die2: number; total: number };
+  /** Each player's opening 2d6 roll, highest-first, that decided play order — recorded once
+   * at game creation so the table can see why the order is what it is. */
+  startingOrderRolls?: { playerId: string; die1: number; die2: number; total: number }[];
   bank: ResourceCount;
   devCardDeck: DevCardType[];
   pendingDiscards: Record<string, number>; // playerId -> count to discard

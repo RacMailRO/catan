@@ -175,7 +175,20 @@ export function createGame(options: CreateGameOptions): GameState {
   const deckShuf = shuffleWithPrng(STANDARD_DEV_CARD_DECK, prngState);
   prngState = deckShuf.nextState;
 
-  const playerOrder = players.map((p) => p.id);
+  // Each player opens with a 2d6 roll; highest total starts, matching the physical game's
+  // "roll to see who goes first" step. Exact ties are broken by a further random draw rather
+  // than an actual re-roll loop, which is equivalent in fairness but simpler and bounded.
+  const startingOrderRolls = players.map((p) => {
+    const d1 = nextPrngInt(prngState, 1, 6);
+    prngState = d1.nextState;
+    const d2 = nextPrngInt(prngState, 1, 6);
+    prngState = d2.nextState;
+    const tiebreak = nextPrngInt(prngState, 0, 999_999);
+    prngState = tiebreak.nextState;
+    return { playerId: p.id, die1: d1.value, die2: d2.value, total: d1.value + d2.value, tiebreak: tiebreak.value };
+  });
+  startingOrderRolls.sort((a, b) => b.total - a.total || b.tiebreak - a.tiebreak);
+  const playerOrder = startingOrderRolls.map((r) => r.playerId);
 
   return {
     gameId: options.gameId,
@@ -191,6 +204,12 @@ export function createGame(options: CreateGameOptions): GameState {
     activePlayerId: playerOrder[0]!,
     phase: 'setup_settlement_1',
     setupStepIndex: 0,
+    startingOrderRolls: startingOrderRolls.map(({ playerId, die1, die2, total }) => ({
+      playerId,
+      die1,
+      die2,
+      total
+    })),
     bank: { ...INITIAL_BANK_RESOURCES },
     devCardDeck: deckShuf.items,
     pendingDiscards: {},

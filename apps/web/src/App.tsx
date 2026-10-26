@@ -56,7 +56,14 @@ import {
 
 type ActiveTab = 'lobby' | 'game' | 'replay' | 'benchmark';
 type BuildSelectionMode = 'none' | 'road' | 'settlement' | 'city' | 'knight';
-type GameModalType = 'none' | 'trade' | 'dev_cards' | 'event_log' | 'costs_help' | 'score_bank';
+type GameModalType =
+  | 'none'
+  | 'trade'
+  | 'dev_cards'
+  | 'event_log'
+  | 'costs_help'
+  | 'score_bank'
+  | 'starting_order';
 
 export const App: React.FC = () => {
   const [locale, setLocale] = useState<Locale>('ro');
@@ -487,7 +494,7 @@ export const App: React.FC = () => {
     const rec = new ReplayRecorder(initial, 15);
     setRecorder(rec);
     setBuildMode('none');
-    setActiveModal('none');
+    setActiveModal(initial.startingOrderRolls && initial.startingOrderRolls.length > 1 ? 'starting_order' : 'none');
     setActionError(null);
     setDiceRollAnimKey(`start-${Date.now()}`);
     setGameVersionTick((v) => v + 1);
@@ -1870,6 +1877,68 @@ export const App: React.FC = () => {
             </div>
           )}
 
+          {/* MODAL A: STARTING ORDER — each player's opening 2d6 roll, highest goes first */}
+          {activeModal === 'starting_order' && gameState?.startingOrderRolls && (
+            <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
+              <div className="modal-dialog" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3>🎲 Cine Începe Partida</h3>
+                  <button type="button" className="btn" onClick={() => setActiveModal('none')}>
+                    ✕ Închide
+                  </button>
+                </div>
+                <div className="modal-body">
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                    Fiecare jucător a dat cu zarurile; cel mai mare total începe jocul.
+                  </p>
+                  {gameState.startingOrderRolls.map((roll, idx) => {
+                    const p = getPlayerById(gameState, roll.playerId);
+                    if (!p) return null;
+                    return (
+                      <div
+                        key={roll.playerId}
+                        className="candidate-row"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          borderColor: idx === 0 ? 'var(--accent-gold)' : undefined,
+                          background: idx === 0 ? 'rgba(184, 134, 63, 0.14)' : undefined
+                        }}
+                      >
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span
+                            className="color-dot"
+                            style={{ backgroundColor: p.color }}
+                          />
+                          <strong>
+                            {idx + 1}. {p.name}
+                          </strong>
+                          {idx === 0 && (
+                            <span style={{ color: 'var(--accent-gold-bright)', fontWeight: 700, fontSize: '0.78rem' }}>
+                              Începe primul
+                            </span>
+                          )}
+                        </span>
+                        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700 }}>
+                          {roll.die1} + {roll.die2} = {roll.total}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ width: '100%', marginTop: '0.75rem', justifyContent: 'center' }}
+                    onClick={() => setActiveModal('none')}
+                  >
+                    Să Începem!
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* MODAL B: MARITIME / BANK TRADE & PLAYER-TO-PLAYER TRADE */}
           {activeModal === 'trade' && activePlayerObj && (
             <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
@@ -1953,14 +2022,21 @@ export const App: React.FC = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
                       <div>
                         <strong style={{ fontSize: '0.8rem' }}>Oferi din mână:</strong>
+                        <div style={{ display: 'flex', gap: 4, marginTop: 6, marginBottom: 2 }}>
+                          {ALL_RESOURCES.map((r) => (
+                            <ResourceCardSprite
+                              key={r}
+                              resource={r}
+                              count={activePlayerObj.resources[r]}
+                              locale={locale}
+                              size="xs"
+                            />
+                          ))}
+                        </div>
                         {ALL_RESOURCES.map((r) => (
                           <div key={r} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                             <span style={{ fontSize: '0.8rem' }}>
-                              {RESOURCE_ICONS[r]} {RESOURCE_LABELS[locale][r]}{' '}
-                              <span style={{ color: 'var(--text-muted)' }}>
-                                (ai {activePlayerObj.resources[r]})
-                              </span>
-                              : <strong>{p2pOffer[r]}</strong>
+                              {RESOURCE_ICONS[r]} {RESOURCE_LABELS[locale][r]}: <strong>{p2pOffer[r]}</strong>
                             </span>
                             <div style={{ display: 'flex', gap: 4 }}>
                               <button
@@ -2184,6 +2260,7 @@ export const App: React.FC = () => {
                         key={tId}
                         type="button"
                         className="btn btn-primary"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                         onClick={() =>
                           executeAction(gameState.activePlayerId, {
                             type: 'steal_from_player',
@@ -2191,6 +2268,12 @@ export const App: React.FC = () => {
                           })
                         }
                       >
+                        {tp && (
+                          <span
+                            className="color-dot"
+                            style={{ backgroundColor: tp.color, width: 11, height: 11 }}
+                          />
+                        )}
                         Fură 1 carte de la {tp?.name ?? tId}
                       </button>
                     );
