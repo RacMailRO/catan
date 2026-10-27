@@ -1,9 +1,14 @@
 {
-  "version": "v1.139",
-  "commitCount": 139,
-  "shortHash": "7d5273c",
-  "buildDate": "2026-10-27T17:31:17.047Z",
+  "version": "v1.140",
+  "commitCount": 140,
+  "shortHash": "2cac4d8",
+  "buildDate": "2026-10-27T17:31:41.244Z",
   "releaseNotes": [
+    {
+      "hash": "2cac4d8",
+      "date": "2026-10-27",
+      "message": "Implement participant panel redesign and official 3-step gameplay features (5-6p Special Build, Seafarers ship movement and island VP chits, Fog hex exploration)"
+    },
     {
       "hash": "7d5273c",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "cd7b25b",
       "date": "2026-10-26",
       "message": "chore: bump build version to v1.90"
-    },
-    {
-      "hash": "e5578f2",
-      "date": "2026-10-26",
-      "message": "fix(web): responsive grid layout for join lobby form to prevent input collapse"
     }
   ]
 }
