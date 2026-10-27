@@ -1,9 +1,29 @@
 {
-  "version": "v1.135",
-  "commitCount": 135,
-  "shortHash": "2131d32",
-  "buildDate": "2026-10-27T16:10:02.269Z",
+  "version": "v1.139",
+  "commitCount": 139,
+  "shortHash": "7d5273c",
+  "buildDate": "2026-10-27T17:31:17.047Z",
   "releaseNotes": [
+    {
+      "hash": "7d5273c",
+      "date": "2026-10-27",
+      "message": "feat(online): in-game human confirmation vote for game termination and max concurrent games limit"
+    },
+    {
+      "hash": "5e30940",
+      "date": "2026-10-27",
+      "message": "feat(lobby): display invite code, seat breakdown, and allow stopping waiting lobbies"
+    },
+    {
+      "hash": "d7cc2f8",
+      "date": "2026-10-27",
+      "message": "fix(lobby): remove terminated games immediately from spectator and server lobby list"
+    },
+    {
+      "hash": "bbcd8f4",
+      "date": "2026-10-27",
+      "message": "feat(seafarers): boat orientation with hull facing water, official Pirate and Robber mechanics, dynamic scenario rulebook and hamburger button"
+    },
     {
       "hash": "2131d32",
       "date": "2026-10-27",
@@ -233,26 +253,6 @@
       "hash": "e5578f2",
       "date": "2026-10-26",
       "message": "fix(web): responsive grid layout for join lobby form to prevent input collapse"
-    },
-    {
-      "hash": "512ccca",
-      "date": "2026-10-26",
-      "message": "chore(release): v1.88 metadata"
-    },
-    {
-      "hash": "3f436cc",
-      "date": "2026-10-26",
-      "message": "chore(release): bump version to v1.87"
-    },
-    {
-      "hash": "a76315e",
-      "date": "2026-10-26",
-      "message": "feat(replay): show totalTaken and explanation for play_monopoly in replay and log"
-    },
-    {
-      "hash": "e700e5c",
-      "date": "2026-10-26",
-      "message": "chore(release): v1.85 metadata"
     }
   ]
 }

@@ -23,10 +23,27 @@ export const SMALL_GROUP_PRESET: GameRulesConfig = {
 };
 
 export function createRulesConfig(overrides?: Partial<GameRulesConfig>): GameRulesConfig {
-  return {
+  const scenario = overrides?.boardScenario ?? STANDARD_RULES.boardScenario;
+  let defaultVp = 10;
+  if (scenario === 'seafarers_shores') {
+    defaultVp = 14;
+  } else if (scenario === 'seafarers_islands') {
+    defaultVp = 13;
+  } else if (scenario === 'seafarers_fog') {
+    defaultVp = 12;
+  }
+
+  const result: GameRulesConfig = {
     ...STANDARD_RULES,
+    victoryPointsToWin: defaultVp,
     ...overrides
   };
+
+  if (overrides && overrides.victoryPointsToWin === undefined) {
+    result.victoryPointsToWin = defaultVp;
+  }
+
+  return result;
 }
 
 export const INITIAL_BANK_RESOURCES: ResourceCount = {

@@ -105,12 +105,20 @@ export function runSimulatedGame(options: SimulationOptions): SimulationResult {
     }
 
     // Guard against infinite trading/action loops in a single turn
-    if (actionsInCurrentTurn > 18 && curState.phase === 'main_actions') {
-      recorder.recordAndApply(
-        curState.activePlayerId,
-        { type: 'end_turn' },
-        { nowMs: 1000000 + eventsCount * 100 }
-      );
+    if (actionsInCurrentTurn > 18 && (curState.phase === 'main_actions' || curState.phase === 'special_building')) {
+      if (curState.phase === 'special_building') {
+        recorder.recordAndApply(
+          curState.activePlayerId,
+          { type: 'pass_special_building' },
+          { nowMs: 1000000 + eventsCount * 100 }
+        );
+      } else {
+        recorder.recordAndApply(
+          curState.activePlayerId,
+          { type: 'end_turn' },
+          { nowMs: 1000000 + eventsCount * 100 }
+        );
+      }
       eventsCount++;
       actionsInCurrentTurn = 0;
       continue;

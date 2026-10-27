@@ -605,6 +605,36 @@ export function evaluateCandidateAction(
       };
     }
 
+    case 'move_ship': {
+      const edge = view.board.edges[action.toEdgeId];
+      if (!edge) {
+        return { action, score: -50, factors: {}, explanation: 'Muchie destinație invalidă' };
+      }
+      let bestReachableSpot = 0;
+      for (const vId of [edge.v1, edge.v2]) {
+        if (isVertexAvailableForSettlement(view.board, vId)) {
+          const spotVal = evaluateVertexForSettlement(view, vId, playerId, weights).total;
+          bestReachableSpot = Math.max(bestReachableSpot, spotVal * 0.7);
+        }
+      }
+      const score = Number((bestReachableSpot + weights.expansionPotential * 2.2).toFixed(3));
+      return {
+        action,
+        score,
+        factors: { expansion: score },
+        explanation: 'Repoziționează nava pentru o rută strategică'
+      };
+    }
+
+    case 'pass_special_building': {
+      return {
+        action,
+        score: 3.0,
+        factors: { passSpecialBuild: 3.0 },
+        explanation: 'Încheie rândul în faza specială de construcție'
+      };
+    }
+
     case 'end_turn': {
       return {
         action,

@@ -271,4 +271,185 @@ describe('Catan Seafarers (Navigatori) & Custom Map Scenarios', () => {
     expect(res2.state.board.robberHexId).toBe(landHex.id);
     expect(res2.state.board.pirateHexId).toBe(otherSeaHex.id);
   });
+
+  it('implements the official Special Building Phase for 5-6 player expansion', () => {
+    const game = createGame({
+      gameId: 'test-5p-special-build',
+      seed: 'seed-5p',
+      rules: createRulesConfig({ boardScenario: 'expansion' }),
+      participants: [
+        { id: 'p1', name: 'P1', type: 'human' },
+        { id: 'p2', name: 'P2', type: 'human' },
+        { id: 'p3', name: 'P3', type: 'human' },
+        { id: 'p4', name: 'P4', type: 'human' },
+        { id: 'p5', name: 'P5', type: 'human' }
+      ]
+    });
+
+    game.phase = 'main_actions';
+    game.turn = 1;
+    game.activePlayerId = 'p1';
+    game.playerOrder = ['p1', 'p2', 'p3', 'p4', 'p5'];
+
+    // When P1 ends turn in 5-6 player expansion, game enters special_building phase
+    const res1 = applyAction(game, 'p1', { type: 'end_turn' });
+    expect(res1.state.phase).toBe('special_building');
+    expect(res1.state.specialBuildingQueue).toEqual(['p2', 'p3', 'p4', 'p5']);
+    expect(res1.state.activePlayerId).toBe('p2');
+
+    // In special_building, P2 has building actions + pass_special_building, but no trading or end_turn
+    const p2Actions = getLegalActions(res1.state, 'p2');
+    expect(p2Actions.some((a) => a.type === 'pass_special_building')).toBe(true);
+    expect(p2Actions.some((a) => a.type === 'end_turn')).toBe(false);
+    expect(p2Actions.some((a) => a.type === 'trade_bank')).toBe(false);
+
+    // Other players cannot act while P2 is in special_building
+    expect(validateAction(res1.state, 'p3', { type: 'pass_special_building' }).valid).toBe(false);
+
+    // P2 passes
+    const res2 = applyAction(res1.state, 'p2', { type: 'pass_special_building' });
+    expect(res2.state.phase).toBe('special_building');
+    expect(res2.state.activePlayerId).toBe('p3');
+
+    // P3, P4, P5 pass in sequence
+    const res3 = applyAction(res2.state, 'p3', { type: 'pass_special_building' });
+    const res4 = applyAction(res3.state, 'p4', { type: 'pass_special_building' });
+    const res5 = applyAction(res4.state, 'p5', { type: 'pass_special_building' });
+
+    // When queue finishes, regular turn advances to P2 (clockwise next player)
+    expect(res5.state.phase).toBe('turn_start');
+    expect(res5.state.activePlayerId).toBe('p2');
+    expect(res5.state.turn).toBe(2);
+  });
+
+  it('implements moving ships (move_ship) with official rules and constraints', () => {
+    const game = createGame({
+      gameId: 'test-move-ship',
+      seed: 'seed-move-ship',
+      rules: createRulesConfig({ boardScenario: 'seafarers_shores' }),
+      participants: [
+        { id: 'p1', name: 'Alice', type: 'human' },
+        { id: 'p2', name: 'Bob', type: 'human' }
+      ]
+    });
+
+    game.phase = 'main_actions';
+    game.turn = 2; // turn 2 so ship built on turn 1 can move
+    game.activePlayerId = 'p1';
+
+    // Find a coastal edge touching land and sea
+    const coastalEdge = Object.values(game.board.edges).find((e) =>
+      e.adjacentHexIds.some((hId) => game.board.hexes[hId]!.terrain === 'sea') &&
+      e.adjacentHexIds.some((hId) => game.board.hexes[hId]!.terrain !== 'sea' && game.board.hexes[hId]!.terrain !== 'fog')
+    )!;
+
+    // Place settlement at v1 and ship at coastalEdge (turn 1)
+    game.board.buildings[coastalEdge.v1] = { ownerId: 'p1', type: 'settlement', vertexId: coastalEdge.v1 };
+    game.board.ships[coastalEdge.id] = { ownerId: 'p1', edgeId: coastalEdge.id, builtAtTurn: 1 };
+
+    const legalActions = getLegalActions(game, 'p1');
+    const moveActions = legalActions.filter((a) => a.type === 'move_ship');
+    expect(moveActions.length).toBeGreaterThan(0);
+
+    const firstMove = moveActions[0] as { type: 'move_ship'; fromEdgeId: string; toEdgeId: string };
+    const res = applyAction(game, 'p1', firstMove);
+    expect(res.state.board.ships[firstMove.fromEdgeId]).toBeUndefined();
+    expect(res.state.board.ships[firstMove.toEdgeId]).toBeDefined();
+    expect(res.state.board.ships[firstMove.toEdgeId]!.ownerId).toBe('p1');
+    expect(res.state.players[0]!.hasMovedShipThisTurn).toBe(true);
+
+    // Cannot move a second time in the same turn
+    const followUpLegal = getLegalActions(res.state, 'p1');
+    expect(followUpLegal.some((a) => a.type === 'move_ship')).toBe(false);
+  });
+
+  it('awards +2 Special Victory Points (Catan Chits) for foreign island settlements and sets scenario VP target', () => {
+    // Heading for New Shores defaults to 14 VP to win
+    const configShores = createRulesConfig({ boardScenario: 'seafarers_shores' });
+    expect(configShores.victoryPointsToWin).toBe(14);
+
+    // The Four Islands defaults to 13 VP to win
+    const configIslands = createRulesConfig({ boardScenario: 'seafarers_islands' });
+    expect(configIslands.victoryPointsToWin).toBe(13);
+
+    // The Fog Island defaults to 12 VP to win
+    const configFog = createRulesConfig({ boardScenario: 'seafarers_fog' });
+    expect(configFog.victoryPointsToWin).toBe(12);
+
+    const game = createGame({
+      gameId: 'test-island-vp',
+      seed: 'seed-isl-vp',
+      rules: configShores,
+      participants: [
+        { id: 'p1', name: 'Alice', type: 'human' },
+        { id: 'p2', name: 'Bob', type: 'human' }
+      ]
+    });
+
+    game.phase = 'main_actions';
+    game.turn = 2;
+    game.activePlayerId = 'p1';
+
+    // In Heading for New Shores: Island 0 is Main Island
+    game.players[0]!.settledIslands = ['island_0'];
+    game.players[0]!.resources = { wood: 2, brick: 2, sheep: 2, wheat: 2, ore: 0 };
+
+    // Find a small land hex (r <= -2)
+    const smallLandHex = Object.values(game.board.hexes).find((h) =>
+      h.terrain !== 'sea' && h.terrain !== 'fog' && (h.r === -3 || h.r === -2)
+    )!;
+
+    // Find vertex touching smallLandHex
+    const smallVert = Object.values(game.board.vertices).find((v) =>
+      v.adjacentHexIds.includes(smallLandHex.id)
+    )!;
+
+    // Connect a ship to smallVert
+    const adjEdge = smallVert.adjacentEdgeIds[0]!;
+    game.board.ships[adjEdge] = { ownerId: 'p1', edgeId: adjEdge, builtAtTurn: 1 };
+
+    const res = applyAction(game, 'p1', { type: 'build_settlement', vertexId: smallVert.id });
+    // Received +2 Special VP (Catan Chits) for first settlement on foreign island!
+    expect(res.state.players[0]!.specialVictoryPoints).toBe(2);
+    expect(res.event.details?.specialVictoryPointsAwarded).toBe(2);
+  });
+
+  it('explores unexplored fog hexes when roads or ships connect to them in The Fog Island', () => {
+    const game = createGame({
+      gameId: 'test-fog-explore',
+      seed: 'seed-fog',
+      rules: createRulesConfig({ boardScenario: 'seafarers_fog' }),
+      participants: [
+        { id: 'p1', name: 'Alice', type: 'human' },
+        { id: 'p2', name: 'Bob', type: 'human' }
+      ]
+    });
+
+    expect(game.fogHexesRemaining).toBeDefined();
+    expect(game.fogHexesRemaining!.length).toBeGreaterThan(0);
+
+    // Find a fog hex and an adjacent edge
+    const fogHex = Object.values(game.board.hexes).find((h) => h.terrain === 'fog')!;
+    const adjacentEdge = Object.values(game.board.edges).find((e) =>
+      e.adjacentHexIds.includes(fogHex.id)
+    )!;
+
+    // Connect player network by placing settlement at one endpoint of adjacentEdge
+    game.board.buildings[adjacentEdge.v1] = { ownerId: 'p1', type: 'settlement', vertexId: adjacentEdge.v1 };
+
+    const initialFogCount = game.fogHexesRemaining!.length;
+
+    game.phase = 'main_actions';
+    game.turn = 2;
+    game.activePlayerId = 'p1';
+    game.players[0]!.resources.wood = 2;
+    game.players[0]!.resources.sheep = 2;
+
+    // Building a ship touching the fog hex triggers exploration
+    const res = applyAction(game, 'p1', { type: 'build_ship', edgeId: adjacentEdge.id });
+
+    // The fog hex was revealed!
+    expect(res.state.board.hexes[fogHex.id]!.terrain).not.toBe('fog');
+    expect(res.state.fogHexesRemaining!.length).toBe(initialFogCount - 1);
+  });
 });

@@ -149,7 +149,7 @@ function savePlayerName(name: string): void {
   }
 }
 
-type BuildSelectionMode = 'none' | 'road' | 'ship' | 'settlement' | 'city' | 'knight';
+type BuildSelectionMode = 'none' | 'road' | 'ship' | 'settlement' | 'city' | 'knight' | 'relocate_ship';
 type GameModalType =
   | 'none'
   | 'trade'
@@ -188,6 +188,8 @@ function getExplicitTurnStatusDescription(
         return 'fură o resursă de la un adversar adiacent';
       case 'road_building_card':
         return 'plasează 2 drumuri gratuite (carte Progres)';
+      case 'special_building':
+        return 'faza specială de construcție (5-6 jucători)';
       case 'main_actions':
         if (openOffer && openOffer.status === 'open') {
           return 'negociază o ofertă comercială de schimb';
@@ -218,6 +220,8 @@ function getExplicitTurnStatusDescription(
       return 'stealing a resource';
     case 'road_building_card':
       return 'placing 2 free roads';
+    case 'special_building':
+      return 'special building phase (5-6 players)';
     case 'main_actions':
       if (openOffer && openOffer.status === 'open') {
         return 'negotiating a trade offer';
@@ -320,6 +324,19 @@ export const App: React.FC = () => {
   const t = TRANSLATIONS[locale];
 
   // Lobby Configuration State
+  const [colorPickerIdx, setColorPickerIdx] = useState<number | null>(null);
+  const handleSwapColor = (targetIdx: number, newColor: PlayerColor) => {
+    const oldColor = participants[targetIdx].color;
+    if (oldColor === newColor) return;
+    const next = [...participants];
+    const otherIdx = next.findIndex((p, i) => i !== targetIdx && p.color === newColor);
+    if (otherIdx !== -1) {
+      next[otherIdx] = { ...next[otherIdx], color: oldColor };
+    }
+    next[targetIdx] = { ...next[targetIdx], color: newColor };
+    setParticipants(next);
+  };
+
   const [participants, setParticipants] = useState<ParticipantConfig[]>([
     { id: 'p1', name: loadSavedPlayerName() ?? 'Jucător 1 (Om)', type: 'human', color: 'red' },
     {
@@ -375,6 +392,7 @@ export const App: React.FC = () => {
   const [recorder, setRecorder] = useState<ReplayRecorder | null>(null);
   const [gameVersionTick, setGameVersionTick] = useState<number>(0);
   const [buildMode, setBuildMode] = useState<BuildSelectionMode>('none');
+  const [selectedShipEdgeId, setSelectedShipEdgeId] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<GameModalType>('none');
   const [autoPlayAi, setAutoPlayAi] = useState<boolean>(true);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -1559,6 +1577,16 @@ export const App: React.FC = () => {
         eSet.add(act.edgeId);
       } else if (buildMode === 'ship' && act.type === 'build_ship') {
         eSet.add(act.edgeId);
+      } else if (buildMode === 'relocate_ship') {
+        if (!selectedShipEdgeId) {
+          if (act.type === 'move_ship') {
+            eSet.add(act.fromEdgeId);
+          }
+        } else {
+          if (act.type === 'move_ship' && act.fromEdgeId === selectedShipEdgeId) {
+            eSet.add(act.toEdgeId);
+          }
+        }
       } else if (buildMode === 'settlement' && act.type === 'build_settlement') {
         vSet.add(act.vertexId);
       } else if (buildMode === 'city' && act.type === 'build_city') {
@@ -1602,6 +1630,41 @@ export const App: React.FC = () => {
       executeAction(pId, { type: 'build_road', edgeId });
     } else if (buildMode === 'ship') {
       executeAction(pId, { type: 'build_ship', edgeId });
+    } else if (buildMode === 'relocate_ship') {
+      if (!selectedShipEdgeId) {
+        const isFromEdge = legalActionsForActive.some(
+          (a) => a.type === 'move_ship' && a.fromEdgeId === edgeId
+        );
+        if (isFromEdge) {
+          setSelectedShipEdgeId(edgeId);
+        }
+      } else {
+        const isValidDest = legalActionsForActive.some(
+          (a) => a.type === 'move_ship' && a.fromEdgeId === selectedShipEdgeId && a.toEdgeId === edgeId
+        );
+        if (isValidDest) {
+          executeAction(pId, { type: 'move_ship', fromEdgeId: selectedShipEdgeId, toEdgeId: edgeId });
+          setBuildMode('none');
+          setSelectedShipEdgeId(null);
+        } else {
+          const isOtherFromEdge = legalActionsForActive.some(
+            (a) => a.type === 'move_ship' && a.fromEdgeId === edgeId
+          );
+          if (isOtherFromEdge) {
+            setSelectedShipEdgeId(edgeId);
+          } else {
+            setSelectedShipEdgeId(null);
+          }
+        }
+      }
+    } else if (gameState.phase === 'main_actions' && buildMode === 'none') {
+      const isMovableShip = legalActionsForActive.some(
+        (a) => a.type === 'move_ship' && a.fromEdgeId === edgeId
+      );
+      if (isMovableShip) {
+        setBuildMode('relocate_ship');
+        setSelectedShipEdgeId(edgeId);
+      }
     }
   };
 
@@ -2267,125 +2330,183 @@ export const App: React.FC = () => {
             )}
 
             <div className="panel-scroll">
-              {participants.map((p, idx) => (
-                <div key={p.id} className="seat-card">
-                  {/* Row 1: Color dot + Name + Delete button */}
-                  <div className="seat-row-main">
-                    <span className="color-dot" style={{ backgroundColor: p.color ?? PLAYER_COLORS[idx] }} />
-                    <input
-                      type="text"
-                      value={p.name}
-                      onChange={(e) => {
-                        const next = [...participants];
-                        next[idx] = { ...p, name: e.target.value };
-                        setParticipants(next);
-                        if (idx === 0) savePlayerName(e.target.value);
-                      }}
-                      style={{ flex: 1, minWidth: 0, width: '100%' }}
-                    />
-                    {participants.length > 1 && (
-                      <button
-                        type="button"
-                        className="btn btn-danger"
-                        style={{ padding: '0.3rem 0.6rem' }}
-                        onClick={() => setParticipants(participants.filter((_, i) => i !== idx))}
-                      >
-                        ✕
-                      </button>
+              {participants.map((p, idx) => {
+                const currentColor = p.color ?? PLAYER_COLORS[idx % PLAYER_COLORS.length]!;
+                const activeColors = maxPlayers > 4 ? PLAYER_COLORS : PLAYER_COLORS.slice(0, 4);
+
+                return (
+                  <div
+                    key={p.id}
+                    className="seat-card"
+                    style={{ borderLeftColor: currentColor }}
+                  >
+                    {/* Top Row: Interactive Color Dot (Swap) + Name input + Type Toggle (Om / AI) + Delete */}
+                    <div className="seat-row-main" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      {/* Interactive Color Dot */}
+                      <div style={{ position: 'relative', flexShrink: 0 }}>
+                        <button
+                          type="button"
+                          className="color-dot-btn"
+                          title={locale === 'ro' ? 'Click pentru a alege culoarea (schimbă automat culoarea cu celălalt jucător)' : 'Click to choose color (swaps with existing player)'}
+                          style={{
+                            backgroundColor: currentColor,
+                            borderColor: colorPickerIdx === idx ? '#fff' : '#e9dfc4'
+                          }}
+                          onClick={() => setColorPickerIdx(colorPickerIdx === idx ? null : idx)}
+                        />
+                        {colorPickerIdx === idx && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: '120%',
+                              left: 0,
+                              zIndex: 60,
+                              display: 'flex',
+                              gap: 6,
+                              padding: '6px 8px',
+                              background: 'var(--bg-card)',
+                              border: '1px solid var(--border-color)',
+                              borderRadius: 'var(--radius-md)',
+                              boxShadow: '0 4px 14px rgba(0,0,0,0.6)'
+                            }}
+                          >
+                            {activeColors.map((c) => (
+                              <button
+                                key={c}
+                                type="button"
+                                title={c.toUpperCase()}
+                                style={{
+                                  backgroundColor: c,
+                                  width: 22,
+                                  height: 22,
+                                  borderRadius: '50%',
+                                  border: currentColor === c ? '2px solid #fff' : '1px solid rgba(0,0,0,0.4)',
+                                  transform: currentColor === c ? 'scale(1.2)' : 'none',
+                                  cursor: 'pointer',
+                                  padding: 0
+                                }}
+                                onClick={() => {
+                                  handleSwapColor(idx, c);
+                                  setColorPickerIdx(null);
+                                }}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Name input */}
+                      <input
+                        type="text"
+                        value={p.name}
+                        placeholder={p.type === 'human' ? 'Nume' : 'Nume Bot'}
+                        onChange={(e) => {
+                          const next = [...participants];
+                          next[idx] = { ...p, name: e.target.value };
+                          setParticipants(next);
+                          if (idx === 0) savePlayerName(e.target.value);
+                        }}
+                        style={{
+                          flex: '1 1 120px',
+                          minWidth: 90,
+                          fontSize: '0.86rem',
+                          padding: '0.35rem 0.55rem'
+                        }}
+                      />
+
+                      {/* Om / AI Segmented Toggle Pills */}
+                      <div className="participant-type-toggle">
+                        <button
+                          type="button"
+                          className={`toggle-pill ${p.type === 'human' ? 'active' : ''}`}
+                          onClick={() => {
+                            const next = [...participants];
+                            next[idx] = { ...p, type: 'human' };
+                            setParticipants(next);
+                          }}
+                        >
+                          👤 {locale === 'ro' ? 'Om' : 'Human'}
+                        </button>
+                        <button
+                          type="button"
+                          className={`toggle-pill ${p.type !== 'human' ? 'active' : ''}`}
+                          onClick={() => {
+                            const next = [...participants];
+                            next[idx] = {
+                              ...p,
+                              type: 'ai',
+                              aiDifficulty: p.aiDifficulty ?? 'medium',
+                              aiStyle: p.aiStyle ?? 'balanced'
+                            };
+                            setParticipants(next);
+                          }}
+                        >
+                          🤖 AI
+                        </button>
+                      </div>
+
+                      {/* Delete Seat Button */}
+                      {participants.length > 1 && (
+                        <button
+                          type="button"
+                          className="btn btn-danger"
+                          style={{ padding: '0.3rem 0.55rem', fontSize: '0.8rem', flexShrink: 0 }}
+                          title={locale === 'ro' ? 'Elimină acest loc' : 'Remove seat'}
+                          onClick={() => setParticipants(participants.filter((_, i) => i !== idx))}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    {/* AI Configuration Row (only when AI) */}
+                    {(p.type === 'ai' || p.type === 'llm') && (
+                      <div className="seat-row-ai" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: 4 }}>
+                        <div className="form-field" style={{ margin: 0 }}>
+                          <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: 2 }}>
+                            {locale === 'ro' ? 'Dificultate' : 'Difficulty'}
+                          </label>
+                          <select
+                            value={p.aiDifficulty ?? 'medium'}
+                            style={{ fontSize: '0.82rem', padding: '0.25rem 0.45rem' }}
+                            onChange={(e) => {
+                              const next = [...participants];
+                              next[idx] = { ...p, aiDifficulty: e.target.value as AIDifficulty };
+                              setParticipants(next);
+                            }}
+                          >
+                            <option value="beginner">{locale === 'ro' ? 'Începător' : 'Beginner'}</option>
+                            <option value="medium">{locale === 'ro' ? 'Mediu' : 'Medium'}</option>
+                            <option value="advanced">{locale === 'ro' ? 'Avansat' : 'Advanced'}</option>
+                            <option value="expert">{locale === 'ro' ? 'Expert' : 'Expert'}</option>
+                          </select>
+                        </div>
+                        <div className="form-field" style={{ margin: 0 }}>
+                          <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: 2 }}>
+                            {locale === 'ro' ? 'Stil Strategic' : 'Strategy Style'}
+                          </label>
+                          <select
+                            value={p.aiStyle ?? 'balanced'}
+                            style={{ fontSize: '0.82rem', padding: '0.25rem 0.45rem' }}
+                            onChange={(e) => {
+                              const next = [...participants];
+                              next[idx] = { ...p, aiStyle: e.target.value as AIStrategyStyle };
+                              setParticipants(next);
+                            }}
+                          >
+                            <option value="balanced">{locale === 'ro' ? 'Echilibrat' : 'Balanced'}</option>
+                            <option value="expansion">{locale === 'ro' ? 'Expansiune' : 'Expansion'}</option>
+                            <option value="development">{locale === 'ro' ? 'Dezvoltare' : 'Development'}</option>
+                            <option value="commercial">{locale === 'ro' ? 'Comercial' : 'Commercial'}</option>
+                            <option value="competitive">{locale === 'ro' ? 'Competitiv' : 'Competitive'}</option>
+                            <option value="adaptive">{locale === 'ro' ? 'Adaptiv' : 'Adaptive'}</option>
+                          </select>
+                        </div>
+                      </div>
                     )}
                   </div>
-
-                  {/* Row 2: Type (Human/AI) + Color Selection */}
-                  <div className="seat-row-options">
-                    <select
-                      value={p.type}
-                      onChange={(e) => {
-                        const newType = e.target.value as ParticipantType;
-                        const next = [...participants];
-                        next[idx] = {
-                          ...p,
-                          type: newType,
-                          aiDifficulty: p.aiDifficulty ?? 'medium',
-                          aiStyle: p.aiStyle ?? 'balanced'
-                        };
-                        setParticipants(next);
-                      }}
-                    >
-                      {(['human', 'ai', 'llm', 'passive'] as ParticipantType[]).map((pt) => (
-                        <option key={pt} value={pt}>
-                          {PARTICIPANT_TYPE_LABELS[locale][pt]}
-                        </option>
-                      ))}
-                    </select>
-
-                    <select
-                      value={p.color ?? PLAYER_COLORS[idx]}
-                      onChange={(e) => {
-                        const next = [...participants];
-                        next[idx] = { ...p, color: e.target.value as PlayerColor };
-                        setParticipants(next);
-                      }}
-                    >
-                      {PLAYER_COLORS.map((c) => (
-                        <option key={c} value={c}>
-                          {c.toUpperCase()}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Row 3 (if AI): Difficulty & Strategy Style */}
-                  {(p.type === 'ai' || p.type === 'llm') && (
-                    <div className="seat-row-ai">
-                      <div className="form-field">
-                        <label>{locale === 'ro' ? 'Dificultate AI' : 'AI Difficulty'}</label>
-                        <select
-                          value={p.aiDifficulty ?? 'medium'}
-                          onChange={(e) => {
-                            const next = [...participants];
-                            next[idx] = { ...p, aiDifficulty: e.target.value as AIDifficulty };
-                            setParticipants(next);
-                          }}
-                        >
-                          {(['beginner', 'medium', 'advanced', 'expert'] as AIDifficulty[]).map(
-                            (diff) => (
-                              <option key={diff} value={diff}>
-                                {AI_DIFFICULTY_LABELS[locale][diff]}
-                              </option>
-                            )
-                          )}
-                        </select>
-                      </div>
-                      <div className="form-field">
-                        <label>{locale === 'ro' ? 'Stil Strategic AI' : 'AI Strategy Style'}</label>
-                        <select
-                          value={p.aiStyle ?? 'balanced'}
-                          onChange={(e) => {
-                            const next = [...participants];
-                            next[idx] = { ...p, aiStyle: e.target.value as AIStrategyStyle };
-                            setParticipants(next);
-                          }}
-                        >
-                          {(
-                            [
-                              'balanced',
-                              'expansion',
-                              'development',
-                              'commercial',
-                              'competitive',
-                              'adaptive'
-                            ] as AIStrategyStyle[]
-                          ).map((st) => (
-                            <option key={st} value={st}>
-                              {AI_STYLE_LABELS[locale][st]}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Unified Start Buttons & Share Banner — online is the only way to actually play
@@ -2723,6 +2844,22 @@ export const App: React.FC = () => {
                         </span>
                         <span style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>
                           {p.totalScore !== undefined ? `${p.totalScore} VP` : `${p.publicScore} VP`}
+                          {!!p.specialVictoryPoints && p.specialVictoryPoints > 0 && (
+                            <span
+                              style={{
+                                marginLeft: 4,
+                                fontSize: '0.68rem',
+                                background: 'rgba(234, 179, 8, 0.2)',
+                                color: '#eab308',
+                                padding: '1px 5px',
+                                borderRadius: 4,
+                                border: '1px solid rgba(234, 179, 8, 0.4)'
+                              }}
+                              title={locale === 'ro' ? `+${p.specialVictoryPoints} Puncte Speciale de Victorie (Catan Chits / Insule)` : `+${p.specialVictoryPoints} Special VP (Catan Chits)`}
+                            >
+                              +{p.specialVictoryPoints}🪙
+                            </span>
+                          )}
                         </span>
                       </div>
 
@@ -3016,8 +3153,19 @@ export const App: React.FC = () => {
                     </button>
                   )}
 
-                  {gameState.phase === 'main_actions' && isHumanTurn && activePlayerObj && (
+                  {(gameState.phase === 'main_actions' || gameState.phase === 'special_building') && isHumanTurn && activePlayerObj && (
                     <>
+                      {gameState.phase === 'special_building' && (
+                        <button
+                          type="button"
+                          className="btn btn-warning"
+                          style={{ fontWeight: 700 }}
+                          onClick={() => executeAction(activePlayerObj.id, { type: 'pass_special_building' })}
+                          title={locale === 'ro' ? 'Încheie rândul de construcție specială' : 'Finish special building turn'}
+                        >
+                          ⏭️ {locale === 'ro' ? 'Pas Fază Specială' : 'Pass Special Build'}
+                        </button>
+                      )}
                       <button
                         type="button"
                         className={`btn ${buildMode === 'road' ? 'btn-primary' : ''}`}
@@ -3041,6 +3189,19 @@ export const App: React.FC = () => {
                       >
                         ⛵ {locale === 'ro' ? 'Corabie' : 'Ship'}
                       </button>
+                      {legalActionsForActive.some((a) => a.type === 'move_ship') && (
+                        <button
+                          type="button"
+                          className={`btn ${buildMode === 'relocate_ship' ? 'btn-primary' : ''}`}
+                          onClick={() => {
+                            setBuildMode((m) => (m === 'relocate_ship' ? 'none' : 'relocate_ship'));
+                            setSelectedShipEdgeId(null);
+                          }}
+                          title={locale === 'ro' ? 'Mută o corabie de la capătul liber (1/tură gratuit)' : 'Relocate open ship (1/turn free)'}
+                        >
+                          🧭 {locale === 'ro' ? (selectedShipEdgeId ? 'Alege Destinație' : 'Mută Corabie') : (selectedShipEdgeId ? 'Choose Dest' : 'Move Ship')}
+                        </button>
+                      )}
                       {/* Port Shortcut: if player has wood port and >= 2 wood, show quick conversion button */}
                       {isHumanTurn && activePlayerObj && activePlayerObj.resources.wood >= 2 && activePlayerObj.resources.brick === 0 && (() => {
                         const wRatio = getPlayerBankTradeRatio(gameState.board, activePlayerObj.id, 'wood');
@@ -3103,13 +3264,15 @@ export const App: React.FC = () => {
                         🃏 {t.buyDevCard}
                       </button>
 
-                      <button
-                        type="button"
-                        className="btn"
-                        onClick={() => setActiveModal('trade')}
-                      >
-                        ⚓ Comerț
-                      </button>
+                      {gameState.phase === 'main_actions' && (
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => setActiveModal('trade')}
+                        >
+                          ⚓ Comerț
+                        </button>
+                      )}
                     </>
                   )}
 

@@ -119,6 +119,12 @@ export interface Road {
   edgeId: string;
 }
 
+export interface Ship {
+  ownerId: string;
+  edgeId: string;
+  builtAtTurn?: number;
+}
+
 export interface BoardState {
   hexes: Record<string, HexTile>;
   vertices: Record<string, Vertex>;
@@ -126,6 +132,7 @@ export interface BoardState {
   harbors: Harbor[];
   buildings: Record<string, Building>; // key: vertexId
   roads: Record<string, Road>; // key: edgeId
+  ships?: Record<string, Ship>; // key: edgeId
   robberHexId: string;
   pirateHexId?: string;
 }
@@ -152,6 +159,9 @@ export interface PlayerState {
   hasPlayedDevCardThisTurn: boolean;
   knightsPlayed: number;
   longestRoadLength: number;
+  specialVictoryPoints?: number;
+  hasMovedShipThisTurn?: boolean;
+  settledIslands?: string[];
   remainingPieces: {
     roads: number;
     settlements: number;
@@ -170,6 +180,7 @@ export type TurnPhase =
   | 'steal_resource'
   | 'road_building_card'
   | 'main_actions'
+  | 'special_building'
   | 'game_over';
 
 export interface TradeOffer {
@@ -213,6 +224,9 @@ export interface GameState {
     eligibleTargetIds: string[];
   };
   freeRoadsRemaining: number;
+  specialBuildingQueue?: string[];
+  specialBuildingNextPlayerId?: string;
+  fogHexesRemaining?: Array<{ terrain: TerrainType; token: number | null }>;
   activeTradeOffers: TradeOffer[];
   longestRoadOwnerId: string | null;
   largestArmyOwnerId: string | null;
@@ -237,6 +251,7 @@ export interface PublicPlayerInfo {
   hasPlayedDevCardThisTurn: boolean;
   knightsPlayed: number;
   longestRoadLength: number;
+  specialVictoryPoints?: number;
   publicScore: number;
   totalScore?: number; // only populated for the viewing player or at game_over
   remainingPieces: {
@@ -263,6 +278,8 @@ export interface PlayerView {
   pendingDiscards: Record<string, number>;
   robberEligibleTargetIds?: string[];
   freeRoadsRemaining: number;
+  specialBuildingQueue?: string[];
+  fogHexesRemaining?: Array<{ terrain: TerrainType; token: number | null }>;
   activeTradeOffers: TradeOffer[];
   longestRoadOwnerId: string | null;
   largestArmyOwnerId: string | null;
@@ -279,6 +296,9 @@ export type GameAction =
   | { type: 'build_road'; edgeId: string }
   | { type: 'build_settlement'; vertexId: string }
   | { type: 'build_city'; vertexId: string }
+  | { type: 'build_ship'; edgeId: string }
+  | { type: 'move_ship'; fromEdgeId: string; toEdgeId: string }
+  | { type: 'pass_special_building' }
   | { type: 'buy_dev_card' }
   | { type: 'play_knight'; hexId: string; targetPlayerId?: string }
   | { type: 'play_road_building' }

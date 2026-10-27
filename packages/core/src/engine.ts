@@ -167,7 +167,10 @@ export function createGame(options: CreateGameOptions): GameState {
       hasPlayedDevCardThisTurn: false,
       knightsPlayed: 0,
       longestRoadLength: 0,
-      remainingPieces: { ...INITIAL_PLAYER_PIECES }
+      remainingPieces: { ...INITIAL_PLAYER_PIECES },
+      specialVictoryPoints: 0,
+      settledIslands: [],
+      hasMovedShipThisTurn: false
     };
   });
 
@@ -191,6 +194,28 @@ export function createGame(options: CreateGameOptions): GameState {
   });
   startingOrderRolls.sort((a, b) => b.total - a.total || b.tiebreak - a.tiebreak);
   const playerOrder = startingOrderRolls.map((r) => r.playerId);
+
+  let fogHexesRemaining: Array<{ terrain: TerrainType; token: number | null }> | undefined = undefined;
+  if (rules.boardScenario === 'seafarers_fog') {
+    const rawFogStack: Array<{ terrain: TerrainType; token: number | null }> = [
+      { terrain: 'sea', token: null },
+      { terrain: 'sea', token: null },
+      { terrain: 'gold_field', token: 3 },
+      { terrain: 'gold_field', token: 4 },
+      { terrain: 'fields', token: 5 },
+      { terrain: 'fields', token: 6 },
+      { terrain: 'hills', token: 8 },
+      { terrain: 'hills', token: 9 },
+      { terrain: 'mountains', token: 10 },
+      { terrain: 'mountains', token: 11 },
+      { terrain: 'pasture', token: 12 },
+      { terrain: 'forest', token: 3 },
+      { terrain: 'forest', token: 8 }
+    ];
+    const shuf = shuffleWithPrng(rawFogStack, prngState);
+    prngState = shuf.nextState;
+    fogHexesRemaining = shuf.items;
+  }
 
   return {
     gameId: options.gameId,
@@ -220,7 +245,8 @@ export function createGame(options: CreateGameOptions): GameState {
     longestRoadOwnerId: null,
     largestArmyOwnerId: null,
     winnerId: null,
-    startedAtMs: options.nowMs ?? Date.now()
+    startedAtMs: options.nowMs ?? Date.now(),
+    fogHexesRemaining
   };
 }
 
@@ -369,6 +395,236 @@ export function getPlayerBankTradeRatio(
 }
 
 /**
+ * Checks if a ship at \edgeId\ is at the open/free end of an open shipping route.
+ * In official Catan Seafarers: one of its two endpoints must have NO player building,
+ * and NO other player road or ship.
+ */
+export function isShipAtOpenEnd(
+  board: BoardState,
+  edgeId: string,
+  playerId: string
+): boolean {
+  const ship = board.ships?.[edgeId];
+  if (!ship || ship.ownerId !== playerId) return false;
+  const edge = board.edges[edgeId];
+  if (!edge) return false;
+
+  const isEndpointOpen = (vId: string) => {
+    if (board.buildings[vId]?.ownerId === playerId) return false;
+    const vert = board.vertices[vId];
+    if (!vert) return false;
+    const hasOtherPiece = vert.adjacentEdgeIds.some((otherEdgeId) => {
+      if (otherEdgeId === edgeId) return false;
+      return (
+        board.roads[otherEdgeId]?.ownerId === playerId ||
+        board.ships?.[otherEdgeId]?.ownerId === playerId
+      );
+    });
+    return !hasOtherPiece;
+  };
+
+  return isEndpointOpen(edge.v1) || isEndpointOpen(edge.v2);
+}
+
+/**
+ * Returns all valid destination edges where a ship at \romEdgeId\ can be moved.
+ */
+export function getLegalShipMoveDestinations(
+  board: BoardState,
+  fromEdgeId: string,
+  playerId: string
+): string[] {
+  const ship = board.ships?.[fromEdgeId];
+  if (!ship || ship.ownerId !== playerId) return [];
+
+  const tempShips = { ...board.ships };
+  delete tempShips[fromEdgeId];
+  const tempBoard: BoardState = {
+    ...board,
+    ships: tempShips
+  };
+
+  const destinations: string[] = [];
+  for (const edgeId of Object.keys(board.edges)) {
+    if (edgeId === fromEdgeId) continue;
+    if (isEdgeLegalForPlayerShip(tempBoard, edgeId, playerId)) {
+      destinations.push(edgeId);
+    }
+  }
+  return destinations;
+}
+
+/**
+ * Identifies connected components of land hexes (islands), sorted by size descending
+ * (so Island 0 is the main landmass / Main Island).
+ */
+export function getBoardIslands(board: BoardState): {
+  islandCount: number;
+  hexToIsland: Record<string, number>;
+  vertexToIslands: Record<string, number[]>;
+} {
+  const landHexIds = Object.keys(board.hexes).filter((hId) => {
+    const t = board.hexes[hId]?.terrain;
+    return t && t !== 'sea' && t !== 'fog';
+  });
+
+  const landSet = new Set(landHexIds);
+  const adjMap: Record<string, string[]> = {};
+  for (const hId of landHexIds) {
+    adjMap[hId] = [];
+  }
+  for (const edge of Object.values(board.edges)) {
+    const landInEdge = edge.adjacentHexIds.filter((hId) => landSet.has(hId));
+    if (landInEdge.length === 2) {
+      const [h1, h2] = landInEdge;
+      adjMap[h1]!.push(h2!);
+      adjMap[h2]!.push(h1!);
+    }
+  }
+
+  const visited = new Set<string>();
+  const components: string[][] = [];
+
+  for (const hId of landHexIds) {
+    if (visited.has(hId)) continue;
+    const comp: string[] = [];
+    const queue = [hId];
+    visited.add(hId);
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      comp.push(cur);
+      for (const neighbor of adjMap[cur] || []) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push(neighbor);
+        }
+      }
+    }
+    components.push(comp);
+  }
+
+  components.sort((a, b) => b.length - a.length);
+
+  const hexToIsland: Record<string, number> = {};
+  components.forEach((comp, idx) => {
+    for (const hId of comp) {
+      hexToIsland[hId] = idx;
+    }
+  });
+
+  const vertexToIslands: Record<string, number[]> = {};
+  for (const [vId, vertex] of Object.entries(board.vertices)) {
+    const isls = new Set<number>();
+    for (const hId of vertex.adjacentHexIds) {
+      if (hexToIsland[hId] !== undefined) {
+        isls.add(hexToIsland[hId]!);
+      }
+    }
+    vertexToIslands[vId] = Array.from(isls);
+  }
+
+  return {
+    islandCount: components.length,
+    hexToIsland,
+    vertexToIslands
+  };
+}
+
+/**
+ * Checks and awards +2 Special Victory Points (Catan Chits) when a settlement is built
+ * on a foreign / small island according to the official Seafarers scenario rules.
+ */
+export function checkAndAwardIslandBonus(
+  state: GameState,
+  vertexId: string,
+  playerId: string,
+  details?: Record<string, unknown>
+): void {
+  const scenario = state.rules.boardScenario;
+  if (scenario !== 'seafarers_shores' && scenario !== 'seafarers_islands') {
+    return;
+  }
+  const player = getPlayerById(state, playerId);
+  if (!player) return;
+  if (!player.settledIslands) player.settledIslands = [];
+
+  const islands = getBoardIslands(state.board);
+  const isls = islands.vertexToIslands[vertexId] || [];
+
+  for (const islIdx of isls) {
+    const islId = 'island_' + islIdx;
+    const isEligible =
+      scenario === 'seafarers_shores'
+        ? islIdx > 0 && !player.settledIslands.includes(islId)
+        : !player.settledIslands.includes(islId);
+
+    if (isEligible) {
+      player.settledIslands.push(islId);
+      player.specialVictoryPoints = (player.specialVictoryPoints ?? 0) + 2;
+      if (details) {
+        details.specialVictoryPointsAwarded = 2;
+        details.islandId = islId;
+      }
+    }
+  }
+}
+
+/**
+ * Explores any adjacent fog hexes when a road or ship is placed or moved in The Fog Island scenario.
+ * Awards 1 resource card of the matching terrain type to the discovering player if a land hex is revealed.
+ */
+export function exploreFogHexesAroundEdge(
+  state: GameState,
+  edgeId: string,
+  playerId: string
+): void {
+  if (state.rules.boardScenario !== 'seafarers_fog') return;
+  if (!state.fogHexesRemaining || state.fogHexesRemaining.length === 0) return;
+
+  const edge = state.board.edges[edgeId];
+  if (!edge) return;
+
+  const candidateHexIds = new Set<string>();
+  for (const hId of edge.adjacentHexIds) {
+    candidateHexIds.add(hId);
+  }
+  for (const vId of [edge.v1, edge.v2]) {
+    const v = state.board.vertices[vId];
+    if (v) {
+      for (const hId of v.adjacentHexIds) {
+        candidateHexIds.add(hId);
+      }
+    }
+  }
+
+  const player = getPlayerById(state, playerId);
+  if (!player) return;
+
+  for (const hId of candidateHexIds) {
+    const hex = state.board.hexes[hId];
+    if (hex && hex.terrain === 'fog' && state.fogHexesRemaining.length > 0) {
+      const drawn = state.fogHexesRemaining.shift()!;
+      hex.terrain = drawn.terrain;
+      hex.numberToken = drawn.token;
+
+      let resReward: ResourceType | null = null;
+      if (drawn.terrain === 'forest') resReward = 'wood';
+      else if (drawn.terrain === 'pasture') resReward = 'sheep';
+      else if (drawn.terrain === 'fields') resReward = 'wheat';
+      else if (drawn.terrain === 'hills') resReward = 'brick';
+      else if (drawn.terrain === 'mountains') resReward = 'ore';
+      else if (drawn.terrain === 'gold_field') resReward = 'ore';
+
+      if (resReward && state.bank[resReward] > 0) {
+        state.bank[resReward] -= 1;
+        player.resources[resReward] += 1;
+      }
+    }
+  }
+}
+
+
+/**
  * Calculates the length of the longest continuous simple path of roads owned by `playerId`,
  * respecting road breaks caused by opponent settlements/cities on intermediate vertices.
  */
@@ -495,7 +751,8 @@ export function calculateScore(
     ? player.devCards.filter((c) => c.type === 'victory_point').length
     : 0;
 
-  const publicScore = buildingPoints + longestRoadPoints + largestArmyPoints;
+  const specialVP = player?.specialVictoryPoints ?? 0;
+  const publicScore = buildingPoints + longestRoadPoints + largestArmyPoints + specialVP;
   const totalScore = publicScore + hiddenVictoryPoints;
 
   return { publicScore, totalScore, hiddenVictoryPoints };
@@ -683,6 +940,66 @@ export function getLegalActions(state: GameState, playerId: string): GameAction[
       return actions;
     }
 
+    case 'special_building': {
+      // In 5-6 player special build phase: players can build roads, ships, settlements, cities or buy dev cards
+      if (
+        player.remainingPieces.roads > 0 &&
+        hasResources(player.resources, BUILDING_COSTS.road)
+      ) {
+        for (const eId of Object.keys(state.board.edges)) {
+          if (isEdgeLegalForPlayerRoad(state.board, eId, playerId)) {
+            actions.push({ type: 'build_road', edgeId: eId });
+          }
+        }
+      }
+
+      if (
+        player.remainingPieces.ships > 0 &&
+        hasResources(player.resources, BUILDING_COSTS.ship)
+      ) {
+        for (const eId of Object.keys(state.board.edges)) {
+          if (isEdgeLegalForPlayerShip(state.board, eId, playerId)) {
+            actions.push({ type: 'build_ship', edgeId: eId });
+          }
+        }
+      }
+
+      if (
+        player.remainingPieces.settlements > 0 &&
+        hasResources(player.resources, BUILDING_COSTS.settlement)
+      ) {
+        for (const vId of Object.keys(state.board.vertices)) {
+          if (
+            isVertexAvailableForSettlement(state.board, vId) &&
+            isVertexConnectedToPlayerRoad(state.board, vId, playerId)
+          ) {
+            actions.push({ type: 'build_settlement', vertexId: vId });
+          }
+        }
+      }
+
+      if (
+        player.remainingPieces.cities > 0 &&
+        hasResources(player.resources, BUILDING_COSTS.city)
+      ) {
+        for (const b of Object.values(state.board.buildings)) {
+          if (b.ownerId === playerId && b.type === 'settlement') {
+            actions.push({ type: 'build_city', vertexId: b.vertexId });
+          }
+        }
+      }
+
+      if (
+        state.devCardDeck.length > 0 &&
+        hasResources(player.resources, BUILDING_COSTS.dev_card)
+      ) {
+        actions.push({ type: 'buy_dev_card' });
+      }
+
+      actions.push({ type: 'pass_special_building' });
+      return actions;
+    }
+
     case 'main_actions': {
       // Build road
       if (
@@ -787,6 +1104,20 @@ export function getLegalActions(state: GameState, playerId: string): GameAction[
 
       // Play Dev Cards
       appendLegalDevCardActions(state, player, actions);
+
+      // Move ship (once per turn during building phase, from open end of route)
+      if (!player.hasMovedShipThisTurn && state.board.ships) {
+        for (const [edgeId, ship] of Object.entries(state.board.ships)) {
+          if (ship.ownerId === playerId && (ship.builtAtTurn ?? 0) < state.turn) {
+            if (isShipAtOpenEnd(state.board, edgeId, playerId)) {
+              const destinations = getLegalShipMoveDestinations(state.board, edgeId, playerId);
+              for (const toEdgeId of destinations) {
+                actions.push({ type: 'move_ship', fromEdgeId: edgeId, toEdgeId });
+              }
+            }
+          }
+        }
+      }
 
       // End Turn
       actions.push({ type: 'end_turn' });
@@ -1070,7 +1401,7 @@ export function validateAction(
 
 
     case 'build_ship': {
-      if (state.phase !== 'main_actions') {
+      if (state.phase !== 'main_actions' && state.phase !== 'special_building') {
         return { valid: false, code: 'WRONG_PHASE', reason: 'Construcțiile sunt permise doar în faza principală.' };
       }
       if (player.remainingPieces.ships <= 0) {
@@ -1105,7 +1436,7 @@ export function validateAction(
       return { valid: true };
     }
     case 'build_road': {
-      if (state.phase !== 'main_actions') {
+      if (state.phase !== 'main_actions' && state.phase !== 'special_building') {
         return { valid: false, code: 'WRONG_PHASE', reason: 'Construcțiile sunt permise doar în faza principală.' };
       }
       if (player.remainingPieces.roads <= 0) {
@@ -1121,7 +1452,7 @@ export function validateAction(
     }
 
     case 'build_settlement': {
-      if (state.phase !== 'main_actions') {
+      if (state.phase !== 'main_actions' && state.phase !== 'special_building') {
         return { valid: false, code: 'WRONG_PHASE', reason: 'Construcțiile sunt permise doar în faza principală.' };
       }
       if (player.remainingPieces.settlements <= 0) {
@@ -1140,7 +1471,7 @@ export function validateAction(
     }
 
     case 'build_city': {
-      if (state.phase !== 'main_actions') {
+      if (state.phase !== 'main_actions' && state.phase !== 'special_building') {
         return { valid: false, code: 'WRONG_PHASE', reason: 'Construcțiile sunt permise doar în faza principală.' };
       }
       if (player.remainingPieces.cities <= 0) {
@@ -1157,7 +1488,7 @@ export function validateAction(
     }
 
     case 'buy_dev_card': {
-      if (state.phase !== 'main_actions') {
+      if (state.phase !== 'main_actions' && state.phase !== 'special_building') {
         return { valid: false, code: 'WRONG_PHASE', reason: 'Cărțile de dezvoltare se cumpără în faza principală.' };
       }
       if (state.devCardDeck.length === 0) {
@@ -1327,6 +1658,37 @@ export function validateAction(
       return { valid: true };
     }
 
+    case 'move_ship': {
+      if (state.phase !== 'main_actions') {
+        return { valid: false, code: 'WRONG_PHASE', reason: 'Navele pot fi mutate doar în faza principală.' };
+      }
+      if (player.hasMovedShipThisTurn) {
+        return { valid: false, code: 'ALREADY_MOVED_SHIP', reason: 'Ai mutat deja o navă în această tură.' };
+      }
+      const ship = state.board.ships?.[action.fromEdgeId];
+      if (!ship || ship.ownerId !== playerId) {
+        return { valid: false, code: 'INVALID_SHIP', reason: 'Nu deții nava pe care dorești să o muți.' };
+      }
+      if ((ship.builtAtTurn ?? 0) === state.turn) {
+        return { valid: false, code: 'CANNOT_MOVE_NEW_SHIP', reason: 'Nu poți muta o navă în aceeași tură în care ai construit-o.' };
+      }
+      if (!isShipAtOpenEnd(state.board, action.fromEdgeId, playerId)) {
+        return { valid: false, code: 'NOT_OPEN_END', reason: 'Doar capătul deschis al unei rute maritime poate fi mutat.' };
+      }
+      const destinations = getLegalShipMoveDestinations(state.board, action.fromEdgeId, playerId);
+      if (!destinations.includes(action.toEdgeId)) {
+        return { valid: false, code: 'INVALID_DESTINATION', reason: 'Destinația aleasă pentru navă nu este validă.' };
+      }
+      return { valid: true };
+    }
+
+    case 'pass_special_building': {
+      if (state.phase !== 'special_building') {
+        return { valid: false, code: 'WRONG_PHASE', reason: 'Nu este faza specială de construcție.' };
+      }
+      return { valid: true };
+    }
+
     case 'end_turn': {
       if (state.phase !== 'main_actions') {
         return { valid: false, code: 'WRONG_PHASE', reason: 'Tura poate fi încheiată doar din faza principală.' };
@@ -1389,6 +1751,16 @@ export function applyAction(
         details.startingResources = granted;
       }
 
+      if (!player.settledIslands) player.settledIslands = [];
+      const islands = getBoardIslands(nextState.board);
+      const isls = islands.vertexToIslands[action.vertexId] || [];
+      for (const islIdx of isls) {
+        const islId = `island_${islIdx}`;
+        if (!player.settledIslands.includes(islId)) {
+          player.settledIslands.push(islId);
+        }
+      }
+
       nextState.phase = isSecondSettlement ? 'setup_road_2' : 'setup_road_1';
       updateLongestRoadState(nextState);
       break;
@@ -1402,6 +1774,7 @@ export function applyAction(
       player.remainingPieces.roads -= 1;
       nextState.lastPlacedSettlementVertexId = undefined;
       updateLongestRoadState(nextState);
+      exploreFogHexesAroundEdge(nextState, action.edgeId, playerId);
 
       const numPlayers = nextState.playerOrder.length;
       nextState.setupStepIndex += 1;
@@ -1527,10 +1900,12 @@ export function applyAction(
       nextState.board.ships = nextState.board.ships || {};
       nextState.board.ships[action.edgeId] = {
         ownerId: playerId,
-        edgeId: action.edgeId
+        edgeId: action.edgeId,
+        builtAtTurn: nextState.turn
       };
       player.remainingPieces.ships -= 1;
       updateLongestRoadState(nextState);
+      exploreFogHexesAroundEdge(nextState, action.edgeId, playerId);
       checkVictory(nextState, nowMs);
       break;
     }
@@ -1539,11 +1914,13 @@ export function applyAction(
       nextState.board.ships = nextState.board.ships || {};
       nextState.board.ships[action.edgeId] = {
         ownerId: playerId,
-        edgeId: action.edgeId
+        edgeId: action.edgeId,
+        builtAtTurn: 0
       };
       player.remainingPieces.ships -= 1;
       nextState.lastPlacedSettlementVertexId = undefined;
       updateLongestRoadState(nextState);
+      exploreFogHexesAroundEdge(nextState, action.edgeId, playerId);
 
       const totalPlayers = nextState.players.length;
       if (nextState.phase === 'setup_road_1') {
@@ -1580,6 +1957,7 @@ export function applyAction(
       };
       player.remainingPieces.roads -= 1;
       updateLongestRoadState(nextState);
+      exploreFogHexesAroundEdge(nextState, action.edgeId, playerId);
       checkVictory(nextState, nowMs);
       break;
     }
@@ -1593,6 +1971,7 @@ export function applyAction(
         vertexId: action.vertexId
       };
       player.remainingPieces.settlements -= 1;
+      checkAndAwardIslandBonus(nextState, action.vertexId, playerId, details);
       // Building a settlement can also break an opponent's longest road!
       updateLongestRoadState(nextState);
       checkVictory(nextState, nowMs);
@@ -1684,6 +2063,7 @@ export function applyAction(
       player.remainingPieces.roads -= 1;
       nextState.freeRoadsRemaining -= 1;
       updateLongestRoadState(nextState);
+      exploreFogHexesAroundEdge(nextState, action.edgeId, playerId);
 
       const canPlaceAnother =
         nextState.freeRoadsRemaining > 0 &&
@@ -1806,6 +2186,41 @@ export function applyAction(
       break;
     }
 
+    case 'move_ship': {
+      const ship = nextState.board.ships![action.fromEdgeId]!;
+      delete nextState.board.ships![action.fromEdgeId];
+      nextState.board.ships![action.toEdgeId] = {
+        ownerId: playerId,
+        edgeId: action.toEdgeId,
+        builtAtTurn: ship.builtAtTurn
+      };
+      player.hasMovedShipThisTurn = true;
+      details.fromEdgeId = action.fromEdgeId;
+      details.toEdgeId = action.toEdgeId;
+      updateLongestRoadState(nextState);
+      exploreFogHexesAroundEdge(nextState, action.toEdgeId, playerId);
+      checkVictory(nextState, nowMs);
+      break;
+    }
+
+    case 'pass_special_building': {
+      if (!nextState.specialBuildingQueue || nextState.specialBuildingQueue.length === 0) {
+        break;
+      }
+      nextState.specialBuildingQueue.shift();
+      if (nextState.specialBuildingQueue.length > 0) {
+        nextState.activePlayerId = nextState.specialBuildingQueue[0]!;
+      } else {
+        const nextId = nextState.specialBuildingNextPlayerId ?? nextState.playerOrder[0]!;
+        nextState.activePlayerId = nextId;
+        nextState.turn += 1;
+        nextState.phase = 'turn_start';
+        nextState.specialBuildingQueue = undefined;
+        nextState.specialBuildingNextPlayerId = undefined;
+      }
+      break;
+    }
+
     case 'end_turn': {
       // Check if current player already won before ending turn
       if (checkVictory(nextState, nowMs)) {
@@ -1820,11 +2235,28 @@ export function applyAction(
       nextState.activeTradeOffers = [];
       player.hasPlayedDevCardThisTurn = false;
       player.playedDevCardTypesThisTurn = [];
+      player.hasMovedShipThisTurn = false;
       nextState.lastDiceRoll = undefined;
 
       const currentIdx = nextState.playerOrder.indexOf(playerId);
       const nextIdx = (currentIdx + 1) % nextState.playerOrder.length;
-      nextState.activePlayerId = nextState.playerOrder[nextIdx]!;
+      const nextPlayerId = nextState.playerOrder[nextIdx]!;
+
+      // Special Building Phase for 5-6 player expansion
+      if (nextState.rules.boardScenario === 'expansion' && nextState.players.length >= 5) {
+        const queue: string[] = [];
+        for (let i = 1; i < nextState.playerOrder.length; i++) {
+          const idx = (currentIdx + i) % nextState.playerOrder.length;
+          queue.push(nextState.playerOrder[idx]!);
+        }
+        nextState.specialBuildingQueue = queue;
+        nextState.specialBuildingNextPlayerId = nextPlayerId;
+        nextState.activePlayerId = queue[0]!;
+        nextState.phase = 'special_building';
+        break;
+      }
+
+      nextState.activePlayerId = nextPlayerId;
       nextState.turn += 1;
       nextState.phase = 'turn_start';
       break;
@@ -2082,6 +2514,8 @@ export function getPlayerView(state: GameState, viewerId: string): PlayerView {
       hasPlayedDevCardThisTurn: p.hasPlayedDevCardThisTurn,
       knightsPlayed: p.knightsPlayed,
       longestRoadLength: p.longestRoadLength,
+      specialVictoryPoints: p.specialVictoryPoints ?? 0,
+      settledIslands: p.settledIslands ? [...p.settledIslands] : [],
       publicScore: score.publicScore,
       totalScore: isSelf || isGameOver ? score.totalScore : undefined,
       remainingPieces: { ...p.remainingPieces }
@@ -2107,6 +2541,8 @@ export function getPlayerView(state: GameState, viewerId: string): PlayerView {
       ? [...state.robberContext.eligibleTargetIds]
       : undefined,
     freeRoadsRemaining: state.freeRoadsRemaining,
+    specialBuildingQueue: state.specialBuildingQueue ? [...state.specialBuildingQueue] : undefined,
+    fogHexesRemaining: state.fogHexesRemaining ? [...state.fogHexesRemaining] : undefined,
     activeTradeOffers: structuredClone(state.activeTradeOffers),
     longestRoadOwnerId: state.longestRoadOwnerId,
     largestArmyOwnerId: state.largestArmyOwnerId,
