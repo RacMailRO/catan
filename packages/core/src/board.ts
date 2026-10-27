@@ -51,25 +51,27 @@ export const STANDARD_HEX_COORDS: AxialCoord[] = [
   { q: 0, r: 2 }
 ];
 
-// 5-6 Player Expansion board: 30 hexes in an elongated hexagon (row lengths 4,5,6,6,5,4 —
-// the real expansion board's shape, noticeably wider/flatter than the classic board's
-// perfect hexagon). Unlike STANDARD_HEX_COORDS there's no official fixed spiral/letter
-// sequence for this board — the expansion rulebook just says to place tiles and tokens
-// randomly — so generateStandardBoard always uses plain shuffling for this scenario,
-// regardless of the classic board's boardLayout setting.
+// 5-6 Player Expansion board: 30 hexes in a (near-)hexagonal shape — row lengths
+// 3,4,5,6,5,4,3, verified by directly counting the hex tiles in the official rulebook's
+// own assembly diagram (Catan 5-6 Player Extension, "Illustration B"), not guessed. Unlike
+// STANDARD_HEX_COORDS there's no official fixed spiral/letter->value token mapping sourced
+// for this board (see generateStandardBoard's doc comment), so number tokens are placed via
+// a balanced shuffle instead of literally replaying the unknown official sequence.
 export const EXPANSION_HEX_COORDS: AxialCoord[] = [
-  // Row r = -3 (4 hexes)
-  { q: -2, r: -3 }, { q: -1, r: -3 }, { q: 0, r: -3 }, { q: 1, r: -3 },
-  // Row r = -2 (5 hexes)
-  { q: -2, r: -2 }, { q: -1, r: -2 }, { q: 0, r: -2 }, { q: 1, r: -2 }, { q: 2, r: -2 },
-  // Row r = -1 (6 hexes)
-  { q: -3, r: -1 }, { q: -2, r: -1 }, { q: -1, r: -1 }, { q: 0, r: -1 }, { q: 1, r: -1 }, { q: 2, r: -1 },
+  // Row r = -3 (3 hexes)
+  { q: -1, r: -3 }, { q: 0, r: -3 }, { q: 1, r: -3 },
+  // Row r = -2 (4 hexes)
+  { q: -2, r: -2 }, { q: -1, r: -2 }, { q: 0, r: -2 }, { q: 1, r: -2 },
+  // Row r = -1 (5 hexes)
+  { q: -2, r: -1 }, { q: -1, r: -1 }, { q: 0, r: -1 }, { q: 1, r: -1 }, { q: 2, r: -1 },
   // Row r = 0 (6 hexes)
   { q: -3, r: 0 }, { q: -2, r: 0 }, { q: -1, r: 0 }, { q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 },
   // Row r = 1 (5 hexes)
   { q: -3, r: 1 }, { q: -2, r: 1 }, { q: -1, r: 1 }, { q: 0, r: 1 }, { q: 1, r: 1 },
   // Row r = 2 (4 hexes)
-  { q: -3, r: 2 }, { q: -2, r: 2 }, { q: -1, r: 2 }, { q: 0, r: 2 }
+  { q: -3, r: 2 }, { q: -2, r: 2 }, { q: -1, r: 2 }, { q: 0, r: 2 },
+  // Row r = 3 (3 hexes)
+  { q: -2, r: 3 }, { q: -1, r: 3 }, { q: 0, r: 3 }
 ];
 
 // Expansion harbor frame — 11 harbors (vs the classic board's 9): 6 generic (3:1) + the same
