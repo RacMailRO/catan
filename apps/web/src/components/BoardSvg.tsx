@@ -204,7 +204,8 @@ const AXIAL_NEIGHBOR_DELTAS: Array<[number, number]> = [
 
 function generateOuterSeaRing(board: BoardState): OuterSeaHex[] {
   const hexList = Object.values(board.hexes);
-  if (hexList.length === 0) return [];
+  // Complete boards (like authentic 97-hex Seafarers Fog Island) already include their own full perimeter sea frame
+  if (hexList.length === 0 || hexList.length >= 70) return [];
   const sampleHex = hexList[0]!;
   const rawSample = axialToPixel(sampleHex.q, sampleHex.r, HEX_RADIUS);
   const centerOffsetX = rawSample.x - sampleHex.x;
@@ -329,15 +330,16 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
   // around the origin is safe for any board shape.
   const viewBoxHalfExtent = useMemo(() => {
     const margin = HEX_RADIUS + 20;
-    if (outerSeaRing.length === 0) return { w: 640, h: 580 };
+    const sourceHexes = outerSeaRing.length > 0 ? outerSeaRing : Object.values(board.hexes);
+    if (sourceHexes.length === 0) return { w: 640, h: 580 };
     let maxAbsX = 0;
     let maxAbsY = 0;
-    for (const sea of outerSeaRing) {
-      maxAbsX = Math.max(maxAbsX, Math.abs(sea.x));
-      maxAbsY = Math.max(maxAbsY, Math.abs(sea.y));
+    for (const h of sourceHexes) {
+      maxAbsX = Math.max(maxAbsX, Math.abs(h.x));
+      maxAbsY = Math.max(maxAbsY, Math.abs(h.y));
     }
     return { w: maxAbsX + margin, h: maxAbsY + margin };
-  }, [outerSeaRing]);
+  }, [outerSeaRing, board.hexes]);
 
   // Outer hexagon mask: the convex hull of every outer-sea-hex corner, pushed out a couple px
   // so the clip edge sits just past the tile art (no hairline gap at the border). Everything
@@ -345,12 +347,13 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
   // aspect ratio — is clipped to transparent instead of showing a hard rectangular cutoff.
   const outerHexMaskPoints = useMemo(() => {
     const corners: { x: number; y: number }[] = [];
-    for (const sea of outerSeaRing) {
+    const sourceHexes = outerSeaRing.length > 0 ? outerSeaRing : Object.values(board.hexes);
+    for (const h of sourceHexes) {
       for (let k = 0; k < 6; k++) {
         const angleRad = ((60 * k - 90) * Math.PI) / 180;
         corners.push({
-          x: sea.x + HEX_RADIUS * Math.cos(angleRad),
-          y: sea.y + HEX_RADIUS * Math.sin(angleRad)
+          x: h.x + HEX_RADIUS * Math.cos(angleRad),
+          y: h.y + HEX_RADIUS * Math.sin(angleRad)
         });
       }
     }
@@ -367,7 +370,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
         return `${(p.x + (dx / len) * pad).toFixed(2)},${(p.y + (dy / len) * pad).toFixed(2)}`;
       })
       .join(' ');
-  }, [outerSeaRing]);
+  }, [outerSeaRing, board.hexes]);
 
   // Each harbor sits on whichever outer sea hex is nearest to its dock position.
   const harborBySeaHexId = useMemo(() => {
@@ -698,16 +701,18 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             );
           })}
 
-          {/* 0B. Sandy fill behind the 19 Island Hexes — keeps the thin seams between adjacent
-              tiles sand-colored rather than showing the sea through them. */}
-          {Object.values(board.hexes).map((hex) => (
-            <polygon
-              key={`sand-${hex.id}`}
-              points={getHexPolygonPoints(hex.x, hex.y, HEX_RADIUS + 7)}
-              fill="#fde68a"
-              style={{ pointerEvents: 'none' }}
-            />
-          ))}
+          {/* 0B. Sandy fill behind Island Land Hexes — keeps the thin seams between adjacent
+              tiles sand-colored rather than showing the sea through them (skips sea & fog). */}
+          {Object.values(board.hexes)
+            .filter((hex) => hex.terrain !== 'sea' && hex.terrain !== 'fog')
+            .map((hex) => (
+              <polygon
+                key={`sand-${hex.id}`}
+                points={getHexPolygonPoints(hex.x, hex.y, HEX_RADIUS + 7)}
+                fill="#fde68a"
+                style={{ pointerEvents: 'none' }}
+              />
+            ))}
 
           {/* 0C. One continuous coastline stroke along the island's true outer boundary
               (walked from its coastal edges), drawn over the per-hex fill above so the
@@ -762,14 +767,21 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                   />
                 </g>
 
-                {/* Sandy Hexagon Border (or glowing blue if selectable for Robber) */}
+                {/* Hexagon Border (or glowing blue if selectable for Robber) */}
                 <polygon
-                  
                   points={getHexPolygonPoints(hex.x, hex.y, HEX_RADIUS - 1.5)}
                   fill={isHighlighted ? 'rgba(56, 189, 248, 0.2)' : 'none'}
-                  stroke={isHighlighted ? '#38bdf8' : '#fde68a'}
-                  strokeWidth={isHighlighted ? 5.5 : 3.2}
-                  strokeOpacity={isHighlighted ? 1 : 0.82}
+                  stroke={
+                    isHighlighted
+                      ? '#38bdf8'
+                      : hex.terrain === 'sea'
+                      ? 'rgba(56, 189, 248, 0.15)'
+                      : hex.terrain === 'fog'
+                      ? '#94a3b8'
+                      : '#fde68a'
+                  }
+                  strokeWidth={isHighlighted ? 5.5 : hex.terrain === 'sea' ? 0.8 : 3.2}
+                  strokeOpacity={isHighlighted ? 1 : hex.terrain === 'sea' ? 0.35 : 0.82}
                 />
 
                 {/* Number Token — vector disc with a beveled 3D face, drawn directly rather
@@ -827,6 +839,26 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                         </g>
                       );
                     })()}
+                  </g>
+                )}
+
+                {/* Fog unexplored marker disc with clean ? */}
+                {hex.terrain === 'fog' && hex.numberToken === null && (
+                  <g
+                    transform={`translate(${hex.x}, ${hex.y + 2})`}
+                    style={{ pointerEvents: 'none', filter: 'drop-shadow(0 3px 4px rgba(0,0,0,0.5))' }}
+                  >
+                    <circle r={tokenRadius} fill="#f8fafc" stroke="#94a3b8" strokeWidth={1.5} />
+                    <text
+                      y={tokenRadius * 0.35}
+                      textAnchor="middle"
+                      fontSize={tokenRadius * 1.05}
+                      fontWeight="800"
+                      fill="#475569"
+                      fontFamily="var(--font-display, Georgia, serif)"
+                    >
+                      ?
+                    </text>
                   </g>
                 )}
 
@@ -1094,6 +1126,20 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             );
           })}
         </g>
+
+        {/* Outer Frame Border (Seafarers deep blue ocean frame) */}
+        {outerHexMaskPoints && (
+          <polygon
+            transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}
+            points={outerHexMaskPoints}
+            fill="none"
+            stroke="#0369a1"
+            strokeWidth={12}
+            strokeLinejoin="round"
+            strokeOpacity={0.85}
+            style={{ pointerEvents: 'none' }}
+          />
+        )}
       </svg>
     </div>
   );

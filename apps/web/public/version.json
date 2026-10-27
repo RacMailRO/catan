@@ -1,9 +1,14 @@
 {
-  "version": "v1.125",
-  "commitCount": 125,
-  "shortHash": "625b1dd",
-  "buildDate": "2026-10-27T12:28:32.899Z",
+  "version": "v1.126",
+  "commitCount": 126,
+  "shortHash": "8535c38",
+  "buildDate": "2026-10-27T12:46:51.139Z",
   "releaseNotes": [
+    {
+      "hash": "8535c38",
+      "date": "2026-10-27",
+      "message": "feat(sandbox): adaugare mediu de test local, remediere decupare camp de aur si suport plasare piese"
+    },
     {
       "hash": "625b1dd",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "0b174a2",
       "date": "2026-10-26",
       "message": "merge: feat(web) display player hand in trade modal"
-    },
-    {
-      "hash": "8e1832f",
-      "date": "2026-10-26",
-      "message": "feat(web): display viewer's resource cards in incoming trade offer modal"
     }
   ]
 }

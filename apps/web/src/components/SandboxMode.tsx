@@ -41,8 +41,8 @@ const SCENARIO_LABELS: Record<BoardScenario, { ro: string; en: string }> = {
     en: 'Seafarers: The Four Islands (31 hexes)'
   },
   seafarers_fog: {
-    ro: 'Navigatori: Insula din Ceață (29 hexuri)',
-    en: 'Seafarers: The Fog Island (29 hexes)'
+    ro: 'Navigatori: Insula din Ceață (Oficial 5-6 Jucători / 97 hexuri)',
+    en: 'Seafarers: The Fog Island (Official 5-6 Players / 97 hexes)'
   },
   world_map: {
     ro: 'Navigatori: Harta Lumii (38 hexuri)',
