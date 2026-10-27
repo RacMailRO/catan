@@ -1,9 +1,14 @@
 {
-  "version": "v1.145",
-  "commitCount": 145,
-  "shortHash": "d654763",
-  "buildDate": "2026-10-27T22:21:25.655Z",
+  "version": "v1.146",
+  "commitCount": 146,
+  "shortHash": "2b5054a",
+  "buildDate": "2026-10-27T22:21:42.381Z",
   "releaseNotes": [
+    {
+      "hash": "2b5054a",
+      "date": "2026-10-28",
+      "message": "Fix mobile replay layout: keep transport controls above board, add player stats grid, and sliding AI drawer"
+    },
     {
       "hash": "d654763",
       "date": "2026-10-28",
@@ -248,11 +253,6 @@
       "hash": "f82d5ff",
       "date": "2026-10-26",
       "message": "redesign: leaderboard player cards — spacing, same-row VP, top-pinned turn badge"
-    },
-    {
-      "hash": "04ec0d1",
-      "date": "2026-10-26",
-      "message": "fix(dev-cards): remove duplicate play buttons, show own hand for Year of Plenty, readable small-card labels"
     }
   ]
 }
