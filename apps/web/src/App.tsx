@@ -55,6 +55,7 @@ import {
   stepOnlineAi,
   terminateOnlineGame,
   terminateOnlineLobby,
+  respondOnlineTermination,
   fetchLobby,
   fetchSpectatorGameState,
   joinOnlineLobbyByCode,
@@ -497,6 +498,27 @@ export const App: React.FC = () => {
   const [spectateGameId, setSpectateGameId] = useState<string | null>(null);
   const [spectateView, setSpectateView] = useState<PlayerView | null>(null);
   const [spectateError, setSpectateError] = useState<string | null>(null);
+  const [spectateTerminationDismissed, setSpectateTerminationDismissed] = useState<boolean>(false);
+  const [inGameTermination, setInGameTermination] = useState<{
+    expiresAtMs: number;
+    remainingSec: number;
+    humanPlayerIds: string[];
+    confirmedCount: number;
+    deniedCount: number;
+  } | null>(null);
+  const [inGameTerminationCountdown, setInGameTerminationCountdown] = useState<number>(30);
+  const [inGameTerminationDismissed, setInGameTerminationDismissed] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!inGameTermination) return;
+    const update = () => {
+      const sec = Math.max(0, Math.ceil((inGameTermination.expiresAtMs - Date.now()) / 1000));
+      setInGameTerminationCountdown(sec);
+    };
+    update();
+    const interval = setInterval(update, 500);
+    return () => clearInterval(interval);
+  }, [inGameTermination]);
 
   // Refresh the public lobby list every 5s while it's actually visible (the lobby tab).
   useEffect(() => {
@@ -519,7 +541,14 @@ export const App: React.FC = () => {
     let cancelled = false;
     const refresh = () => {
       fetchSpectatorGameState(spectateGameId)
-        .then((data) => { if (!cancelled) setSpectateView(data.playerView); })
+        .then((data) => {
+          if (!cancelled) {
+            setSpectateView(data.playerView);
+            if (data.terminationDismissed !== undefined) {
+              setSpectateTerminationDismissed(Boolean(data.terminationDismissed));
+            }
+          }
+        })
         .catch((err) => { if (!cancelled) setSpectateError(err instanceof Error ? err.message : String(err)); });
     };
     refresh();
@@ -530,6 +559,7 @@ export const App: React.FC = () => {
   const handleSpectate = (gameId: string) => {
     setSpectateError(null);
     setSpectateView(null);
+    setSpectateTerminationDismissed(false);
     setSpectateGameId(gameId);
     setActiveTab('spectate');
   };
@@ -538,6 +568,7 @@ export const App: React.FC = () => {
     setSpectateGameId(null);
     setSpectateView(null);
     setSpectateError(null);
+    setSpectateTerminationDismissed(false);
     setActiveTab('lobby');
     listPublicLobbies().then((lobbies) => setPublicLobbies(lobbies)).catch(() => {});
   };
@@ -813,6 +844,14 @@ export const App: React.FC = () => {
             if (msg.type === 'state_sync') {
               setOnlinePlayerView(msg.playerView);
               setOnlineLegalActions(msg.legalActions);
+              if (msg.pendingTermination) {
+                setInGameTermination(msg.pendingTermination);
+              } else {
+                setInGameTermination(null);
+              }
+              if (msg.terminationDismissed !== undefined) {
+                setInGameTerminationDismissed(Boolean(msg.terminationDismissed));
+              }
             } else if (msg.type === 'action_rejected') {
               setOnlineError(msg.reason ?? 'Mutare respinsă de server.');
             }
@@ -869,6 +908,14 @@ export const App: React.FC = () => {
         if (cancelled) return;
         setOnlinePlayerView((prev) => (prev && prev.sequence >= data.playerView.sequence ? prev : data.playerView));
         setOnlineLegalActions(data.legalActions);
+        if (data.pendingTermination) {
+          setInGameTermination(data.pendingTermination);
+        } else {
+          setInGameTermination(null);
+        }
+        if (data.terminationDismissed !== undefined) {
+          setInGameTerminationDismissed(Boolean(data.terminationDismissed));
+        }
       } catch {
         // Transient network hiccup — the next tick will retry.
       }
@@ -2117,28 +2164,47 @@ export const App: React.FC = () => {
                                 👁️ {locale === 'ro' ? 'Spectează' : 'Spectate'}
                               </button>
                             )}
-                            <button
-                              type="button"
-                              className="btn btn-danger"
-                              style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem' }}
-                              title={locale === 'ro' ? 'Oprește sau anulează această partidă de pe server' : 'Stop or cancel this game/lobby'}
-                              onClick={async () => {
-                                if (!window.confirm(locale === 'ro' ? 'Sigur dorești să oprești definitiv această partidă/sală de pe server?' : 'Are you sure you want to stop and cancel this lobby/game?')) return;
-                                try {
-                                  if (l.gameId) {
-                                    await terminateOnlineGame(l.gameId);
+                            {l.terminationDismissed ? (
+                              <span style={{ fontSize: '0.74rem', color: '#4ade80', fontWeight: 600, padding: '0.25rem 0.5rem', background: 'rgba(34,197,94,0.15)', borderRadius: 4 }}>
+                                🛡️ {locale === 'ro' ? 'Partidă protejată' : 'Protected'}
+                              </span>
+                            ) : l.pendingTermination ? (
+                              <span style={{ fontSize: '0.74rem', color: '#f59e0b', fontWeight: 600, padding: '0.25rem 0.5rem', background: 'rgba(245,158,11,0.15)', borderRadius: 4 }}>
+                                ⏱️ {locale === 'ro' ? 'Confirmare în curs (30s)...' : 'Confirmation pending (30s)...'}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-danger"
+                                style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem' }}
+                                title={locale === 'ro' ? 'Oprește sau anulează această partidă de pe server' : 'Stop or cancel this game/lobby'}
+                                onClick={async () => {
+                                  if (!window.confirm(locale === 'ro' ? 'Sigur dorești să oprești definitiv această partidă/sală de pe server?' : 'Are you sure you want to stop and cancel this lobby/game?')) return;
+                                  try {
+                                    let res: any;
+                                    if (l.gameId) {
+                                      res = await terminateOnlineGame(l.gameId);
+                                    } else {
+                                      res = await terminateOnlineLobby(l.lobbyId);
+                                    }
+                                    if (res?.pendingConfirmation) {
+                                      alert(locale === 'ro'
+                                        ? 'Cererea de oprire a fost trimisă jucătorilor din partidă. Dacă aceștia refuză, partida va continua. Dacă nu răspund în 30 de secunde, partida se va închide automat.'
+                                        : 'Confirmation requested from players (30s timeout).');
+                                      listPublicLobbies().then(setPublicLobbies).catch(() => {});
+                                    } else {
+                                      setPublicLobbies((prev) => prev.filter((p) => p.lobbyId !== l.lobbyId && p.gameId !== l.gameId));
+                                      listPublicLobbies().then((lobbies) => setPublicLobbies(lobbies)).catch(() => {});
+                                      setServerStatusMsg(locale === 'ro' ? 'Partida/sala a fost oprită cu succes.' : 'Game/lobby stopped successfully.');
+                                    }
+                                  } catch (err) {
+                                    alert(err instanceof Error ? err.message : 'Eroare la oprirea partidei');
                                   }
-                                  await terminateOnlineLobby(l.lobbyId);
-                                  setPublicLobbies((prev) => prev.filter((p) => p.lobbyId !== l.lobbyId && p.gameId !== l.gameId));
-                                  listPublicLobbies().then((lobbies) => setPublicLobbies(lobbies)).catch(() => {});
-                                  setServerStatusMsg(locale === 'ro' ? 'Partida/sala a fost oprită cu succes.' : 'Game/lobby stopped successfully.');
-                                } catch (err) {
-                                  alert(err instanceof Error ? err.message : 'Eroare la oprirea partidei');
-                                }
-                              }}
-                            >
-                              ⏹️ {locale === 'ro' ? 'Oprește' : 'Stop'}
-                            </button>
+                                }}
+                              >
+                                ⏹️ {locale === 'ro' ? 'Oprește' : 'Stop'}
+                              </button>
+                            )}
                           </div>
                         </div>
                       );
@@ -4511,24 +4577,37 @@ export const App: React.FC = () => {
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
                 {spectateGameId && (
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    style={{ padding: '0.25rem 0.6rem', fontSize: '0.78rem' }}
-                    onClick={async () => {
-                      if (!window.confirm('Sigur dorești să oprești definitiv această partidă pe server?')) return;
-                      try {
-                        const targetGid = spectateGameId;
-                        await terminateOnlineGame(targetGid);
-                        setPublicLobbies((prev) => prev.filter((l) => l.gameId !== targetGid));
-                        handleStopSpectating();
-                      } catch (err) {
-                        alert(err instanceof Error ? err.message : 'Eroare la oprirea partidei');
-                      }
-                    }}
-                  >
-                    ⏹️ {locale === 'ro' ? 'Oprește Partida' : 'Stop Game'}
-                  </button>
+                  spectateTerminationDismissed ? (
+                    <span style={{ fontSize: '0.78rem', color: '#4ade80', fontWeight: 600, padding: '0.25rem 0.5rem', background: 'rgba(34,197,94,0.15)', borderRadius: 4 }}>
+                      🛡️ {locale === 'ro' ? 'Oprire refuzată de jucători' : 'Termination dismissed'}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      style={{ padding: '0.25rem 0.6rem', fontSize: '0.78rem' }}
+                      onClick={async () => {
+                        if (!window.confirm('Sigur dorești să oprești definitiv această partidă pe server?')) return;
+                        try {
+                          const targetGid = spectateGameId;
+                          const res = await terminateOnlineGame(targetGid);
+                          if ((res as any).pendingConfirmation) {
+                            alert(locale === 'ro'
+                              ? 'A fost trimisă o cerere de confirmare către jucătorii din partidă. Dacă aceștia refuză, partida va continua. Dacă nu răspund în 30 de secunde, partida se va închide automat.'
+                              : 'Termination request sent to players (30s timeout).');
+                          } else {
+                            setPublicLobbies((prev) => prev.filter((l) => l.gameId !== targetGid));
+                            handleStopSpectating();
+                            listPublicLobbies().then((lobbies) => setPublicLobbies(lobbies)).catch(() => {});
+                          }
+                        } catch (err) {
+                          alert(err instanceof Error ? err.message : 'Eroare la oprirea partidei');
+                        }
+                      }}
+                    >
+                      ⏹️ {locale === 'ro' ? 'Oprește Partida' : 'Stop Game'}
+                    </button>
+                  )
                 )}
                 <button type="button" className="btn" onClick={handleStopSpectating}>
                   ✕ {locale === 'ro' ? 'Părăsește' : 'Leave'}
@@ -4761,6 +4840,69 @@ export const App: React.FC = () => {
           locale={locale}
           onExit={() => setActiveTab('lobby')}
         />
+      )}
+
+      {/* Modal Confirmare Închidere Partidă pentru Jucătorii Umani din Joc */}
+      {inGameTermination && onlineSession && (
+        <div className="modal-backdrop" style={{ zIndex: 9999 }}>
+          <div className="modal-dialog" style={{ maxWidth: 450, border: '2px solid var(--accent-gold)' }}>
+            <div className="modal-header">
+              <h3 style={{ margin: 0, color: 'var(--accent-gold)' }}>⚠️ Cerere de Închidere a Partidei</h3>
+            </div>
+            <div style={{ padding: '1.1rem', display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+              <p style={{ margin: 0, fontSize: '0.93rem', lineHeight: 1.5 }}>
+                Cineva (un spectator sau un utilizator din lobby) a solicitat oprirea acestei partide. Ești de acord să fie închisă definitiv?
+              </p>
+              <div style={{ background: 'var(--bg-inset)', padding: '0.65rem 0.9rem', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Timp rămas pentru răspuns:</span>
+                <span style={{ fontWeight: 700, fontSize: '1.15rem', color: inGameTerminationCountdown <= 10 ? '#ef4444' : 'var(--accent-gold)' }}>
+                  ⏱️ {inGameTerminationCountdown}s
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                * Dacă nimeni nu răspunde până la expirarea celor 30 de secunde, partida se va închide automat. Dacă alegi <strong>„Nu, continuă partida”</strong>, cererea este respinsă definitiv, iar butonul de oprire dispare pentru toată lumea.
+              </p>
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: 6 }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ fontWeight: 700, padding: '0.5rem 1rem' }}
+                  onClick={async () => {
+                    if (onlineSession?.gameId) {
+                      try {
+                        await respondOnlineTermination(onlineSession.gameId, 'deny', onlineSession.sessionToken, onlineSession.playerId);
+                        setInGameTermination(null);
+                        setInGameTerminationDismissed(true);
+                        setServerStatusMsg('Ai refuzat oprirea partidei. Butonul a fost dezactivat, iar jocul continuă!');
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : 'Eroare la refuzul cererii.');
+                      }
+                    }
+                  }}
+                >
+                  🛡️ Nu, continuă partida
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  style={{ padding: '0.5rem 0.9rem' }}
+                  onClick={async () => {
+                    if (onlineSession?.gameId) {
+                      try {
+                        await respondOnlineTermination(onlineSession.gameId, 'confirm', onlineSession.sessionToken, onlineSession.playerId);
+                        setInGameTermination(null);
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : 'Eroare la confirmarea cererii.');
+                      }
+                    }
+                  }}
+                >
+                  ⏹️ Da, închide
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Online Waiting Room — shown from the moment a lobby is created/joined until the game

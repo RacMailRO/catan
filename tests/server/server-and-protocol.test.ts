@@ -371,4 +371,121 @@ describe('Authoritative LAN/Online Server, Protocol Validation & WebSocket Sync'
     const data2 = (await listRes2.json()) as { lobbies: Array<{ lobbyId: string; status: string }> };
     expect(data2.lobbies.some((l) => l.lobbyId === lobby.lobbyId)).toBe(false);
   });
+
+  it('notifies human players of termination and cancels termination if human denies', async () => {
+    // 1. Create a public game with a human player and AI
+    const createRes = await fetch(`${baseUrl}/api/lobbies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Partida Uman vs AI',
+        hostName: 'JucatorUman',
+        mode: 'online',
+        isPrivate: false,
+        rules: { victoryPointsToWin: 10 },
+        seats: [
+          { seatIndex: 0, name: 'JucatorUman', type: 'human', color: 'red' },
+          { seatIndex: 1, name: 'AI Bot', type: 'ai', color: 'blue' }
+        ]
+      })
+    });
+    const { lobby, sessionToken, playerId } = (await createRes.json()) as {
+      lobby: { lobbyId: string };
+      sessionToken: string;
+      playerId: string;
+    };
+
+    // 2. Start the game
+    const startRes = await fetch(`${baseUrl}/api/lobbies/${lobby.lobbyId}/start`, {
+      method: 'POST'
+    });
+    const { gameId } = (await startRes.json()) as { gameId: string };
+
+    // 3. Attempt to terminate (e.g. from spectator or lobby) -> Should request confirmation from human!
+    const termRes1 = await fetch(`${baseUrl}/api/games/${gameId}/terminate`, {
+      method: 'POST'
+    });
+    expect(termRes1.status).toBe(200);
+    const termData1 = (await termRes1.json()) as { pendingConfirmation: boolean; expiresAtMs: number };
+    expect(termData1.pendingConfirmation).toBe(true);
+    expect(termData1.expiresAtMs).toBeGreaterThan(Date.now());
+
+    // 4. Verify game state reflects pending termination
+    const stateRes1 = await fetch(`${baseUrl}/api/games/${gameId}/state?sessionToken=${sessionToken}`);
+    const stateData1 = (await stateRes1.json()) as { pendingTermination?: { remainingSec: number } | null };
+    expect(stateData1.pendingTermination).toBeTruthy();
+    expect(stateData1.pendingTermination?.remainingSec).toBeGreaterThan(0);
+
+    // 5. Human player responds with 'deny' (rejects termination)
+    const denyRes = await fetch(`${baseUrl}/api/games/${gameId}/terminate-response`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionToken,
+        playerId,
+        response: 'deny'
+      })
+    });
+    expect(denyRes.status).toBe(200);
+    const denyData = (await denyRes.json()) as { status: string };
+    expect(denyData.status).toBe('denied');
+
+    // 6. Verify pending termination is cleared and terminationDismissed is true
+    const stateRes2 = await fetch(`${baseUrl}/api/games/${gameId}/state?sessionToken=${sessionToken}`);
+    const stateData2 = (await stateRes2.json()) as {
+      pendingTermination?: unknown;
+      terminationDismissed?: boolean;
+    };
+    expect(stateData2.pendingTermination).toBeNull();
+    expect(stateData2.terminationDismissed).toBe(true);
+
+    // 7. Subsequent termination attempt must be rejected because players dismissed it
+    const termRes2 = await fetch(`${baseUrl}/api/games/${gameId}/terminate`, {
+      method: 'POST'
+    });
+    expect(termRes2.status).toBe(403);
+    const termData2 = (await termRes2.json()) as { dismissed: boolean };
+    expect(termData2.dismissed).toBe(true);
+  });
+
+  it('enforces maximum concurrent games limit when starting new games', async () => {
+    // Create custom server with limit of 1 game
+    const customServer = createCatanServer({ dbPath: ':memory:', maxConcurrentGames: 1 });
+    const bound = await customServer.listen(0, '127.0.0.1');
+    const customUrl = bound.url;
+
+    try {
+      // 1. Create and start game 1
+      const c1 = await fetch(`${customUrl}/api/lobbies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Game 1',
+          hostName: 'P1',
+          seats: [{ seatIndex: 0, name: 'AI 1', type: 'ai', color: 'red' }]
+        })
+      });
+      const d1 = (await c1.json()) as { lobby: { lobbyId: string } };
+      const s1 = await fetch(`${customUrl}/api/lobbies/${d1.lobby.lobbyId}/start`, { method: 'POST' });
+      expect(s1.status).toBe(200);
+
+      // 2. Create and attempt to start game 2 -> Must exceed limit (429)!
+      const c2 = await fetch(`${customUrl}/api/lobbies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Game 2',
+          hostName: 'P2',
+          seats: [{ seatIndex: 0, name: 'AI 2', type: 'ai', color: 'blue' }]
+        })
+      });
+      const d2 = (await c2.json()) as { lobby: { lobbyId: string } };
+      const s2 = await fetch(`${customUrl}/api/lobbies/${d2.lobby.lobbyId}/start`, { method: 'POST' });
+      expect(s2.status).toBe(429);
+      const err = (await s2.json()) as { error: string };
+      expect(err.error).toContain('Serverul a atins limita maximă de partide active simultan');
+    } finally {
+      await customServer.close();
+    }
+  });
 });

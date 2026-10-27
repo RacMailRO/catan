@@ -44,6 +44,15 @@ import {
 } from '@catan/protocol';
 import { CatanStorage } from './db';
 
+interface TerminationRequest {
+  requestedAtMs: number;
+  expiresAtMs: number;
+  humanPlayerIds: string[];
+  confirmations: Set<string>;
+  denials: Set<string>;
+  timer: NodeJS.Timeout;
+}
+
 interface ActiveGameRuntime {
   gameId: string;
   lobbyId?: string;
@@ -51,6 +60,20 @@ interface ActiveGameRuntime {
   events: GameEvent[];
   aiDecisions: AIDecisionRecord[];
   replay: ReplayFile;
+  pendingTermination?: TerminationRequest;
+  terminationDismissed?: boolean;
+}
+
+function serializePendingTermination(req?: TerminationRequest) {
+  if (!req) return null;
+  return {
+    requestedAtMs: req.requestedAtMs,
+    expiresAtMs: req.expiresAtMs,
+    remainingSec: Math.max(0, Math.ceil((req.expiresAtMs - Date.now()) / 1000)),
+    humanPlayerIds: req.humanPlayerIds,
+    confirmedCount: req.confirmations.size,
+    deniedCount: req.denials.size
+  };
 }
 
 interface WsClientConnection {
@@ -212,6 +235,7 @@ export function createCatanServer(options?: {
   dbPath?: string;
   assetsDir?: string;
   autoStepAiMaxBatch?: number;
+  maxConcurrentGames?: number;
   /** apps/web's built output (vite build). When present, this one server also serves the
    * frontend — so deploying just means running this process on the host, no separate static
    * host or vite process needed. Defaults to apps/web/dist next to this file's own repo. */
@@ -222,6 +246,17 @@ export function createCatanServer(options?: {
   const wsClients = new Set<WsClientConnection>();
   const rateLimits = new Map<string, { count: number; windowStartMs: number }>();
   const autoStepAiMaxBatch = options?.autoStepAiMaxBatch ?? 80;
+  const maxConcurrentGames = options?.maxConcurrentGames ?? Number(process.env.MAX_CONCURRENT_GAMES ?? 10);
+
+  function countActiveConcurrentGames(): number {
+    let count = 0;
+    for (const runtime of activeGames.values()) {
+      if (runtime.state.phase !== 'game_over') {
+        count++;
+      }
+    }
+    return count;
+  }
   const currentDir = path.dirname(fileURLToPath(import.meta.url));
   const candidateWebDistDirs = [
     options?.webDistDir,
@@ -398,7 +433,9 @@ export function createCatanServer(options?: {
         playerView: getPlayerView(runtime.state, client.playerId),
         legalActions: getLegalActions(runtime.state, client.playerId),
         recentEvents: runtime.events.slice(-25),
-        aiDecisions: runtime.aiDecisions.slice(-15)
+        aiDecisions: runtime.aiDecisions.slice(-15),
+        pendingTermination: serializePendingTermination(runtime.pendingTermination),
+        terminationDismissed: Boolean(runtime.terminationDismissed)
       };
       client.ws.send(JSON.stringify(msg));
     }
@@ -584,8 +621,19 @@ export function createCatanServer(options?: {
             }
           }
           return true;
+        }).map((l) => {
+          const mem = l.gameId ? activeGames.get(l.gameId) : undefined;
+          return {
+            ...l,
+            pendingTermination: Boolean(mem?.pendingTermination),
+            terminationDismissed: Boolean(mem?.terminationDismissed)
+          };
         });
-        sendJson(res, 200, { lobbies });
+        sendJson(res, 200, {
+          lobbies,
+          activeGamesCount: countActiveConcurrentGames(),
+          maxConcurrentGames
+        });
         return;
       }
 
@@ -935,6 +983,13 @@ export function createCatanServer(options?: {
           }
         }
 
+        if (countActiveConcurrentGames() >= maxConcurrentGames) {
+          sendJson(res, 429, {
+            error: `Serverul a atins limita maximă de partide active simultan (${maxConcurrentGames}). Te rugăm să aștepți finalizarea unei partide existente.`
+          });
+          return;
+        }
+
         const activeSeats = lobby.seats.filter((s) => s.type !== 'open');
         if (activeSeats.length === 0) {
           sendJson(res, 400, { error: 'Lobby must have at least 1 active participant' });
@@ -1030,7 +1085,9 @@ export function createCatanServer(options?: {
           playerView: getPlayerView(runtime.state, viewerId),
           legalActions: getLegalActions(runtime.state, viewerId),
           recentEvents: runtime.events.slice(-30),
-          aiDecisions: runtime.aiDecisions.slice(-20)
+          aiDecisions: runtime.aiDecisions.slice(-20),
+          pendingTermination: serializePendingTermination(runtime.pendingTermination),
+          terminationDismissed: Boolean(runtime.terminationDismissed)
         });
         return;
       }
@@ -1136,9 +1193,91 @@ export function createCatanServer(options?: {
           playerView: getPlayerView(runtime.state, viewerId),
           legalActions: getLegalActions(runtime.state, viewerId),
           recentEvents: runtime.events.slice(-30),
-          aiDecisions: runtime.aiDecisions.slice(-20)
+          aiDecisions: runtime.aiDecisions.slice(-20),
+          pendingTermination: serializePendingTermination(runtime.pendingTermination),
+          terminationDismissed: Boolean(runtime.terminationDismissed)
         });
         return;
+      }
+
+      // Terminate response from human player (confirm or deny)
+      const termResponseMatch = pathname.match(/^\/api\/games\/([^/]+)\/terminate-response$/);
+      if (req.method === 'POST' && termResponseMatch) {
+        const gameId = termResponseMatch[1]!;
+        const runtime = loadOrGetGameRuntime(gameId);
+        if (!runtime) {
+          sendJson(res, 404, { error: 'Game not found' });
+          return;
+        }
+
+        const body = ((await readJsonBody(req)) ?? {}) as {
+          sessionToken?: string;
+          playerId?: string;
+          response?: 'confirm' | 'deny';
+        };
+
+        if (body.response !== 'confirm' && body.response !== 'deny') {
+          sendJson(res, 400, { error: 'Răspuns invalid. Alege "confirm" sau "deny".' });
+          return;
+        }
+
+        let respondingPlayerId = body.playerId;
+        if (body.sessionToken) {
+          const session = storage.getSession(body.sessionToken);
+          if (session) respondingPlayerId = session.playerId;
+        }
+
+        if (!runtime.pendingTermination) {
+          sendJson(res, 400, { error: 'Nu există nicio cerere activă de oprire a partidei.' });
+          return;
+        }
+
+        if (body.response === 'deny') {
+          clearTimeout(runtime.pendingTermination.timer);
+          runtime.pendingTermination = undefined;
+          runtime.terminationDismissed = true; // Button disappears for everyone!
+          broadcastGameSync(runtime);
+          sendJson(res, 200, {
+            success: true,
+            status: 'denied',
+            message: 'Oprirea partidei a fost refuzată. Jocul continuă.'
+          });
+          return;
+        }
+
+        if (body.response === 'confirm') {
+          if (respondingPlayerId) {
+            runtime.pendingTermination.confirmations.add(respondingPlayerId);
+          }
+          const allConfirmed = runtime.pendingTermination.humanPlayerIds.every((id) =>
+            runtime.pendingTermination!.confirmations.has(id)
+          );
+
+          if (allConfirmed || runtime.pendingTermination.humanPlayerIds.length <= 1) {
+            clearTimeout(runtime.pendingTermination.timer);
+            runtime.pendingTermination = undefined;
+            runtime.state.phase = 'game_over';
+            persistRuntime(runtime);
+            if (runtime.lobbyId) storage.markLobbyFinished(runtime.lobbyId);
+            storage.markLobbyFinished(gameId);
+            activeGames.delete(gameId);
+            broadcastGameSync(runtime);
+            sendJson(res, 200, {
+              success: true,
+              status: 'finished',
+              message: 'Partida a fost închisă cu acordul jucătorilor.'
+            });
+            return;
+          }
+
+          broadcastGameSync(runtime);
+          sendJson(res, 200, {
+            success: true,
+            status: 'waiting_others',
+            confirmedCount: runtime.pendingTermination.confirmations.size
+          });
+          return;
+        }
       }
 
       // Terminate / Stop an in-progress game
@@ -1149,6 +1288,63 @@ export function createCatanServer(options?: {
         if (!runtime) {
           sendJson(res, 404, { error: 'Game not found' });
           return;
+        }
+
+        // If termination was dismissed by human players, refuse termination!
+        if (runtime.terminationDismissed) {
+          sendJson(res, 403, {
+            error: 'Oprirea partidei a fost refuzată de jucători.',
+            dismissed: true
+          });
+          return;
+        }
+
+        const humanPlayers = runtime.state.players.filter((p) => p.type === 'human');
+        const hasHumanPlayers = humanPlayers.length > 0 && runtime.state.phase !== 'game_over';
+
+        if (hasHumanPlayers) {
+          if (!runtime.pendingTermination) {
+            const requestedAtMs = Date.now();
+            const expiresAtMs = requestedAtMs + 30000;
+            const humanPlayerIds = humanPlayers.map((h) => h.id);
+
+            const timer = setTimeout(() => {
+              if (runtime.pendingTermination && runtime.pendingTermination.denials.size === 0) {
+                runtime.pendingTermination = undefined;
+                runtime.state.phase = 'game_over';
+                persistRuntime(runtime);
+                if (runtime.lobbyId) storage.markLobbyFinished(runtime.lobbyId);
+                storage.markLobbyFinished(gameId);
+                activeGames.delete(gameId);
+                broadcastGameSync(runtime);
+              }
+            }, 30000);
+
+            runtime.pendingTermination = {
+              requestedAtMs,
+              expiresAtMs,
+              humanPlayerIds,
+              confirmations: new Set(),
+              denials: new Set(),
+              timer
+            };
+
+            broadcastGameSync(runtime);
+          }
+
+          sendJson(res, 200, {
+            success: true,
+            pendingConfirmation: true,
+            expiresAtMs: runtime.pendingTermination.expiresAtMs,
+            message: 'Cererea de oprire a fost trimisă jucătorilor din partidă. Dacă nimeni nu confirmă sau refuză în 30 de secunde, partida se va închide automat.'
+          });
+          return;
+        }
+
+        // If no human players in the game (e.g. 4 AI match), terminate immediately
+        if (runtime.pendingTermination) {
+          clearTimeout(runtime.pendingTermination.timer);
+          runtime.pendingTermination = undefined;
         }
 
         runtime.state.phase = 'game_over';

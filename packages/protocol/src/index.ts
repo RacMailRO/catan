@@ -172,6 +172,8 @@ export interface LobbyState {
   status: 'waiting' | 'in_progress' | 'finished';
   gameId?: string;
   createdAtMs: number;
+  pendingTermination?: boolean;
+  terminationDismissed?: boolean;
 }
 
 export const CreateLobbyRequestSchema = z.object({
@@ -235,6 +237,15 @@ export type ServerToClientWsMessage =
       legalActions: GameAction[];
       recentEvents: GameEvent[];
       aiDecisions: AIDecisionRecord[];
+      pendingTermination?: {
+        requestedAtMs: number;
+        expiresAtMs: number;
+        remainingSec: number;
+        humanPlayerIds: string[];
+        confirmedCount: number;
+        deniedCount: number;
+      } | null;
+      terminationDismissed?: boolean;
     }
   | {
       type: 'action_rejected';

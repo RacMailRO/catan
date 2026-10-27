@@ -58,6 +58,15 @@ export interface GameSyncPayload {
   legalActions: GameAction[];
   recentEvents?: GameEvent[];
   aiDecisions?: unknown[];
+  pendingTermination?: {
+    requestedAtMs: number;
+    expiresAtMs: number;
+    remainingSec: number;
+    humanPlayerIds: string[];
+    confirmedCount: number;
+    deniedCount: number;
+  } | null;
+  terminationDismissed?: boolean;
 }
 
 async function parseJsonResponse(res: Response): Promise<any> {
@@ -152,6 +161,22 @@ export async function terminateOnlineLobby(lobbyId: string): Promise<{ success: 
   const res = await fetch(`/api/lobbies/${lobbyId}/terminate`, { method: 'POST' });
   const data = await parseJsonResponse(res);
   if (!res.ok) throw new Error(data.error ?? 'Nu s-a putut opri lobby-ul.');
+  return data;
+}
+
+export async function respondOnlineTermination(
+  gameId: string,
+  response: 'confirm' | 'deny',
+  sessionToken?: string,
+  playerId?: string
+): Promise<{ success: boolean; status: string; message?: string }> {
+  const res = await fetch(`/api/games/${gameId}/terminate-response`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ response, sessionToken, playerId })
+  });
+  const data = await parseJsonResponse(res);
+  if (!res.ok) throw new Error(data.error ?? 'Eroare la trimiterea răspunsului.');
   return data;
 }
 
