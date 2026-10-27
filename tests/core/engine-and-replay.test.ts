@@ -902,4 +902,34 @@ describe('Catan Core Engine & Replay System', () => {
     expect(tradeProposals.length).toBeGreaterThan(0);
     expect(tradeProposals.some((a) => a.type === 'propose_trade' && a.offering.wood === 1)).toBe(true);
   });
+  it('disallows ships in classic 4-player Catan and allows them in Seafarers scenarios', () => {
+    const classicGame = createGame({
+      gameId: 'classic-no-ships',
+      seed: 'classic-seed',
+      rules: createRulesConfig({ boardScenario: 'classic' }),
+      participants: [
+        { id: 'p1', name: 'P1', type: 'human' },
+        { id: 'p2', name: 'P2', type: 'ai' },
+        { id: 'p3', name: 'P3', type: 'ai' },
+        { id: 'p4', name: 'P4', type: 'ai' }
+      ]
+    });
+    expect(classicGame.players[0]!.remainingPieces.ships).toBeUndefined();
+    const validation = validateAction(classicGame, classicGame.activePlayerId, { type: 'build_ship', edgeId: 'e1' });
+    expect(validation.valid).toBe(false);
+    expect(validation.code).toBe('SHIPS_NOT_ALLOWED');
+
+    const seafarersGame = createGame({
+      gameId: 'seafarers-with-ships',
+      seed: 'seafarers-seed',
+      rules: createRulesConfig({ boardScenario: 'seafarers_shores' }),
+      participants: [
+        { id: 'p1', name: 'P1', type: 'human' },
+        { id: 'p2', name: 'P2', type: 'ai' },
+        { id: 'p3', name: 'P3', type: 'ai' },
+        { id: 'p4', name: 'P4', type: 'ai' }
+      ]
+    });
+    expect(seafarersGame.players[0]!.remainingPieces.ships).toBe(15);
+  });
 });

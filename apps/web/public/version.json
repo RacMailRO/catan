@@ -1,9 +1,14 @@
 {
-  "version": "v1.140",
-  "commitCount": 140,
-  "shortHash": "2cac4d8",
-  "buildDate": "2026-10-27T17:31:41.244Z",
+  "version": "v1.141",
+  "commitCount": 141,
+  "shortHash": "347461e",
+  "buildDate": "2026-10-27T21:45:04.848Z",
   "releaseNotes": [
+    {
+      "hash": "347461e",
+      "date": "2026-10-27",
+      "message": "Update version stamps v1.140"
+    },
     {
       "hash": "2cac4d8",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "0c3da92",
       "date": "2026-10-26",
       "message": "fix(server): case-insensitive static asset lookup for Linux filesystems"
-    },
-    {
-      "hash": "cd7b25b",
-      "date": "2026-10-26",
-      "message": "chore: bump build version to v1.90"
     }
   ]
 }

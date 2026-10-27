@@ -175,3 +175,19 @@ export const DICE_PIPS: Record<number, number> = {
   11: 2,
   12: 1
 };
+
+
+export function isScenarioWithShips(scenario?: string | null): boolean {
+  if (!scenario) return false;
+  return scenario.startsWith('seafarers_') || scenario === 'world_map';
+}
+
+export function getInitialPlayerPieces(scenario?: string | null) {
+  const withShips = isScenarioWithShips(scenario);
+  return {
+    roads: 15,
+    settlements: 5,
+    cities: 4,
+    ...(withShips ? { ships: 15 } : {})
+  };
+}

@@ -5,7 +5,9 @@ import {
   INITIAL_BANK_RESOURCES,
   INITIAL_PLAYER_PIECES,
   STANDARD_DEV_CARD_DECK,
-  createRulesConfig
+  createRulesConfig,
+  getInitialPlayerPieces,
+  isScenarioWithShips
 } from './config';
 import {
   computeStateHash,
@@ -167,7 +169,7 @@ export function createGame(options: CreateGameOptions): GameState {
       hasPlayedDevCardThisTurn: false,
       knightsPlayed: 0,
       longestRoadLength: 0,
-      remainingPieces: { ...INITIAL_PLAYER_PIECES },
+      remainingPieces: getInitialPlayerPieces(rules.boardScenario),
       specialVictoryPoints: 0,
       settledIslands: [],
       hasMovedShipThisTurn: false
@@ -1401,10 +1403,13 @@ export function validateAction(
 
 
     case 'build_ship': {
+      if (!isScenarioWithShips(state.rules.boardScenario)) {
+        return { valid: false, code: 'SHIPS_NOT_ALLOWED', reason: 'Corăbiile sunt disponibile doar în scenariile Seafarers.' };
+      }
       if (state.phase !== 'main_actions' && state.phase !== 'special_building') {
         return { valid: false, code: 'WRONG_PHASE', reason: 'Construcțiile sunt permise doar în faza principală.' };
       }
-      if (player.remainingPieces.ships <= 0) {
+      if ((player.remainingPieces.ships ?? 0) <= 0) {
         return { valid: false, code: 'NO_PIECES_LEFT', reason: 'Nu mai ai piese de corabie disponibile (maxim 15).' };
       }
       if (!hasResources(player.resources, BUILDING_COSTS.ship)) {
@@ -1417,10 +1422,13 @@ export function validateAction(
     }
 
     case 'place_initial_ship': {
+      if (!isScenarioWithShips(state.rules.boardScenario)) {
+        return { valid: false, code: 'SHIPS_NOT_ALLOWED', reason: 'Corăbiile sunt disponibile doar în scenariile Seafarers.' };
+      }
       if (state.phase !== 'setup_road_1' && state.phase !== 'setup_road_2') {
         return { valid: false, code: 'WRONG_PHASE', reason: 'Nu este faza de plasare a drumului/corabiei de început.' };
       }
-      if (player.remainingPieces.ships <= 0) {
+      if ((player.remainingPieces.ships ?? 0) <= 0) {
         return { valid: false, code: 'NO_PIECES_LEFT', reason: 'Nu mai ai corăbii disponibile.' };
       }
       if (!state.lastPlacedSettlementVertexId) {
@@ -1659,6 +1667,9 @@ export function validateAction(
     }
 
     case 'move_ship': {
+      if (!isScenarioWithShips(state.rules.boardScenario)) {
+        return { valid: false, code: 'SHIPS_NOT_ALLOWED', reason: 'Corăbiile pot fi mutate doar în scenariile Seafarers.' };
+      }
       if (state.phase !== 'main_actions') {
         return { valid: false, code: 'WRONG_PHASE', reason: 'Navele pot fi mutate doar în faza principală.' };
       }

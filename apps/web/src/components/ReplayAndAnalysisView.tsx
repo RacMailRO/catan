@@ -103,6 +103,28 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
     }
   }, [replay]);
 
+  const handleSelectSavedReplay = async (item: SavedReplaySummary) => {
+    if (item.replay) {
+      onSelectReplay(item.replay);
+      setActiveModal('none');
+      return;
+    }
+    try {
+      const res = await fetch(`/api/games/${item.gameId}/replay`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.replay) {
+          saveReplayToHistory(data.replay, false);
+          onSelectReplay(data.replay);
+          setActiveModal('none');
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Eroare la descărcarea replay-ului:', err);
+    }
+  };
+
   const handleGenerateSampleReplay = () => {
     const sim = runSimulatedGame({
       seed: `replay-lab-${Date.now()}`,
@@ -204,7 +226,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                     <button
                       type="button"
                       className="btn btn-primary"
-                      onClick={() => onSelectReplay(item.replay)}
+                      onClick={() => handleSelectSavedReplay(item)}
                     >
                       🔍 Analizează
                     </button>
@@ -576,10 +598,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                       <button
                         type="button"
                         className="btn btn-primary"
-                        onClick={() => {
-                          onSelectReplay(item.replay);
-                          setActiveModal('none');
-                        }}
+                        onClick={() => handleSelectSavedReplay(item)}
                       >
                         Încarcă
                       </button>

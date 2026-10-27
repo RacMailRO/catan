@@ -166,6 +166,7 @@ export interface PlayerState {
     roads: number;
     settlements: number;
     cities: number;
+    ships?: number;
   };
 }
 
@@ -258,6 +259,7 @@ export interface PublicPlayerInfo {
     roads: number;
     settlements: number;
     cities: number;
+    ships?: number;
   };
 }
 
