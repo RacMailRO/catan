@@ -1,4 +1,5 @@
 import {
+  STANDARD_NUMBER_TOKENS,
   STANDARD_TERRAIN_DISTRIBUTION
 } from './config';
 import { nextPrngInt, shuffleWithPrng } from './prng';
@@ -128,15 +129,21 @@ export function areHexesAdjacent(a: AxialCoord, b: AxialCoord): boolean {
 }
 
 /**
- * Official Catan board generator:
- * 1. Shuffles the 19 terrain hex cards.
- * 2. Picks a starting corner on the outer ring (0..5) and places the 19 hexes in a clockwise inward spiral.
- * 3. Starting from the exact same outer corner and walking clockwise along the same spiral,
- *    places the 18 alphabetical number tokens (A -> R), skipping only the Desert hex.
+ * Catan board generator. Terrain hexes are always placed in a shuffled clockwise inward
+ * spiral (steps 1-2) — that part of the layout is purely cosmetic/positional and has no
+ * gameplay effect either way. The two `layoutMode` values differ in step 3, how the number
+ * tokens are assigned:
+ * - 'random_balanced' (default): the official rulebook algorithm — walk the SAME spiral
+ *   order and place the 18 alphabetical tokens (A -> R) in sequence, skipping the Desert.
+ *   This is the standard board setup and (as a property of that fixed sequence) never puts
+ *   a 6 and an 8 on adjacent hexes.
+ * - 'random_pure': tokens are independently shuffled and dropped onto the non-Desert hexes
+ *   in that random order, with no spiral/adjacency constraint — a different, more chaotic
+ *   table every game, closer to a "house rule" free setup than the rulebook procedure.
  */
 export function generateStandardBoard(
   prngState: number,
-  _layoutMode: GameRulesConfig['boardLayout'] = 'random_balanced'
+  layoutMode: GameRulesConfig['boardLayout'] = 'random_balanced'
 ): { board: BoardState; nextPrngState: number } {
   let state = prngState;
 
@@ -150,24 +157,29 @@ export function generateStandardBoard(
   state = cornerPick.nextState;
   const spiralIndices = getClockwiseSpiralHexIndices(cornerPick.value);
 
-  // 3. Place terrains along the spiral and place A->R tokens in the same clockwise spiral order (skipping desert)
+  // 3. Place terrains along the spiral, then assign number tokens per layoutMode (skipping desert)
   const terrains = new Array<TerrainType>(19);
   const assignedTokens = new Array<number | null>(19).fill(null);
   const assignedLetters = new Array<string | null>(19).fill(null);
-  let tokenCursor = 0;
 
   for (let step = 0; step < spiralIndices.length; step++) {
     const hexIdx = spiralIndices[step]!;
-    const terrain = shuffledTerrains[step]!;
-    terrains[hexIdx] = terrain;
-    if (terrain === 'desert') {
-      assignedTokens[hexIdx] = null;
-      assignedLetters[hexIdx] = null;
-    } else {
-      assignedTokens[hexIdx] = OFFICIAL_ALPHABETICAL_TOKENS[tokenCursor] ?? null;
-      assignedLetters[hexIdx] = String.fromCharCode(65 + tokenCursor); // A, B, C ... R
-      tokenCursor++;
-    }
+    terrains[hexIdx] = shuffledTerrains[step]!;
+  }
+
+  const nonDesertHexIndices = spiralIndices.filter((idx) => terrains[idx] !== 'desert');
+
+  if (layoutMode === 'random_pure') {
+    const shufTokens = shuffleWithPrng(STANDARD_NUMBER_TOKENS, state);
+    state = shufTokens.nextState;
+    nonDesertHexIndices.forEach((hexIdx, i) => {
+      assignedTokens[hexIdx] = shufTokens.items[i] ?? null;
+    });
+  } else {
+    nonDesertHexIndices.forEach((hexIdx, i) => {
+      assignedTokens[hexIdx] = OFFICIAL_ALPHABETICAL_TOKENS[i] ?? null;
+      assignedLetters[hexIdx] = String.fromCharCode(65 + i); // A, B, C ... R
+    });
   }
 
   const hexes: Record<string, HexTile> = {};

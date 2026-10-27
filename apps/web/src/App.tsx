@@ -2171,16 +2171,18 @@ export const App: React.FC = () => {
 
                 <div className="form-field">
                   <label>{t.boardLayout}</label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={
-                      locale === 'ro'
-                        ? 'Spirala Oficială Regulament (A–R ceasornic)'
-                        : 'Official Rulebook Spiral (A–R clockwise)'
+                  <select
+                    value={rules.boardLayout}
+                    onChange={(e) =>
+                      setRules({
+                        ...rules,
+                        boardLayout: e.target.value as GameRulesConfig['boardLayout']
+                      })
                     }
-                    style={{ color: 'var(--accent-gold)', fontWeight: 600 }}
-                  />
+                  >
+                    <option value="random_balanced">{t.boardBalanced}</option>
+                    <option value="random_pure">{t.boardPure}</option>
+                  </select>
                 </div>
 
                 <div className="form-field">

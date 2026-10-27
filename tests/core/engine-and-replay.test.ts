@@ -8,6 +8,7 @@ import {
   calculateScore,
   canPlayDevCardType,
   createGame,
+  createRulesConfig,
   expireStaleTradesInPlace,
   exportReplayJson,
   getLegalActions,
@@ -62,6 +63,50 @@ describe('Catan Core Engine & Replay System', () => {
         expect(dist).toBeGreaterThan(1);
       }
     }
+  });
+
+  it('generates a valid board under the random_pure layout (independently shuffled tokens, no spiral constraint)', () => {
+    const state = createGame({
+      gameId: 'test-board-pure',
+      seed: 'pure-seed-1',
+      participants: [
+        { id: 'p1', name: 'Alice', type: 'human' },
+        { id: 'p2', name: 'Bob', type: 'ai' },
+        { id: 'p3', name: 'Carol', type: 'ai' },
+        { id: 'p4', name: 'Dave', type: 'ai' }
+      ],
+      rules: createRulesConfig({ boardLayout: 'random_pure' })
+    });
+
+    expect(Object.keys(state.board.hexes)).toHaveLength(19);
+    expect(state.board.harbors).toHaveLength(9);
+
+    const hexes = Object.values(state.board.hexes);
+    const desertHexes = hexes.filter((h) => h.terrain === 'desert');
+    expect(desertHexes).toHaveLength(1);
+    expect(desertHexes[0]!.numberToken).toBeNull();
+
+    // Every non-desert hex gets exactly one of the 18 standard number tokens, none repeated
+    // beyond their normal counts, and letters are NOT assigned (A-R letters are specific to
+    // the official alphabetical spiral procedure, not meaningful for a pure-random table).
+    const nonDesertTokens = hexes.filter((h) => h.terrain !== 'desert').map((h) => h.numberToken);
+    expect(nonDesertTokens).toHaveLength(18);
+    expect(nonDesertTokens.every((t) => t !== null)).toBe(true);
+    expect(hexes.every((h) => h.tokenLetter === null)).toBe(true);
+
+    // Same seed -> same board (deterministic), matching the engine's reproducibility guarantee.
+    const replayState = createGame({
+      gameId: 'test-board-pure-2',
+      seed: 'pure-seed-1',
+      participants: [
+        { id: 'p1', name: 'Alice', type: 'human' },
+        { id: 'p2', name: 'Bob', type: 'ai' },
+        { id: 'p3', name: 'Carol', type: 'ai' },
+        { id: 'p4', name: 'Dave', type: 'ai' }
+      ],
+      rules: createRulesConfig({ boardLayout: 'random_pure' })
+    });
+    expect(replayState.board.hexes).toEqual(state.board.hexes);
   });
 
   it('automatically adds passive bots up to 3 players when 1 or 2 participants are configured', () => {
