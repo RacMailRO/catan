@@ -1,9 +1,14 @@
 {
-  "version": "v1.143",
-  "commitCount": 143,
-  "shortHash": "f3075cd",
-  "buildDate": "2026-10-27T22:07:58.901Z",
+  "version": "v1.144",
+  "commitCount": 144,
+  "shortHash": "496a0d7",
+  "buildDate": "2026-10-27T22:08:17.698Z",
   "releaseNotes": [
+    {
+      "hash": "496a0d7",
+      "date": "2026-10-28",
+      "message": "Fix mobile hamburger dropdown clipping and allow tolerant replay reconstruction for legacy ship actions"
+    },
     {
       "hash": "f3075cd",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "5a6df62",
       "date": "2026-10-26",
       "message": "feat: remember player name per device, classic board hex mask + tight water ring"
-    },
-    {
-      "hash": "2b8741b",
-      "date": "2026-10-26",
-      "message": "test(core): cover Road Building dev card and AI trade negotiation"
     }
   ]
 }
