@@ -719,14 +719,33 @@ export function generateStandardBoard(
     vert2.adjacentEdgeIds.push(eId);
   });
 
-  // Identify coastal edges (adjacentHexIds.length === 1), ordered clockwise around center (0,0)
+  // Identify coastal edges:
+  // For classic / expansion boards (where all board.hexes are land), coastal edges have adjacentHexIds.length === 1.
+  // For Seafarers / custom scenarios (which contain sea and fog hexes), a harbor edge MUST:
+  // 1. Touch at least one LAND hex (terrain !== 'sea' && !== 'fog').
+  // 2. Face water (either adjacent to a sea hex or has adjacentHexIds.length === 1 facing the outer ocean).
   const coastalEdges = Object.values(edges)
-    .filter((e) => e.adjacentHexIds.length === 1)
+    .filter((e) => {
+      const landHexId = e.adjacentHexIds.find((hId) => {
+        const t = hexes[hId]?.terrain;
+        return t && t !== 'sea' && t !== 'fog';
+      });
+      if (!landHexId) return false;
+
+      const facesWater =
+        e.adjacentHexIds.length === 1 ||
+        e.adjacentHexIds.some((hId) => hexes[hId]?.terrain === 'sea');
+      return facesWater;
+    })
     .map((e) => {
+      const landHexId = e.adjacentHexIds.find((hId) => {
+        const t = hexes[hId]?.terrain;
+        return t && t !== 'sea' && t !== 'fog';
+      })!;
       const mx = (e.x1 + e.x2) / 2;
       const my = (e.y1 + e.y2) / 2;
       const angle = Math.atan2(my, mx);
-      return { edge: e, mx, my, angle };
+      return { edge: e, landHexId, mx, my, angle };
     })
     .sort((a, b) => a.angle - b.angle);
 
@@ -754,9 +773,9 @@ export function generateStandardBoard(
 
     const chosen = coastalEdges[candidateIdx]!;
     const hType = harborTypes[i]!;
-    const hexId = chosen.edge.adjacentHexIds[0]!;
+    const hexId = chosen.landHexId;
     const hex = hexes[hexId]!;
-    // Position harbor icon outward from the coastal edge midpoint away from the hex center
+    // Position harbor icon outward from the coastal edge midpoint away from the land hex center
     const dx = chosen.mx - hex.x;
     const dy = chosen.my - hex.y;
     const len = Math.hypot(dx, dy) || 1;

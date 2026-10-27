@@ -1,9 +1,14 @@
 {
-  "version": "v1.126",
-  "commitCount": 126,
-  "shortHash": "8535c38",
-  "buildDate": "2026-10-27T12:46:51.139Z",
+  "version": "v1.127",
+  "commitCount": 127,
+  "shortHash": "efd4372",
+  "buildDate": "2026-10-27T12:51:39.883Z",
   "releaseNotes": [
+    {
+      "hash": "efd4372",
+      "date": "2026-10-27",
+      "message": "fix(board): aliniere simetrica orizontala a hartilor navigatori si scenariul oficial Fog Island din poza (97 hexuri)"
+    },
     {
       "hash": "8535c38",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "aaa7194",
       "date": "2026-10-26",
       "message": "chore(release): bump version to v1.77"
-    },
-    {
-      "hash": "0b174a2",
-      "date": "2026-10-26",
-      "message": "merge: feat(web) display player hand in trade modal"
     }
   ]
 }

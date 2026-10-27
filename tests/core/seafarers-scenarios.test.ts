@@ -48,6 +48,21 @@ describe('Catan Seafarers (Navigatori) & Custom Map Scenarios', () => {
       expect(Object.keys(game.board.edges).length).toBeGreaterThan(80);
       expect(game.board.ships).toBeDefined();
 
+      // Ensure every harbor is placed on the coast of a land hex, never floating in deep sea
+      for (const harbor of game.board.harbors) {
+        const hex = game.board.hexes[harbor.hexId]!;
+        expect(hex.terrain).not.toBe('sea');
+        expect(hex.terrain).not.toBe('fog');
+        for (const vId of harbor.vertexIds) {
+          const v = game.board.vertices[vId]!;
+          const touchesLand = v.adjacentHexIds.some((hId) => {
+            const t = game.board.hexes[hId]?.terrain;
+            return t && t !== 'sea' && t !== 'fog';
+          });
+          expect(touchesLand).toBe(true);
+        }
+      }
+
       if (scenario === 'seafarers_fog') {
         const fogHexes = Object.values(game.board.hexes).filter((h) => h.terrain === 'fog');
         expect(fogHexes.length).toBeGreaterThan(5);
