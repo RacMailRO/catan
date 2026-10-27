@@ -54,6 +54,7 @@ import {
   fetchGameState,
   stepOnlineAi,
   terminateOnlineGame,
+  terminateOnlineLobby,
   fetchLobby,
   fetchSpectatorGameState,
   joinOnlineLobbyByCode,
@@ -2016,7 +2017,10 @@ export const App: React.FC = () => {
                     .map((l) => {
                       const filledSeats = l.seats.filter((s) => s.type !== 'open').length;
                       const isWaiting = l.status === 'waiting';
-                      const hasOpenSeat = l.seats.some((s) => s.type === 'open');
+                      const openSeats = l.seats.filter((s) => s.type === 'open');
+                      const humanSeats = l.seats.filter((s) => s.type === 'human');
+                      const aiSeats = l.seats.filter((s) => s.type === 'ai');
+                      const hasOpenSeat = openSeats.length > 0;
                       return (
                         <div
                           key={l.lobbyId}
@@ -2029,40 +2033,113 @@ export const App: React.FC = () => {
                             background: 'var(--bg-inset)',
                             border: '1px solid var(--border-color-soft)',
                             borderRadius: 'var(--radius-md)',
-                            padding: '0.5rem 0.65rem'
+                            padding: '0.55rem 0.7rem'
                           }}
                         >
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <span style={{ fontWeight: 600, fontSize: '0.86rem' }}>{l.name}</span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 600, fontSize: '0.86rem' }}>{l.name}</span>
+                              {isWaiting && hasOpenSeat && (
+                                <span style={{ fontSize: '0.72rem', background: 'rgba(34,197,94,0.18)', color: '#4ade80', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>
+                                  🟢 {openSeats.length} {openSeats.length === 1 ? (locale === 'ro' ? 'loc liber' : 'open seat') : (locale === 'ro' ? 'locuri libere' : 'open seats')}
+                                </span>
+                              )}
+                              {isWaiting && !hasOpenSeat && (
+                                <span style={{ fontSize: '0.72rem', background: 'rgba(245,158,11,0.18)', color: '#f59e0b', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>
+                                  🚫 {locale === 'ro' ? 'Fără locuri libere' : 'No open seats'}
+                                </span>
+                              )}
+                            </div>
                             <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
                               {isWaiting
-                                ? (locale === 'ro' ? '⏳ Așteaptă jucători' : '⏳ Waiting for players')
+                                ? (hasOpenSeat
+                                    ? (locale === 'ro' ? '⏳ Așteaptă jucători' : '⏳ Waiting for players')
+                                    : (locale === 'ro' ? `⏳ Așteaptă pornirea de către gazdă (${humanSeats.length} Om, ${aiSeats.length} AI)` : `⏳ Waiting for host to start (${humanSeats.length} Human, ${aiSeats.length} AI)`))
                                 : (locale === 'ro' ? '▶️ În desfășurare' : '▶️ In progress')}
                               {' · '}
                               {filledSeats}/{l.seats.length} {locale === 'ro' ? 'locuri' : 'seats'}
                             </span>
+                            {l.inviteCode && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.73rem', marginTop: 1 }}>
+                                <span style={{ color: 'var(--text-muted)' }}>{locale === 'ro' ? 'Cod invitație:' : 'Invite code:'}</span>
+                                <code
+                                  style={{
+                                    background: 'rgba(255,255,255,0.08)',
+                                    padding: '1px 6px',
+                                    borderRadius: 4,
+                                    fontFamily: 'monospace',
+                                    fontWeight: 700,
+                                    color: 'var(--accent-gold)'
+                                  }}
+                                >
+                                  {l.inviteCode}
+                                </code>
+                                <button
+                                  type="button"
+                                  title={locale === 'ro' ? 'Copiază codul și completează caseta de alăturare' : 'Copy code and fill join box'}
+                                  style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    padding: '0 3px',
+                                    fontSize: '0.85rem'
+                                  }}
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(l.inviteCode!);
+                                    setJoinCodeInput(l.inviteCode!);
+                                    setServerStatusMsg(locale === 'ro' ? `Codul ${l.inviteCode} a fost copiat în casetă!` : `Code ${l.inviteCode} copied to box!`);
+                                  }}
+                                >
+                                  📋
+                                </button>
+                              </div>
+                            )}
                           </div>
-                          {isWaiting && hasOpenSeat && l.inviteCode && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                            {isWaiting && hasOpenSeat && l.inviteCode && (
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                                disabled={joinLoading}
+                                onClick={() => handleJoinWithCode(l.inviteCode)}
+                              >
+                                🚀 {locale === 'ro' ? 'Alătură-te' : 'Join'}
+                              </button>
+                            )}
+                            {l.status === 'in_progress' && l.gameId && (
+                              <button
+                                type="button"
+                                className="btn"
+                                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                                onClick={() => handleSpectate(l.gameId!)}
+                              >
+                                👁️ {locale === 'ro' ? 'Spectează' : 'Spectate'}
+                              </button>
+                            )}
                             <button
                               type="button"
-                              className="btn btn-primary"
-                              style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
-                              disabled={joinLoading}
-                              onClick={() => handleJoinWithCode(l.inviteCode)}
+                              className="btn btn-danger"
+                              style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem' }}
+                              title={locale === 'ro' ? 'Oprește sau anulează această partidă de pe server' : 'Stop or cancel this game/lobby'}
+                              onClick={async () => {
+                                if (!window.confirm(locale === 'ro' ? 'Sigur dorești să oprești definitiv această partidă/sală de pe server?' : 'Are you sure you want to stop and cancel this lobby/game?')) return;
+                                try {
+                                  if (l.gameId) {
+                                    await terminateOnlineGame(l.gameId);
+                                  }
+                                  await terminateOnlineLobby(l.lobbyId);
+                                  setPublicLobbies((prev) => prev.filter((p) => p.lobbyId !== l.lobbyId && p.gameId !== l.gameId));
+                                  listPublicLobbies().then((lobbies) => setPublicLobbies(lobbies)).catch(() => {});
+                                  setServerStatusMsg(locale === 'ro' ? 'Partida/sala a fost oprită cu succes.' : 'Game/lobby stopped successfully.');
+                                } catch (err) {
+                                  alert(err instanceof Error ? err.message : 'Eroare la oprirea partidei');
+                                }
+                              }}
                             >
-                              🚀 {locale === 'ro' ? 'Alătură-te' : 'Join'}
+                              ⏹️ {locale === 'ro' ? 'Oprește' : 'Stop'}
                             </button>
-                          )}
-                          {l.status === 'in_progress' && l.gameId && (
-                            <button
-                              type="button"
-                              className="btn"
-                              style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
-                              onClick={() => handleSpectate(l.gameId!)}
-                            >
-                              👁️ {locale === 'ro' ? 'Spectează' : 'Spectate'}
-                            </button>
-                          )}
+                          </div>
                         </div>
                       );
                     })}

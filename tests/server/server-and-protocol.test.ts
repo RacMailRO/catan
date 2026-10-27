@@ -334,4 +334,41 @@ describe('Authoritative LAN/Online Server, Protocol Validation & WebSocket Sync'
     const data2 = (await listRes2.json()) as { lobbies: Array<{ lobbyId: string; gameId?: string; status: string }> };
     expect(data2.lobbies.some((l) => l.lobbyId === lobby.lobbyId || l.gameId === gameId)).toBe(false);
   });
+
+  it('terminates and cancels a waiting lobby before it starts', async () => {
+    // 1. Create a waiting public lobby
+    const createRes = await fetch(`${baseUrl}/api/lobbies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Lobby In Asteptare',
+        hostName: 'TestHost',
+        mode: 'online',
+        isPrivate: false,
+        rules: { victoryPointsToWin: 10 },
+        seats: [
+          { seatIndex: 0, name: 'TestHost', type: 'human', color: 'red' },
+          { seatIndex: 1, name: 'AI Bot', type: 'ai', color: 'blue' }
+        ]
+      })
+    });
+    expect(createRes.status).toBe(201);
+    const { lobby } = (await createRes.json()) as { lobby: { lobbyId: string } };
+
+    // 2. Verify it is listed under /api/lobbies
+    const listRes1 = await fetch(`${baseUrl}/api/lobbies`);
+    const data1 = (await listRes1.json()) as { lobbies: Array<{ lobbyId: string; status: string }> };
+    expect(data1.lobbies.some((l) => l.lobbyId === lobby.lobbyId)).toBe(true);
+
+    // 3. Terminate the waiting lobby
+    const termRes = await fetch(`${baseUrl}/api/lobbies/${lobby.lobbyId}/terminate`, {
+      method: 'POST'
+    });
+    expect(termRes.status).toBe(200);
+
+    // 4. Verify it is no longer listed under /api/lobbies
+    const listRes2 = await fetch(`${baseUrl}/api/lobbies`);
+    const data2 = (await listRes2.json()) as { lobbies: Array<{ lobbyId: string; status: string }> };
+    expect(data2.lobbies.some((l) => l.lobbyId === lobby.lobbyId)).toBe(false);
+  });
 });

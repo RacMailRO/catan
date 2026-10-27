@@ -689,6 +689,34 @@ export function createCatanServer(options?: {
         return;
       }
 
+      // Terminate / Delete an active or waiting lobby
+      const terminateLobbyMatch = pathname.match(/^\/api\/lobbies\/([^/]+)\/terminate$/);
+      if ((req.method === 'POST' && terminateLobbyMatch) || (req.method === 'DELETE' && lobbyMatch)) {
+        const lobbyId = terminateLobbyMatch ? terminateLobbyMatch[1]! : lobbyMatch![1]!;
+        const lobby = storage.getLobby(lobbyId);
+        if (!lobby) {
+          sendJson(res, 404, { error: 'Lobby not found' });
+          return;
+        }
+
+        lobby.status = 'finished';
+        storage.saveLobby(lobby);
+
+        // If the lobby already spawned a game, terminate the game runtime as well
+        if (lobby.gameId) {
+          const runtime = loadOrGetGameRuntime(lobby.gameId);
+          if (runtime) {
+            runtime.state.phase = 'game_over';
+            persistRuntime(runtime);
+            activeGames.delete(lobby.gameId);
+            broadcastGameSync(runtime);
+          }
+        }
+
+        sendJson(res, 200, { success: true, lobbyId, status: 'finished' });
+        return;
+      }
+
       // Configure lobby
       const configMatch = pathname.match(/^\/api\/lobbies\/([^/]+)\/configure$/);
       if (req.method === 'POST' && configMatch) {
