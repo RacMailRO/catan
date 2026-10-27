@@ -415,6 +415,14 @@ export const WORLD_MAP_HEXES: { q: number; r: number; terrain: TerrainType; toke
   { q: 2, r: 2, terrain: 'desert', token: null }
 ];
 
+function getTokenLetter(index: number): string {
+  if (index < 26) {
+    return String.fromCharCode(65 + index); // A, B, C ... Z
+  }
+  const subIdx = index - 26;
+  return `Z${String.fromCharCode(97 + subIdx)}`; // Za, Zb, Zc ...
+}
+
 export function generateStandardBoard(
   prngState: number,
   layoutMode: GameRulesConfig['boardLayout'] = 'random_balanced',
@@ -519,9 +527,13 @@ export function generateStandardBoard(
   const nonDesertHexIndices = placementOrder.filter((idx) => terrains[idx] !== 'desert');
 
   if (isCustomScenario) {
-
     // Custom scenarios have their balanced token assignments pre-defined
-
+    const tokenHexIndices = hexCoords
+      .map((_, idx) => idx)
+      .filter((idx) => assignedTokens[idx] !== null);
+    tokenHexIndices.forEach((hexIdx, i) => {
+      assignedLetters[hexIdx] = getTokenLetter(i);
+    });
   } else if (isExpansion) {
     // The real 5-6 Player Expansion's 28 number tokens are pre-printed (lettered A-Y, Za,
     // Zb, Zc) and placed in that fixed alphabetical order along the same kind of
@@ -556,6 +568,7 @@ export function generateStandardBoard(
     }
     nonDesertHexIndices.forEach((hexIdx, i) => {
       assignedTokens[hexIdx] = bestTokens[i] ?? null;
+      assignedLetters[hexIdx] = getTokenLetter(i);
     });
   } else if (layoutMode === 'random_pure') {
     const shufTokens = shuffleWithPrng(STANDARD_NUMBER_TOKENS, state);
@@ -566,7 +579,7 @@ export function generateStandardBoard(
   } else {
     nonDesertHexIndices.forEach((hexIdx, i) => {
       assignedTokens[hexIdx] = OFFICIAL_ALPHABETICAL_TOKENS[i] ?? null;
-      assignedLetters[hexIdx] = String.fromCharCode(65 + i); // A, B, C ... R
+      assignedLetters[hexIdx] = getTokenLetter(i);
     });
   }
 

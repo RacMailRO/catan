@@ -1,9 +1,14 @@
 {
-  "version": "v1.129",
-  "commitCount": 129,
-  "shortHash": "9997d50",
-  "buildDate": "2026-10-27T13:22:32.832Z",
+  "version": "v1.130",
+  "commitCount": 130,
+  "shortHash": "6826326",
+  "buildDate": "2026-10-27T13:31:23.498Z",
   "releaseNotes": [
+    {
+      "hash": "6826326",
+      "date": "2026-10-27",
+      "message": "fix(board): remove outer blue frame, accurately bind harbor hex tiles to exact coastal edges, and align dock rotation"
+    },
     {
       "hash": "9997d50",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "c6545c6",
       "date": "2026-10-26",
       "message": "merge: feat ai trading, lobby links, guest rename, and playerOrder alignment"
-    },
-    {
-      "hash": "9621ace",
-      "date": "2026-10-26",
-      "message": "feat: AI trading, header lobby link, guest player rename, and playerOrder alignment"
     }
   ]
 }
