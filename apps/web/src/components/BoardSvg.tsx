@@ -73,25 +73,48 @@ const HARBOR_VERTEX_COLOR: Record<HarborType, string> = {
 // proxy and left a small but visible aiming error.
 const PORT_ART_DEFAULT_ANGLE_DEG = 60.2;
 
+// 'gold' and 'brown' (only used by the 5-6 Player Expansion board) reuse existing sprite
+// art — 'gold' has real dedicated assets already (settlement.svg is in fact a gold/amber
+// gradient, matching city_gold/road_gold, just without a "_gold" suffix in its filename
+// since it predates that per-color naming convention), so it needs no filter. 'brown' has
+// no dedicated art, so it reuses the orange set with a filter (PIECE_COLOR_FILTER below)
+// that desaturates and darkens it toward brown.
 const SETTLEMENT_SVG_BY_COLOR: Record<PlayerColor, string> = {
   red: '/settlement_red.22949197b57f9cfd968b.svg',
   blue: '/settlement_blue.bad4cdb43d65c329deda.svg',
   orange: '/settlement_orange.774ddafc8cc0595acdb7.svg',
-  green: '/settlement_green.1b78c696cd137be02fae.svg'
+  green: '/settlement_green.1b78c696cd137be02fae.svg',
+  gold: '/settlement.svg',
+  brown: '/settlement_orange.774ddafc8cc0595acdb7.svg'
 };
 
 const CITY_SVG_BY_COLOR: Record<PlayerColor, string> = {
   red: '/city_red.svg',
   blue: '/city_blue.svg',
   orange: '/city_orange.svg',
-  green: '/city_green.svg'
+  green: '/city_green.svg',
+  gold: '/city_gold.ae8ea43a6dc22d3aace7.svg',
+  brown: '/city_orange.svg'
 };
 
 const ROAD_SVG_BY_COLOR: Record<PlayerColor, string> = {
   red: '/road_red.41c6cbd9278108542715.svg',
   blue: '/road_blue.3301e2eed15cae5a6a05.svg',
   orange: '/road_orange.07bb26b8c1e63dd438c7.svg',
-  green: '/road_green.d206aed3747b3687bc40.svg'
+  green: '/road_green.d206aed3747b3687bc40.svg',
+  gold: '/road_gold.c48ddeff8c81a713c940.svg',
+  brown: '/road_orange.07bb26b8c1e63dd438c7.svg'
+};
+
+// Extra CSS filter applied before the drop-shadow chain below, only for colors reusing
+// another asset's art (see comment above) — empty for every color with real dedicated art.
+const PIECE_COLOR_FILTER: Record<PlayerColor, string> = {
+  red: '',
+  blue: '',
+  orange: '',
+  green: '',
+  gold: '',
+  brown: 'hue-rotate(-18deg) saturate(0.6) brightness(0.72) '
 };
 // Native proportions of the road SVG art (a vertical plank, long axis = road length).
 const ROAD_ART_WIDTH = 40;
@@ -153,21 +176,29 @@ interface OuterSeaHex {
   r: number;
 }
 
-// Classic board: just one ring of open sea/harbor hexes around the island, matching the
-// physical game's own footprint (and the reference box art) — not padded out with extra
-// rings of plain water.
-const OUTER_SEA_MAX_RING = 3;
+// One ring of open sea/harbor hexes around the land — matching the physical game's own
+// footprint (and the reference box art), not padded out with extra rings of plain water.
+// Computed from the board's ACTUAL land hexes (every axial neighbor of a land hex that
+// isn't itself land) rather than a fixed cube-distance-from-origin radius, so this works
+// for any board shape — the classic board's regular hexagon as well as the 5-6 Player
+// Expansion's larger, non-hexagonal (elongated) footprint.
+const AXIAL_NEIGHBOR_DELTAS: Array<[number, number]> = [
+  [1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]
+];
 
-function generateOuterSeaRing(): OuterSeaHex[] {
+function generateOuterSeaRing(board: BoardState): OuterSeaHex[] {
+  const landKeys = new Set(Object.values(board.hexes).map((h) => `${h.q}_${h.r}`));
+  const seaKeys = new Set<string>();
   const ring: OuterSeaHex[] = [];
-  for (let q = -OUTER_SEA_MAX_RING; q <= OUTER_SEA_MAX_RING; q++) {
-    for (let r = -OUTER_SEA_MAX_RING; r <= OUTER_SEA_MAX_RING; r++) {
-      const s = -q - r;
-      const dist = Math.max(Math.abs(q), Math.abs(r), Math.abs(s));
-      if (dist >= 3 && dist <= OUTER_SEA_MAX_RING) {
-        const { x, y } = axialToPixel(q, r, HEX_RADIUS);
-        ring.push({ id: `sea_${q}_${r}`, x, y, q, r });
-      }
+  for (const hex of Object.values(board.hexes)) {
+    for (const [dq, dr] of AXIAL_NEIGHBOR_DELTAS) {
+      const nq = hex.q + dq;
+      const nr = hex.r + dr;
+      const key = `${nq}_${nr}`;
+      if (landKeys.has(key) || seaKeys.has(key)) continue;
+      seaKeys.add(key);
+      const { x, y } = axialToPixel(nq, nr, HEX_RADIUS);
+      ring.push({ id: `sea_${nq}_${nr}`, x, y, q: nq, r: nr });
     }
   }
   return ring;
@@ -214,12 +245,6 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState<boolean>(false);
 
-  // Fixed viewBox sized to the island + its one ring of sea/harbor hexes (the board's natural
-  // footprint). The outer hex clip-path (see outerHexMaskPoints) keeps this a clean hexagon
-  // silhouette; the SVG's own default preserveAspectRatio ("xMidYMid meet") scales it to fit
-  // any container — letterboxed on the non-matching axis — so the hexagon is always as large
-  // as the container allows without distortion, with no resize-tracking JS needed.
-  const viewBoxHalfExtent = { w: 640, h: 580 };
   const hasMovedRef = useRef<boolean>(false);
   const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number }>({
     x: 0,
@@ -264,7 +289,29 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
     return { x: unitsPerPx, y: unitsPerPx };
   };
 
-  const outerSeaRing = useMemo(() => generateOuterSeaRing(), []);
+  const outerSeaRing = useMemo(() => generateOuterSeaRing(board), [board]);
+
+  // viewBox sized to the land + its one ring of sea/harbor hexes (the board's natural
+  // footprint), computed from the actual sea-ring extent rather than a fixed constant —
+  // the classic board's radius-2 hexagon and the (bigger, non-hexagonal) 5-6 Player
+  // Expansion board both need to fit without clipping or excess empty margin. The outer hex
+  // clip-path (see outerHexMaskPoints) keeps this a clean silhouette regardless of shape;
+  // the SVG's own default preserveAspectRatio ("xMidYMid meet") scales it to fit any
+  // container — letterboxed on the non-matching axis — so it's always as large as the
+  // container allows without distortion, with no resize-tracking JS needed. Board
+  // generation always centers the board at (0,0) (see board.ts), so a symmetric half-extent
+  // around the origin is safe for any board shape.
+  const viewBoxHalfExtent = useMemo(() => {
+    const margin = HEX_RADIUS + 20;
+    if (outerSeaRing.length === 0) return { w: 640, h: 580 };
+    let maxAbsX = 0;
+    let maxAbsY = 0;
+    for (const sea of outerSeaRing) {
+      maxAbsX = Math.max(maxAbsX, Math.abs(sea.x));
+      maxAbsY = Math.max(maxAbsY, Math.abs(sea.y));
+    }
+    return { w: maxAbsX + margin, h: maxAbsY + margin };
+  }, [outerSeaRing]);
 
   // Outer hexagon mask: the convex hull of every outer-sea-hex corner, pushed out a couple px
   // so the clip edge sits just past the tile art (no hairline gap at the border). Everything
@@ -855,7 +902,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                       width={roadDisplayWidth}
                       height={roadDisplayHeight}
                       preserveAspectRatio="none"
-                      style={{ filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.5))' }}
+                      style={{ filter: `${PIECE_COLOR_FILTER[ownerPColor]}drop-shadow(0 2px 2px rgba(0,0,0,0.5))` }}
                     />
                   </g>
                 )}
@@ -934,8 +981,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                     height={66}
                     style={{
                       pointerEvents: 'none',
-                      filter:
-                        'drop-shadow(0 2px 4px rgba(0,0,0,0.85)) drop-shadow(0 0 2px rgba(255,255,255,0.75))'
+                      filter: `${PIECE_COLOR_FILTER[pColor]}drop-shadow(0 2px 4px rgba(0,0,0,0.85)) drop-shadow(0 0 2px rgba(255,255,255,0.75))`
                     }}
                   />
                 )}
@@ -949,8 +995,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                     height={56}
                     style={{
                       pointerEvents: 'none',
-                      filter:
-                        'drop-shadow(0 3px 5px rgba(0,0,0,0.9)) drop-shadow(0 0 2px rgba(255,255,255,0.8))'
+                      filter: `${PIECE_COLOR_FILTER[pColor]}drop-shadow(0 3px 5px rgba(0,0,0,0.9)) drop-shadow(0 0 2px rgba(255,255,255,0.8))`
                     }}
                   />
                 )}

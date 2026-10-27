@@ -34,7 +34,7 @@ export const AIStrategyStyleSchema = z.enum([
 
 export const ParticipantTypeSchema = z.enum(['human', 'ai', 'llm', 'passive']);
 
-export const PlayerColorSchema = z.enum(['red', 'blue', 'orange', 'green']);
+export const PlayerColorSchema = z.enum(['red', 'blue', 'orange', 'green', 'brown', 'gold']);
 
 export const GameRulesConfigSchema = z
   .object({
@@ -46,7 +46,8 @@ export const GameRulesConfigSchema = z
     devCardsPerTurnRule: z.enum(['one_total', 'one_per_type']).optional(),
     tradeOfferTimeoutSec: z.number().int().min(5).max(300).optional(),
     boardLayout: z.enum(['random_balanced', 'random_pure', 'beginner_fixed']).optional(),
-    autoFillPassiveBotsMinPlayers: z.number().int().min(1).max(4).optional()
+    boardScenario: z.enum(['classic', 'expansion']).optional(),
+    autoFillPassiveBotsMinPlayers: z.number().int().min(1).max(6).optional()
   })
   .strict();
 
@@ -138,7 +139,7 @@ export const GameActionSchema = z.discriminatedUnion('type', [
 ]);
 
 export const LobbySeatConfigSchema = z.object({
-  seatIndex: z.number().int().min(0).max(3),
+  seatIndex: z.number().int().min(0).max(5),
   name: z.string().min(1).max(40),
   type: z.enum(['human', 'ai', 'llm', 'passive', 'open']),
   color: PlayerColorSchema.optional(),
@@ -181,20 +182,20 @@ export const CreateLobbyRequestSchema = z.object({
   disconnectPolicy: z.enum(['wait', 'replace_with_ai', 'abandon']).default('wait'),
   seed: z.string().max(80).optional(),
   rules: GameRulesConfigSchema.optional(),
-  seats: z.array(LobbySeatConfigSchema).min(1).max(4).optional()
+  seats: z.array(LobbySeatConfigSchema).min(1).max(6).optional()
 });
 
 export const ConfigureLobbyRequestSchema = z.object({
   sessionToken: z.string().min(1),
   rules: GameRulesConfigSchema.optional(),
   disconnectPolicy: z.enum(['wait', 'replace_with_ai', 'abandon']).optional(),
-  seats: z.array(LobbySeatConfigSchema).min(1).max(4).optional(),
+  seats: z.array(LobbySeatConfigSchema).min(1).max(6).optional(),
   seed: z.string().max(80).optional()
 });
 
 export const JoinLobbyRequestSchema = z.object({
   playerName: z.string().min(1).max(40),
-  seatIndex: z.number().int().min(0).max(3).optional(),
+  seatIndex: z.number().int().min(0).max(5).optional(),
   inviteCode: z.string().optional(),
   sessionToken: z.string().optional()
 });

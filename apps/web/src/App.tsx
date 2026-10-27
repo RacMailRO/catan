@@ -1448,6 +1448,8 @@ export const App: React.FC = () => {
     setBenchmarkReport(rep);
   };
 
+  const maxPlayers = rules.boardScenario === 'expansion' ? 6 : 4;
+
   const playerColorsMap: Record<string, PlayerColor> = {};
   if (gameState) {
     for (const p of gameState.players) {
@@ -1891,8 +1893,12 @@ export const App: React.FC = () => {
             )}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexShrink: 0 }}>
-              <h2 style={{ margin: 0, border: 'none', padding: 0 }}>👥 {t.participantsTitle}</h2>
-              {participants.length < 4 && (
+              <h2 style={{ margin: 0, border: 'none', padding: 0 }}>
+                👥 {locale === 'ro'
+                  ? `Configurare Participanți (1–${maxPlayers} Locuri)`
+                  : `Configure Participants (1–${maxPlayers} Seats)`}
+              </h2>
+              {participants.length < maxPlayers && (
                 <button
                   type="button"
                   className="btn"
@@ -1901,7 +1907,7 @@ export const App: React.FC = () => {
                     const usedColors = new Set(participants.map((p) => p.color));
                     const nextColor =
                       PLAYER_COLORS.find((c) => !usedColors.has(c)) ??
-                      PLAYER_COLORS[(nextIdx - 1) % 4]!;
+                      PLAYER_COLORS[(nextIdx - 1) % PLAYER_COLORS.length]!;
                     setParticipants([
                       ...participants,
                       {
@@ -2166,6 +2172,27 @@ export const App: React.FC = () => {
                   >
                     <option value="one_total">{t.devOneTotal}</option>
                     <option value="one_per_type">{t.devOnePerType}</option>
+                  </select>
+                </div>
+
+                <div className="form-field">
+                  <label>{locale === 'ro' ? 'Variantă Tablă' : 'Board Variant'}</label>
+                  <select
+                    value={rules.boardScenario}
+                    onChange={(e) => {
+                      const scenario = e.target.value as GameRulesConfig['boardScenario'];
+                      setRules({ ...rules, boardScenario: scenario });
+                      if (scenario === 'classic' && participants.length > 4) {
+                        setParticipants(participants.slice(0, 4));
+                      }
+                    }}
+                  >
+                    <option value="classic">
+                      {locale === 'ro' ? 'Clasică (19 hexagoane, până la 4 jucători)' : 'Classic (19 hexes, up to 4 players)'}
+                    </option>
+                    <option value="expansion">
+                      {locale === 'ro' ? 'Extensie 5-6 Jucători (30 hexagoane, până la 6 jucători)' : '5-6 Player Expansion (30 hexes, up to 6 players)'}
+                    </option>
                   </select>
                 </div>
 

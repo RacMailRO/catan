@@ -24,9 +24,16 @@ export type DevCardType =
   | 'monopoly'
   | 'victory_point';
 
-export type PlayerColor = 'red' | 'blue' | 'orange' | 'green';
+export type PlayerColor = 'red' | 'blue' | 'orange' | 'green' | 'brown' | 'gold';
 
-export const PLAYER_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'green'];
+// First 4 are the classic board's colors; 'brown' and 'gold' are only offered once the
+// 5-6 Player Expansion board scenario is selected (see GameRulesConfig.boardScenario).
+export const PLAYER_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'green', 'brown', 'gold'];
+
+export const MAX_PLAYERS_BY_SCENARIO: Record<'classic' | 'expansion', number> = {
+  classic: 4,
+  expansion: 6
+};
 
 export type ParticipantType = 'human' | 'ai' | 'llm' | 'passive';
 
@@ -49,6 +56,11 @@ export interface GameRulesConfig {
   devCardsPerTurnRule: 'one_total' | 'one_per_type';
   tradeOfferTimeoutSec: number;
   boardLayout: 'random_balanced' | 'random_pure' | 'beginner_fixed';
+  // 'classic': the standard 19-hex board, up to 4 players. 'expansion': the 5-6 Player
+  // Expansion's larger 30-hex board, up to 6 players. Independent of boardLayout — the
+  // expansion scenario always shuffles its number tokens with no fixed letter sequence
+  // (the rulebook doesn't define one for the bigger board), regardless of boardLayout.
+  boardScenario: 'classic' | 'expansion';
   autoFillPassiveBotsMinPlayers: number;
 }
 

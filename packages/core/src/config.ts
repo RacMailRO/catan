@@ -12,6 +12,7 @@ export const STANDARD_RULES: GameRulesConfig = {
   devCardsPerTurnRule: 'one_total',
   tradeOfferTimeoutSec: 30,
   boardLayout: 'random_balanced',
+  boardScenario: 'classic',
   autoFillPassiveBotsMinPlayers: 3
 };
 
@@ -76,6 +77,24 @@ export const STANDARD_TERRAIN_DISTRIBUTION: TerrainType[] = [
 
 export const STANDARD_NUMBER_TOKENS: number[] = [
   2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12
+];
+
+// 5-6 Player Expansion board: 30 land hexes (5 hills, 6 forest, 5 mountains, 6 fields,
+// 6 pasture, 2 desert) — the official expansion's terrain counts.
+export const EXPANSION_TERRAIN_DISTRIBUTION: TerrainType[] = [
+  'forest', 'forest', 'forest', 'forest', 'forest', 'forest',
+  'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture',
+  'fields', 'fields', 'fields', 'fields', 'fields', 'fields',
+  'hills', 'hills', 'hills', 'hills', 'hills',
+  'mountains', 'mountains', 'mountains', 'mountains', 'mountains',
+  'desert', 'desert'
+];
+
+// 28 number tokens for the 28 non-desert expansion hexes: the standard 18 plus one extra
+// of each value (no second 7, since 7 has no tile — it's the robber/discard roll).
+export const EXPANSION_NUMBER_TOKENS: number[] = [
+  ...STANDARD_NUMBER_TOKENS,
+  2, 3, 4, 5, 6, 8, 9, 10, 11, 12
 ];
 
 export const STANDARD_DEV_CARD_DECK: DevCardType[] = [

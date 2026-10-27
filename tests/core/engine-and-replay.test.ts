@@ -109,6 +109,60 @@ describe('Catan Core Engine & Replay System', () => {
     expect(replayState.board.hexes).toEqual(state.board.hexes);
   });
 
+  it('supports the 5-6 Player Expansion board scenario: 30 hexes, 11 harbors, 6 players, 2 deserts', () => {
+    const participants = [
+      { id: 'p1', name: 'Alice', type: 'human' as const },
+      { id: 'p2', name: 'Bob', type: 'ai' as const },
+      { id: 'p3', name: 'Carol', type: 'ai' as const },
+      { id: 'p4', name: 'Dave', type: 'ai' as const },
+      { id: 'p5', name: 'Eve', type: 'ai' as const },
+      { id: 'p6', name: 'Frank', type: 'ai' as const }
+    ];
+
+    const state = createGame({
+      gameId: 'test-expansion-1',
+      seed: 'expansion-seed-1',
+      participants,
+      rules: createRulesConfig({ boardScenario: 'expansion' })
+    });
+
+    expect(state.players).toHaveLength(6);
+    expect(new Set(state.players.map((p) => p.color)).size).toBe(6); // all distinct colors
+
+    expect(Object.keys(state.board.hexes)).toHaveLength(30);
+    expect(state.board.harbors).toHaveLength(11);
+
+    const hexes = Object.values(state.board.hexes);
+    const desertHexes = hexes.filter((h) => h.terrain === 'desert');
+    expect(desertHexes).toHaveLength(2);
+    expect(['classic', 'expansion']).toContain(state.rules.boardScenario);
+    expect(state.rules.boardScenario).toBe('expansion');
+
+    const nonDesertTokens = hexes.filter((h) => h.terrain !== 'desert').map((h) => h.numberToken);
+    expect(nonDesertTokens).toHaveLength(28);
+    expect(nonDesertTokens.every((t) => t !== null)).toBe(true);
+
+    // A 7th participant must be rejected on the expansion board (max 6), and a 5th must be
+    // rejected on the classic board (max 4) — the scenario's player cap is actually enforced.
+    expect(() =>
+      createGame({
+        gameId: 'test-expansion-overflow',
+        seed: 'overflow-seed',
+        participants: [...participants, { id: 'p7', name: 'Grace', type: 'ai' as const }],
+        rules: createRulesConfig({ boardScenario: 'expansion' })
+      })
+    ).toThrow();
+
+    expect(() =>
+      createGame({
+        gameId: 'test-classic-overflow',
+        seed: 'overflow-seed-2',
+        participants,
+        rules: createRulesConfig({ boardScenario: 'classic' })
+      })
+    ).toThrow();
+  });
+
   it('automatically adds passive bots up to 3 players when 1 or 2 participants are configured', () => {
     const soloGame = createGame({
       gameId: 'solo-1',

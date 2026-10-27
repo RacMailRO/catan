@@ -24,6 +24,7 @@ import {
   GameEvent,
   GameRulesConfig,
   GameState,
+  MAX_PLAYERS_BY_SCENARIO,
   ParticipantType,
   PLAYER_COLORS,
   PlayerColor,
@@ -116,8 +117,9 @@ export function createGame(options: CreateGameOptions): GameState {
   const seed = options.seed ?? `seed-${options.gameId}-${Date.now()}`;
   let prngState = hashSeedToUint32(seed);
 
-  if (options.participants.length < 1 || options.participants.length > 4) {
-    throw new Error('A game requires between 1 and 4 configured participants.');
+  const maxPlayers = MAX_PLAYERS_BY_SCENARIO[options.rules?.boardScenario ?? 'classic'];
+  if (options.participants.length < 1 || options.participants.length > maxPlayers) {
+    throw new Error(`A game requires between 1 and ${maxPlayers} configured participants for this board scenario.`);
   }
 
   const basePreset =
@@ -129,7 +131,7 @@ export function createGame(options: CreateGameOptions): GameState {
 
   // Expand participants with passive neutral bots if 1-2 players and autoFillPassiveBotsMinPlayers >= 3
   const finalParticipants: ParticipantConfig[] = [...options.participants];
-  const minPlayers = Math.min(4, Math.max(1, rules.autoFillPassiveBotsMinPlayers));
+  const minPlayers = Math.min(maxPlayers, Math.max(1, rules.autoFillPassiveBotsMinPlayers));
   let botIdx = 1;
   while (finalParticipants.length < minPlayers) {
     finalParticipants.push({
@@ -147,7 +149,7 @@ export function createGame(options: CreateGameOptions): GameState {
   const players: PlayerState[] = finalParticipants.map((p, idx) => {
     let color = p.color;
     if (!color || usedColors.has(color)) {
-      color = PLAYER_COLORS.find((c) => !usedColors.has(c)) ?? PLAYER_COLORS[idx % 4]!;
+      color = PLAYER_COLORS.find((c) => !usedColors.has(c)) ?? PLAYER_COLORS[idx % PLAYER_COLORS.length]!;
     }
     usedColors.add(color);
 
@@ -169,7 +171,7 @@ export function createGame(options: CreateGameOptions): GameState {
     };
   });
 
-  const boardGen = generateStandardBoard(prngState, rules.boardLayout);
+  const boardGen = generateStandardBoard(prngState, rules.boardLayout, rules.boardScenario);
   prngState = boardGen.nextPrngState;
 
   const deckShuf = shuffleWithPrng(STANDARD_DEV_CARD_DECK, prngState);

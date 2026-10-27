@@ -1,4 +1,6 @@
 import {
+  EXPANSION_NUMBER_TOKENS,
+  EXPANSION_TERRAIN_DISTRIBUTION,
   STANDARD_NUMBER_TOKENS,
   STANDARD_TERRAIN_DISTRIBUTION
 } from './config';
@@ -47,6 +49,34 @@ export const STANDARD_HEX_COORDS: AxialCoord[] = [
   { q: -2, r: 2 },
   { q: -1, r: 2 },
   { q: 0, r: 2 }
+];
+
+// 5-6 Player Expansion board: 30 hexes in an elongated hexagon (row lengths 4,5,6,6,5,4 —
+// the real expansion board's shape, noticeably wider/flatter than the classic board's
+// perfect hexagon). Unlike STANDARD_HEX_COORDS there's no official fixed spiral/letter
+// sequence for this board — the expansion rulebook just says to place tiles and tokens
+// randomly — so generateStandardBoard always uses plain shuffling for this scenario,
+// regardless of the classic board's boardLayout setting.
+export const EXPANSION_HEX_COORDS: AxialCoord[] = [
+  // Row r = -3 (4 hexes)
+  { q: -2, r: -3 }, { q: -1, r: -3 }, { q: 0, r: -3 }, { q: 1, r: -3 },
+  // Row r = -2 (5 hexes)
+  { q: -2, r: -2 }, { q: -1, r: -2 }, { q: 0, r: -2 }, { q: 1, r: -2 }, { q: 2, r: -2 },
+  // Row r = -1 (6 hexes)
+  { q: -3, r: -1 }, { q: -2, r: -1 }, { q: -1, r: -1 }, { q: 0, r: -1 }, { q: 1, r: -1 }, { q: 2, r: -1 },
+  // Row r = 0 (6 hexes)
+  { q: -3, r: 0 }, { q: -2, r: 0 }, { q: -1, r: 0 }, { q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 },
+  // Row r = 1 (5 hexes)
+  { q: -3, r: 1 }, { q: -2, r: 1 }, { q: -1, r: 1 }, { q: 0, r: 1 }, { q: 1, r: 1 },
+  // Row r = 2 (4 hexes)
+  { q: -3, r: 2 }, { q: -2, r: 2 }, { q: -1, r: 2 }, { q: 0, r: 2 }
+];
+
+// Expansion harbor frame — 11 harbors (vs the classic board's 9): 6 generic (3:1) + the same
+// 5 resource-specific (2:1) ones, reflecting the bigger board's longer coastline.
+export const EXPANSION_HARBOR_TYPES: HarborType[] = [
+  'sheep', 'generic', 'wheat', 'generic', 'ore', 'generic',
+  'wood', 'generic', 'generic', 'brick', 'generic'
 ];
 
 /**
@@ -143,34 +173,48 @@ export function areHexesAdjacent(a: AxialCoord, b: AxialCoord): boolean {
  */
 export function generateStandardBoard(
   prngState: number,
-  layoutMode: GameRulesConfig['boardLayout'] = 'random_balanced'
+  layoutMode: GameRulesConfig['boardLayout'] = 'random_balanced',
+  scenario: GameRulesConfig['boardScenario'] = 'classic'
 ): { board: BoardState; nextPrngState: number } {
   let state = prngState;
+  const isExpansion = scenario === 'expansion';
+  const hexCoords = isExpansion ? EXPANSION_HEX_COORDS : STANDARD_HEX_COORDS;
+  const terrainDistribution = isExpansion ? EXPANSION_TERRAIN_DISTRIBUTION : STANDARD_TERRAIN_DISTRIBUTION;
+  const hexCount = hexCoords.length;
 
   // 1. Shuffle terrain cards
-  const shufTerrains = shuffleWithPrng(STANDARD_TERRAIN_DISTRIBUTION, state);
+  const shufTerrains = shuffleWithPrng(terrainDistribution, state);
   const shuffledTerrains = shufTerrains.items;
   state = shufTerrains.nextState;
 
-  // 2. Choose starting corner on the outer edge (0..5) and build the clockwise inward spiral
-  const cornerPick = nextPrngInt(state, 0, 5);
-  state = cornerPick.nextState;
-  const spiralIndices = getClockwiseSpiralHexIndices(cornerPick.value);
+  // 2. Classic board: choose a starting corner and build the official clockwise inward
+  //    spiral walk order. Expansion board: no official spiral is defined for its shape, so
+  //    terrains/tokens are placed in plain array order (already fully randomized by the
+  //    shuffle above / token shuffle below — the order itself carries no meaning here).
+  let placementOrder: number[];
+  if (isExpansion) {
+    placementOrder = hexCoords.map((_, idx) => idx);
+  } else {
+    const cornerPick = nextPrngInt(state, 0, 5);
+    state = cornerPick.nextState;
+    placementOrder = getClockwiseSpiralHexIndices(cornerPick.value);
+  }
 
-  // 3. Place terrains along the spiral, then assign number tokens per layoutMode (skipping desert)
-  const terrains = new Array<TerrainType>(19);
-  const assignedTokens = new Array<number | null>(19).fill(null);
-  const assignedLetters = new Array<string | null>(19).fill(null);
+  // 3. Place terrains along placementOrder, then assign number tokens (skipping desert).
+  const terrains = new Array<TerrainType>(hexCount);
+  const assignedTokens = new Array<number | null>(hexCount).fill(null);
+  const assignedLetters = new Array<string | null>(hexCount).fill(null);
 
-  for (let step = 0; step < spiralIndices.length; step++) {
-    const hexIdx = spiralIndices[step]!;
+  for (let step = 0; step < placementOrder.length; step++) {
+    const hexIdx = placementOrder[step]!;
     terrains[hexIdx] = shuffledTerrains[step]!;
   }
 
-  const nonDesertHexIndices = spiralIndices.filter((idx) => terrains[idx] !== 'desert');
+  const nonDesertHexIndices = placementOrder.filter((idx) => terrains[idx] !== 'desert');
 
-  if (layoutMode === 'random_pure') {
-    const shufTokens = shuffleWithPrng(STANDARD_NUMBER_TOKENS, state);
+  if (isExpansion || layoutMode === 'random_pure') {
+    const tokenPool = isExpansion ? EXPANSION_NUMBER_TOKENS : STANDARD_NUMBER_TOKENS;
+    const shufTokens = shuffleWithPrng(tokenPool, state);
     state = shufTokens.nextState;
     nonDesertHexIndices.forEach((hexIdx, i) => {
       assignedTokens[hexIdx] = shufTokens.items[i] ?? null;
@@ -183,7 +227,7 @@ export function generateStandardBoard(
   }
 
   const hexes: Record<string, HexTile> = {};
-  let robberHexId = 'H9';
+  let robberHexId = `H${Math.floor(hexCount / 2)}`;
 
   // Map spatial key -> vertex accumulator
   const vertexByPosKey = new Map<
@@ -198,7 +242,7 @@ export function generateStandardBoard(
   // For each hex, store its 6 corner position keys in clockwise order
   const hexCornerKeys = new Map<string, string[]>();
 
-  STANDARD_HEX_COORDS.forEach((coord, index) => {
+  hexCoords.forEach((coord, index) => {
     const id = `H${index}`;
     const { x: cx, y: cy } = axialToPixel(coord.q, coord.r, HEX_RADIUS);
     const terrain = terrains[index]!;
@@ -340,15 +384,16 @@ export function generateStandardBoard(
     })
     .sort((a, b) => a.angle - b.angle);
 
-  // The harbor frame is fixed (see STANDARD_HARBOR_TYPES) — never shuffled, unlike the
-  // terrain/number tiles above.
-  const harborTypes = STANDARD_HARBOR_TYPES;
+  // The harbor frame is fixed (see STANDARD_HARBOR_TYPES / EXPANSION_HARBOR_TYPES) — never
+  // shuffled, unlike the terrain/number tiles above.
+  const harborTypes = isExpansion ? EXPANSION_HARBOR_TYPES : STANDARD_HARBOR_TYPES;
+  const harborCount = harborTypes.length;
 
   const harbors: Harbor[] = [];
   const usedHarborVertices = new Set<string>();
-  const step = coastalEdges.length / 9;
+  const step = coastalEdges.length / harborCount;
 
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < harborCount; i++) {
     let candidateIdx = Math.floor(i * step) % coastalEdges.length;
     for (let offset = 0; offset < coastalEdges.length; offset++) {
       const probe = coastalEdges[(candidateIdx + offset) % coastalEdges.length]!;
@@ -386,6 +431,35 @@ export function generateStandardBoard(
     usedHarborVertices.add(chosen.edge.v2);
     vertices[chosen.edge.v1]!.harbor = hType;
     vertices[chosen.edge.v2]!.harbor = hType;
+  }
+
+  // Re-center the whole board around (0,0): the classic board's coordinates are already
+  // symmetric by construction, but the expansion board's elongated, non-hexagonal shape is
+  // not — and BoardSvg's viewBox/pan/zoom math assumes the board is centered at the origin.
+  // Shifting everything by the hex centroid here keeps that assumption true for any shape,
+  // without needing to touch the rendering layer's coordinate system at all.
+  const hexList = Object.values(hexes);
+  const centroidX = hexList.reduce((s, h) => s + h.x, 0) / hexList.length;
+  const centroidY = hexList.reduce((s, h) => s + h.y, 0) / hexList.length;
+  if (Math.abs(centroidX) > 0.001 || Math.abs(centroidY) > 0.001) {
+    for (const hex of hexList) {
+      hex.x = Number((hex.x - centroidX).toFixed(3));
+      hex.y = Number((hex.y - centroidY).toFixed(3));
+    }
+    for (const vertex of Object.values(vertices)) {
+      vertex.x = Number((vertex.x - centroidX).toFixed(3));
+      vertex.y = Number((vertex.y - centroidY).toFixed(3));
+    }
+    for (const edge of Object.values(edges)) {
+      edge.x1 = Number((edge.x1 - centroidX).toFixed(3));
+      edge.y1 = Number((edge.y1 - centroidY).toFixed(3));
+      edge.x2 = Number((edge.x2 - centroidX).toFixed(3));
+      edge.y2 = Number((edge.y2 - centroidY).toFixed(3));
+    }
+    for (const harbor of harbors) {
+      harbor.x = Number((harbor.x - centroidX).toFixed(3));
+      harbor.y = Number((harbor.y - centroidY).toFixed(3));
+    }
   }
 
   return {

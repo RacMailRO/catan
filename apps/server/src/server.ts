@@ -616,7 +616,7 @@ export function createCatanServer(options?: {
           ...s,
           seatIndex: idx,
           playerId: `p${idx + 1}`,
-          color: s.color ?? PLAYER_COLORS[idx % 4]!,
+          color: s.color ?? PLAYER_COLORS[idx % PLAYER_COLORS.length]!,
           connected: s.type !== 'open',
           claimedByPlayerName: s.type === 'human' && idx === 0 ? data.hostName : undefined
         }));
@@ -708,7 +708,7 @@ export function createCatanServer(options?: {
             ...s,
             seatIndex: idx,
             playerId: `p${idx + 1}`,
-            color: s.color ?? PLAYER_COLORS[idx % 4]!,
+            color: s.color ?? PLAYER_COLORS[idx % PLAYER_COLORS.length]!,
             connected: s.type !== 'open'
           }));
         }
