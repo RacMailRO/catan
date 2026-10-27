@@ -967,58 +967,15 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             );
           })}
 
-          {/* 2. Harbor dock badges and colored markers on each harbor's 2 trade-bonus vertices */}
+          {/* 2. Harbor trade-bonus markers on each harbor's 2 coastal vertices */}
           {board.harbors.map((harbor) => {
             const v1 = board.vertices[harbor.vertexIds[0]];
             const v2 = board.vertices[harbor.vertexIds[1]];
             if (!v1 || !v2) return null;
             const color = HARBOR_VERTEX_COLOR[harbor.type];
-            const edgeMidX = (v1.x + v2.x) / 2;
-            const edgeMidY = (v1.y + v2.y) / 2;
 
             return (
               <g key={harbor.id} style={{ pointerEvents: 'none' }}>
-                {/* Visual wooden pier connecting the coastal edge to the harbor badge */}
-                <line
-                  x1={harbor.x}
-                  y1={harbor.y}
-                  x2={edgeMidX}
-                  y2={edgeMidY}
-                  stroke="#78350f"
-                  strokeWidth={4.5}
-                  strokeLinecap="round"
-                />
-                <circle
-                  cx={harbor.x}
-                  cy={harbor.y}
-                  r={18}
-                  fill="#fef3c7"
-                  stroke="#92400e"
-                  strokeWidth={2.5}
-                  style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.45))' }}
-                />
-                <text
-                  x={harbor.x}
-                  y={harbor.y + (harbor.type === 'generic' ? 5 : 6)}
-                  textAnchor="middle"
-                  fontSize={harbor.type === 'generic' ? 13 : 13}
-                  fontWeight="800"
-                  fill="#78350f"
-                >
-                  {harbor.type === 'generic' ? '3:1' : RESOURCE_ICONS[harbor.type]}
-                </text>
-                {harbor.type !== 'generic' && (
-                  <text
-                    x={harbor.x}
-                    y={harbor.y - 7}
-                    textAnchor="middle"
-                    fontSize={8.5}
-                    fontWeight="800"
-                    fill="#92400e"
-                  >
-                    2:1
-                  </text>
-                )}
                 {[v1, v2].map((v, idx) => (
                   <g key={idx} transform={`translate(${v.x}, ${v.y})`}>
                     <circle r={10} fill={color} fillOpacity={0.92} stroke="#fef3c7" strokeWidth={2} />

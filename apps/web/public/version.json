@@ -1,9 +1,14 @@
 {
-  "version": "v1.133",
-  "commitCount": 133,
-  "shortHash": "9576ad4",
-  "buildDate": "2026-10-27T14:29:35.731Z",
+  "version": "v1.134",
+  "commitCount": 134,
+  "shortHash": "9a4b3b8",
+  "buildDate": "2026-10-27T15:53:06.207Z",
   "releaseNotes": [
+    {
+      "hash": "9a4b3b8",
+      "date": "2026-10-27",
+      "message": "fix(assets): re-extract and align gold field terrain tiles with true hex vertices"
+    },
     {
       "hash": "9576ad4",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "d18cbfa",
       "date": "2026-10-26",
       "message": "chore(release): bump version to v1.84"
-    },
-    {
-      "hash": "7637858",
-      "date": "2026-10-26",
-      "message": "feat(dev-card): dedicated interactive selection modal and toast feedback for Monopoly card"
     }
   ]
 }

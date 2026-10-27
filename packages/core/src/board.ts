@@ -513,9 +513,73 @@ export function generateStandardBoard(
   const assignedLetters = new Array<string | null>(hexCount).fill(null);
 
   if (isCustomScenario && customTerrains && customTokens) {
-    for (let i = 0; i < hexCount; i++) {
-      terrains[i] = customTerrains[i]!;
-      assignedTokens[i] = customTokens[i] ?? null;
+    if (layoutMode === 'beginner_fixed') {
+      for (let i = 0; i < hexCount; i++) {
+        terrains[i] = customTerrains[i]!;
+        assignedTokens[i] = customTokens[i] ?? null;
+      }
+    } else {
+      // Variable Seafarers / Custom Map Setup:
+      // Sea and fog hexes stay in their geographical positions (preserving islands & ocean).
+      // Land and gold field terrains are shuffled among the land slots.
+      const landIndices: number[] = [];
+      const landTerrains: TerrainType[] = [];
+      for (let i = 0; i < hexCount; i++) {
+        const t = customTerrains[i]!;
+        if (t === 'sea' || t === 'fog') {
+          terrains[i] = t;
+        } else {
+          landIndices.push(i);
+          landTerrains.push(t);
+        }
+      }
+
+      const shufLand = shuffleWithPrng(landTerrains, state);
+      state = shufLand.nextState;
+      landIndices.forEach((idx, i) => {
+        terrains[idx] = shufLand.items[i]!;
+      });
+
+      // Producing hexes: non-desert land hexes
+      const nonDesertProducingIndices = landIndices.filter((idx) => terrains[idx] !== 'desert');
+      const baseTokens = customTokens.filter((t): t is number => t !== null);
+
+      if (layoutMode === 'random_balanced') {
+        const maxAttempts = 300;
+        let bestTokens: number[] = [];
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          const shufTokens = shuffleWithPrng(baseTokens, state);
+          state = shufTokens.nextState;
+          const candidate = shufTokens.items;
+          let hasHotAdjacency = false;
+          for (let i = 0; i < nonDesertProducingIndices.length && !hasHotAdjacency; i++) {
+            const tokenI = candidate[i]!;
+            if (tokenI !== 6 && tokenI !== 8) continue;
+            const coordI = hexCoords[nonDesertProducingIndices[i]!]!;
+            for (let j = i + 1; j < nonDesertProducingIndices.length; j++) {
+              const tokenJ = candidate[j]!;
+              if (tokenJ !== 6 && tokenJ !== 8) continue;
+              const coordJ = hexCoords[nonDesertProducingIndices[j]!]!;
+              if (areHexesAdjacent(coordI, coordJ)) {
+                hasHotAdjacency = true;
+                break;
+              }
+            }
+          }
+          bestTokens = candidate;
+          if (!hasHotAdjacency) break;
+        }
+        nonDesertProducingIndices.forEach((hexIdx, i) => {
+          assignedTokens[hexIdx] = bestTokens[i] ?? null;
+        });
+      } else {
+        // random_pure
+        const shufTokens = shuffleWithPrng(baseTokens, state);
+        state = shufTokens.nextState;
+        nonDesertProducingIndices.forEach((hexIdx, i) => {
+          assignedTokens[hexIdx] = shufTokens.items[i] ?? null;
+        });
+      }
     }
   } else {
     for (let step = 0; step < placementOrder.length; step++) {

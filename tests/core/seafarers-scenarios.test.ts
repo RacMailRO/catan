@@ -31,6 +31,50 @@ describe('Catan Seafarers (Navigatori) & Custom Map Scenarios', () => {
     expect(game.board.ships).toEqual({});
   });
 
+  it('supports variable Seafarers maps when randomized while keeping beginner_fixed static', () => {
+    const fixed1 = createGame({
+      gameId: 'test-fixed-1',
+      seed: 'seed-A',
+      rules: createRulesConfig({ boardScenario: 'seafarers_shores', boardLayout: 'beginner_fixed' }),
+      participants: [{ id: 'p1', name: 'P1', type: 'human' }]
+    });
+    const fixed2 = createGame({
+      gameId: 'test-fixed-2',
+      seed: 'seed-B',
+      rules: createRulesConfig({ boardScenario: 'seafarers_shores', boardLayout: 'beginner_fixed' }),
+      participants: [{ id: 'p1', name: 'P1', type: 'human' }]
+    });
+    // beginner_fixed maintains identical terrain and token layouts regardless of seed
+    expect(Object.values(fixed1.board.hexes).map((h) => h.terrain))
+      .toEqual(Object.values(fixed2.board.hexes).map((h) => h.terrain));
+    expect(Object.values(fixed1.board.hexes).map((h) => h.numberToken))
+      .toEqual(Object.values(fixed2.board.hexes).map((h) => h.numberToken));
+
+    // random_balanced produces variable distributions across seeds while keeping sea intact
+    const var1 = createGame({
+      gameId: 'test-var-1',
+      seed: 'seed-1111',
+      rules: createRulesConfig({ boardScenario: 'seafarers_shores', boardLayout: 'random_balanced' }),
+      participants: [{ id: 'p1', name: 'P1', type: 'human' }]
+    });
+    const var2 = createGame({
+      gameId: 'test-var-2',
+      seed: 'seed-9999',
+      rules: createRulesConfig({ boardScenario: 'seafarers_shores', boardLayout: 'random_balanced' }),
+      participants: [{ id: 'p1', name: 'P1', type: 'human' }]
+    });
+
+    // Sea hexes remain in their exact geographical positions in both
+    const seaCoords1 = Object.values(var1.board.hexes).filter((h) => h.terrain === 'sea').map((h) => `${h.x},${h.y}`);
+    const seaCoords2 = Object.values(var2.board.hexes).filter((h) => h.terrain === 'sea').map((h) => `${h.x},${h.y}`);
+    expect(seaCoords1).toEqual(seaCoords2);
+
+    // Land terrains and tokens vary between different seeds
+    const terrains1 = Object.values(var1.board.hexes).map((h) => h.terrain);
+    const terrains2 = Object.values(var2.board.hexes).map((h) => h.terrain);
+    expect(terrains1).not.toEqual(terrains2);
+  });
+
   it('generates Four Islands, Fog Island, and World Map scenarios', () => {
     for (const scenario of ['seafarers_islands', 'seafarers_fog', 'world_map'] as const) {
       const game = createGame({
