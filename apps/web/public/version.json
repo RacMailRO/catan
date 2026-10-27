@@ -1,9 +1,14 @@
 {
-  "version": "v1.132",
-  "commitCount": 132,
-  "shortHash": "c6ae734",
-  "buildDate": "2026-10-27T13:41:35.451Z",
+  "version": "v1.133",
+  "commitCount": 133,
+  "shortHash": "9576ad4",
+  "buildDate": "2026-10-27T14:29:35.731Z",
   "releaseNotes": [
+    {
+      "hash": "9576ad4",
+      "date": "2026-10-27",
+      "message": "fix(board): fix coastline shoreline to strictly hug land-water boundaries instead of raw hex perimeter"
+    },
     {
       "hash": "c6ae734",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "7637858",
       "date": "2026-10-26",
       "message": "feat(dev-card): dedicated interactive selection modal and toast feedback for Monopoly card"
-    },
-    {
-      "hash": "41ce2d6",
-      "date": "2026-10-26",
-      "message": "chore(release): v1.82 metadata"
     }
   ]
 }
