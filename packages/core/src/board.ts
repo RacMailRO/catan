@@ -161,15 +161,22 @@ export function areHexesAdjacent(a: AxialCoord, b: AxialCoord): boolean {
 /**
  * Catan board generator. Terrain hexes are always placed in a shuffled clockwise inward
  * spiral (steps 1-2) — that part of the layout is purely cosmetic/positional and has no
- * gameplay effect either way. The two `layoutMode` values differ in step 3, how the number
- * tokens are assigned:
- * - 'random_balanced' (default): the official rulebook algorithm — walk the SAME spiral
- *   order and place the 18 alphabetical tokens (A -> R) in sequence, skipping the Desert.
- *   This is the standard board setup and (as a property of that fixed sequence) never puts
- *   a 6 and an 8 on adjacent hexes.
- * - 'random_pure': tokens are independently shuffled and dropped onto the non-Desert hexes
- *   in that random order, with no spiral/adjacency constraint — a different, more chaotic
- *   table every game, closer to a "house rule" free setup than the rulebook procedure.
+ * gameplay effect either way. Number token assignment (step 3) depends on `scenario`:
+ * - Classic board (default, 'random_balanced' `layoutMode`): the official rulebook
+ *   algorithm — walk the SAME spiral order and place the 18 alphabetical tokens (A -> R) in
+ *   sequence, skipping the Desert. This is the standard board setup and (as a property of
+ *   that fixed sequence) never puts a 6 and an 8 on adjacent hexes. Not user-selectable —
+ *   this is simply how the real board is always set up.
+ * - Expansion board ('expansion' scenario): the real 5-6 Player Expansion also places its
+ *   28 tokens in a fixed alphabetical sequence (A-Y, Za, Zb, Zc) along an outer-to-center
+ *   spiral, for the same reason — but that exact letter->value mapping isn't published
+ *   anywhere this could be sourced from, so this reproduces its actual *effect* instead:
+ *   shuffle, then reject any arrangement with two 6s or two 8s adjacent, same as the real
+ *   tokens guarantee.
+ * - `layoutMode: 'random_pure'` (classic board only, not currently exposed in the UI):
+ *   tokens independently shuffled with no adjacency constraint at all — kept as a tested,
+ *   available building block, not offered as a player-facing choice since the real game
+ *   doesn't have one here.
  */
 export function generateStandardBoard(
   prngState: number,
@@ -212,9 +219,43 @@ export function generateStandardBoard(
 
   const nonDesertHexIndices = placementOrder.filter((idx) => terrains[idx] !== 'desert');
 
-  if (isExpansion || layoutMode === 'random_pure') {
-    const tokenPool = isExpansion ? EXPANSION_NUMBER_TOKENS : STANDARD_NUMBER_TOKENS;
-    const shufTokens = shuffleWithPrng(tokenPool, state);
+  if (isExpansion) {
+    // The real 5-6 Player Expansion's 28 number tokens are pre-printed (lettered A-Y, Za,
+    // Zb, Zc) and placed in that fixed alphabetical order along the same kind of
+    // outer-ring-to-center spiral the classic board uses — which is precisely what gives the
+    // classic board its "6 and 8 are never adjacent" guarantee. The exact letter->value
+    // mapping isn't published anywhere we could source, but the actual *goal* it exists for
+    // is reproducible directly: shuffle, then reject any arrangement that puts two 6s or two
+    // 8s (the two highest-probability rolls) next to each other, same as the real tokens do.
+    const maxAttempts = 300;
+    let bestTokens: number[] = [];
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const shufTokens = shuffleWithPrng(EXPANSION_NUMBER_TOKENS, state);
+      state = shufTokens.nextState;
+      const candidate = shufTokens.items;
+      let hasHotAdjacency = false;
+      for (let i = 0; i < nonDesertHexIndices.length && !hasHotAdjacency; i++) {
+        const tokenI = candidate[i]!;
+        if (tokenI !== 6 && tokenI !== 8) continue;
+        const coordI = hexCoords[nonDesertHexIndices[i]!]!;
+        for (let j = i + 1; j < nonDesertHexIndices.length; j++) {
+          const tokenJ = candidate[j]!;
+          if (tokenJ !== 6 && tokenJ !== 8) continue;
+          const coordJ = hexCoords[nonDesertHexIndices[j]!]!;
+          if (areHexesAdjacent(coordI, coordJ)) {
+            hasHotAdjacency = true;
+            break;
+          }
+        }
+      }
+      bestTokens = candidate;
+      if (!hasHotAdjacency) break;
+    }
+    nonDesertHexIndices.forEach((hexIdx, i) => {
+      assignedTokens[hexIdx] = bestTokens[i] ?? null;
+    });
+  } else if (layoutMode === 'random_pure') {
+    const shufTokens = shuffleWithPrng(STANDARD_NUMBER_TOKENS, state);
     state = shufTokens.nextState;
     nonDesertHexIndices.forEach((hexIdx, i) => {
       assignedTokens[hexIdx] = shufTokens.items[i] ?? null;

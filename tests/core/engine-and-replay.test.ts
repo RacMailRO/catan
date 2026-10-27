@@ -142,6 +142,33 @@ describe('Catan Core Engine & Replay System', () => {
     expect(nonDesertTokens).toHaveLength(28);
     expect(nonDesertTokens.every((t) => t !== null)).toBe(true);
 
+    // The real 5-6 Player Expansion places its (fixed, pre-printed) tokens so 6s and 8s are
+    // never adjacent, same guarantee as the classic board — reproduced here via a balanced
+    // shuffle rather than the (unpublished) official letter sequence. Check across several
+    // seeds since this isn't structurally guaranteed by construction the way the classic
+    // board's fixed A-R sequence is — it's a shuffle-and-reject loop that could in principle
+    // fail, so this also covers that the loop is actually doing its job.
+    for (const seed of ['expansion-seed-1', 'expansion-seed-2', 'expansion-seed-3', 'expansion-seed-4']) {
+      const seededState = createGame({
+        gameId: `test-expansion-balance-${seed}`,
+        seed,
+        participants,
+        rules: createRulesConfig({ boardScenario: 'expansion' })
+      });
+      const hotHexes = Object.values(seededState.board.hexes).filter(
+        (h) => h.numberToken === 6 || h.numberToken === 8
+      );
+      for (let i = 0; i < hotHexes.length; i++) {
+        for (let j = i + 1; j < hotHexes.length; j++) {
+          const h1 = hotHexes[i]!;
+          const h2 = hotHexes[j]!;
+          const dist =
+            (Math.abs(h1.q - h2.q) + Math.abs(h1.r - h2.r) + Math.abs(-h1.q - h1.r - (-h2.q - h2.r))) / 2;
+          expect(dist).toBeGreaterThan(1);
+        }
+      }
+    }
+
     // A 7th participant must be rejected on the expansion board (max 6), and a 5th must be
     // rejected on the classic board (max 4) — the scenario's player cap is actually enforced.
     expect(() =>

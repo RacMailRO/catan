@@ -149,39 +149,62 @@ export const App: React.FC = () => {
   } | null>(null);
   const [showReleaseNotes, setShowReleaseNotes] = useState<boolean>(false);
 
+  // True once the live server reports a different build than the JS actually running in
+  // this tab — the version BADGE always reflects the server instantly (plain API read), but
+  // a tab opened before a new deploy keeps running its old bundle until reloaded, including
+  // a browser-cached index.html that never even re-requested it. __BUILD_HASH__ is baked in
+  // at build time (see vite.config.ts) specifically so this can be detected without the user
+  // having to notice the badge number themselves and guess that a hard refresh would help.
+  const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
+
   useEffect(() => {
-    fetch('/api/version')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data && typeof data.version === 'string' && data.version !== 'v1.0-dev') {
-          setVersionInfo(data);
-        } else {
+    const checkVersion = () => {
+      fetch('/api/version')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data && typeof data.version === 'string' && data.version !== 'v1.0-dev') {
+            setVersionInfo(data);
+            if (
+              typeof data.shortHash === 'string' &&
+              __BUILD_HASH__ !== 'dev' &&
+              data.shortHash !== __BUILD_HASH__
+            ) {
+              setUpdateAvailable(true);
+            }
+          } else {
+            fetch('/version.json')
+              .then((r) => (r.ok ? r.json() : null))
+              .then((staticData) => {
+                if (staticData && typeof staticData.version === 'string') {
+                  setVersionInfo(staticData);
+                } else if (data) {
+                  setVersionInfo(data);
+                }
+              })
+              .catch(() => {
+                if (data) setVersionInfo(data);
+              });
+          }
+        })
+        .catch(() => {
           fetch('/version.json')
             .then((r) => (r.ok ? r.json() : null))
             .then((staticData) => {
               if (staticData && typeof staticData.version === 'string') {
                 setVersionInfo(staticData);
-              } else if (data) {
-                setVersionInfo(data);
               }
             })
             .catch(() => {
-              if (data) setVersionInfo(data);
+              // Pure offline preview without version.json
             });
-        }
-      })
-      .catch(() => {
-        fetch('/version.json')
-          .then((r) => (r.ok ? r.json() : null))
-          .then((staticData) => {
-            if (staticData && typeof staticData.version === 'string') {
-              setVersionInfo(staticData);
-            }
-          })
-          .catch(() => {
-            // Pure offline preview without version.json
-          });
-      });
+        });
+    };
+
+    checkVersion();
+    // Re-check periodically so a tab left open eventually notices a new deploy too, not
+    // just the very first load.
+    const interval = setInterval(checkVersion, 3 * 60 * 1000);
+    return () => clearInterval(interval);
   }, []);
 
   // Browser tab title: version alongside the name, visible on every tab (including Lobby),
@@ -1735,6 +1758,19 @@ export const App: React.FC = () => {
         </div>
       </header>
 
+      {updateAvailable && (
+        <div className="update-banner">
+          <span>
+            🔄 {locale === 'ro'
+              ? `O versiune nouă e disponibilă (${versionInfo?.version ?? ''}).`
+              : `A new version is available (${versionInfo?.version ?? ''}).`}
+          </span>
+          <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>
+            {locale === 'ro' ? '↻ Reîncarcă' : '↻ Reload'}
+          </button>
+        </div>
+      )}
+
       {/* TAB 1: LOBBY & GAME CONFIGURATION (Fully Responsive, Vertical Scroll on Mobile) */}
       {activeTab === 'lobby' && (
         <main className="lobby-container">
@@ -2198,18 +2234,20 @@ export const App: React.FC = () => {
 
                 <div className="form-field">
                   <label>{t.boardLayout}</label>
-                  <select
-                    value={rules.boardLayout}
-                    onChange={(e) =>
-                      setRules({
-                        ...rules,
-                        boardLayout: e.target.value as GameRulesConfig['boardLayout']
-                      })
+                  <input
+                    type="text"
+                    readOnly
+                    value={
+                      rules.boardScenario === 'expansion'
+                        ? (locale === 'ro'
+                            ? 'Spirală Echilibrată (28 jetoane, fără 6 și 8 adiacente)'
+                            : 'Balanced Spiral (28 tokens, no adjacent 6s & 8s)')
+                        : (locale === 'ro'
+                            ? 'Spirala Oficială Regulament (A–R ceasornic)'
+                            : 'Official Rulebook Spiral (A–R clockwise)')
                     }
-                  >
-                    <option value="random_balanced">{t.boardBalanced}</option>
-                    <option value="random_pure">{t.boardPure}</option>
-                  </select>
+                    style={{ color: 'var(--accent-gold)', fontWeight: 600 }}
+                  />
                 </div>
 
                 <div className="form-field">
@@ -2272,9 +2310,17 @@ export const App: React.FC = () => {
                   {locale === 'ro' ? 'Cărți de Dezvoltare' : 'Development Cards'}
                 </div>
                 <div className="card-gallery-grid">
-                  {(['knight', 'victory_point', 'road_building', 'year_of_plenty', 'monopoly'] as const).map((t) => (
+                  {(
+                    [
+                      ['knight', 14],
+                      ['victory_point', 5],
+                      ['road_building', 2],
+                      ['year_of_plenty', 2],
+                      ['monopoly', 2]
+                    ] as const
+                  ).map(([t, count]) => (
                     <div key={t} className="card-gallery-item">
-                      <DevCardSprite type={t} locale={locale} size="sm" />
+                      <DevCardSprite type={t} count={count} locale={locale} size="sm" />
                       <p className="card-gallery-rule-text">{DEV_CARD_RULE_TEXT[locale][t]}</p>
                     </div>
                   ))}
@@ -2285,8 +2331,10 @@ export const App: React.FC = () => {
                 </div>
                 <div className="card-gallery-grid">
                   <div className="card-gallery-item">
-                    <div className="special-card-tile">
-                      <span className="special-card-icon">🏆</span>
+                    <div
+                      className="special-card-tile"
+                      style={{ backgroundImage: 'url(/special_longest_road.jpg)' }}
+                    >
                       <span className="special-card-title">{locale === 'ro' ? 'Drumul cel mai Lung' : 'Longest Road'}</span>
                       <span className="special-card-vp">+2 PV</span>
                     </div>
@@ -2297,8 +2345,10 @@ export const App: React.FC = () => {
                     </p>
                   </div>
                   <div className="card-gallery-item">
-                    <div className="special-card-tile special-card-tile-army">
-                      <span className="special-card-icon">🛡️</span>
+                    <div
+                      className="special-card-tile special-card-tile-army"
+                      style={{ backgroundImage: 'url(/special_largest_army.jpg)' }}
+                    >
                       <span className="special-card-title">{locale === 'ro' ? 'Armata cea mai Mare' : 'Largest Army'}</span>
                       <span className="special-card-vp">+2 PV</span>
                     </div>
