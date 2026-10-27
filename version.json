@@ -1,9 +1,14 @@
 {
-  "version": "v1.120",
-  "commitCount": 120,
-  "shortHash": "646ff9d",
-  "buildDate": "2026-10-27T11:11:16.353Z",
+  "version": "v1.121",
+  "commitCount": 121,
+  "shortHash": "f15a97a",
+  "buildDate": "2026-10-27T11:11:28.663Z",
   "releaseNotes": [
+    {
+      "hash": "f15a97a",
+      "date": "2026-10-27",
+      "message": "chore: use tsx watch for server dev script"
+    },
     {
       "hash": "646ff9d",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "953a5b4",
       "date": "2026-10-26",
       "message": "chore: bump version to v1.71"
-    },
-    {
-      "hash": "8512c6b",
-      "date": "2026-10-26",
-      "message": "merge: fix/strict-mime-and-web-dist-bundling into main"
     }
   ]
 }
