@@ -538,6 +538,7 @@ export const App: React.FC = () => {
     setSpectateView(null);
     setSpectateError(null);
     setActiveTab('lobby');
+    listPublicLobbies().then((lobbies) => setPublicLobbies(lobbies)).catch(() => {});
   };
 
   const handleRenameWaitingRoomSeat = async (targetSeatIndex: number, newName: string) => {
@@ -4440,7 +4441,9 @@ export const App: React.FC = () => {
                     onClick={async () => {
                       if (!window.confirm('Sigur dorești să oprești definitiv această partidă pe server?')) return;
                       try {
-                        await terminateOnlineGame(spectateGameId);
+                        const targetGid = spectateGameId;
+                        await terminateOnlineGame(targetGid);
+                        setPublicLobbies((prev) => prev.filter((l) => l.gameId !== targetGid));
                         handleStopSpectating();
                       } catch (err) {
                         alert(err instanceof Error ? err.message : 'Eroare la oprirea partidei');

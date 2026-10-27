@@ -258,6 +258,7 @@ export function createCatanServer(options?: {
     if (!stored) return undefined;
     const runtime: ActiveGameRuntime = {
       gameId,
+      lobbyId: stored.lobbyId ?? storage.getLobbyByGameId(gameId)?.lobbyId,
       state: stored.state,
       events: stored.replay.events,
       aiDecisions: stored.replay.aiDecisions,
@@ -292,12 +293,11 @@ export function createCatanServer(options?: {
     // Mark the lobby finished once the game ends, so the public lobby/spectator list (which
     // otherwise only ever sees 'waiting' -> 'in_progress') stops offering a dead game to join
     // or watch.
-    if (runtime.state.phase === 'game_over' && runtime.lobbyId) {
-      const lobby = storage.getLobby(runtime.lobbyId);
-      if (lobby && lobby.status !== 'finished') {
-        lobby.status = 'finished';
-        storage.saveLobby(lobby);
+    if (runtime.state.phase === 'game_over') {
+      if (runtime.lobbyId) {
+        storage.markLobbyFinished(runtime.lobbyId);
       }
+      storage.markLobbyFinished(runtime.gameId);
     }
   }
 
@@ -571,6 +571,18 @@ export function createCatanServer(options?: {
           if (l.isPrivate) return false;
           if (l.status === 'finished') return false;
           if (l.createdAtMs && now - l.createdAtMs > maxAgeMs) return false;
+          if (l.status === 'in_progress' && l.gameId) {
+            const mem = activeGames.get(l.gameId);
+            if (mem && mem.state.phase === 'game_over') {
+              storage.markLobbyFinished(l.lobbyId);
+              return false;
+            }
+            const stored = storage.getGameAndReplay(l.gameId);
+            if (stored && stored.state.phase === 'game_over') {
+              storage.markLobbyFinished(l.lobbyId);
+              return false;
+            }
+          }
           return true;
         });
         sendJson(res, 200, { lobbies });
@@ -1115,12 +1127,9 @@ export function createCatanServer(options?: {
         persistRuntime(runtime);
 
         if (runtime.lobbyId) {
-          const lobby = storage.getLobby(runtime.lobbyId);
-          if (lobby) {
-            lobby.status = 'finished';
-            storage.saveLobby(lobby);
-          }
+          storage.markLobbyFinished(runtime.lobbyId);
         }
+        storage.markLobbyFinished(gameId);
 
         activeGames.delete(gameId);
         broadcastGameSync(runtime);

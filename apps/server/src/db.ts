@@ -103,6 +103,22 @@ export class CatanStorage {
     return rows.map((r) => JSON.parse(r.data_json) as LobbyState);
   }
 
+  public getLobbyByGameId(gameId: string): LobbyState | undefined {
+    const lobbies = this.listLobbies();
+    return lobbies.find((l) => l.gameId === gameId);
+  }
+
+  public markLobbyFinished(lobbyIdOrGameId: string): void {
+    let lobby = this.getLobby(lobbyIdOrGameId);
+    if (!lobby) {
+      lobby = this.getLobbyByGameId(lobbyIdOrGameId);
+    }
+    if (lobby && lobby.status !== 'finished') {
+      lobby.status = 'finished';
+      this.saveLobby(lobby);
+    }
+  }
+
   public saveSession(session: SessionRecord): void {
     const stmt = this.db.prepare(`
       INSERT INTO sessions (session_token, lobby_id, game_id, player_id, player_name, created_at_ms)
@@ -177,13 +193,14 @@ export class CatanStorage {
     );
   }
 
-  public getGameAndReplay(gameId: string): { state: GameState; replay: ReplayFile } | undefined {
+  public getGameAndReplay(gameId: string): { state: GameState; replay: ReplayFile; lobbyId?: string } | undefined {
     const stmt = this.db.prepare(
-      `SELECT state_json, replay_json FROM games WHERE game_id = ?`
+      `SELECT lobby_id, state_json, replay_json FROM games WHERE game_id = ?`
     );
-    const row = stmt.get(gameId) as { state_json: string; replay_json: string } | undefined;
+    const row = stmt.get(gameId) as { lobby_id?: string | null; state_json: string; replay_json: string } | undefined;
     if (!row) return undefined;
     return {
+      lobbyId: row.lobby_id ?? undefined,
       state: JSON.parse(row.state_json) as GameState,
       replay: JSON.parse(row.replay_json) as ReplayFile
     };

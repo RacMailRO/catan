@@ -289,4 +289,49 @@ describe('Authoritative LAN/Online Server, Protocol Validation & WebSocket Sync'
     });
     expect(rejected).toBe(true);
   });
+
+  it('removes terminated games from public lobby listings upon termination', async () => {
+    // 1. Create a public lobby
+    const createRes = await fetch(`${baseUrl}/api/lobbies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Partida Publica Test',
+        hostName: 'SpectatorHost',
+        mode: 'online',
+        isPrivate: false,
+        rules: { victoryPointsToWin: 10 },
+        seats: [
+          { seatIndex: 0, name: 'AI 1', type: 'ai', color: 'red' },
+          { seatIndex: 1, name: 'AI 2', type: 'ai', color: 'blue' }
+        ]
+      })
+    });
+    expect(createRes.status).toBe(201);
+    const { lobby } = (await createRes.json()) as { lobby: { lobbyId: string } };
+
+    // 2. Start the lobby
+    const startRes = await fetch(`${baseUrl}/api/lobbies/${lobby.lobbyId}/start`, {
+      method: 'POST'
+    });
+    expect(startRes.status).toBe(200);
+    const { gameId } = (await startRes.json()) as { gameId: string };
+    expect(gameId).toBeTruthy();
+
+    // 3. Verify public lobbies list includes this active game
+    const listRes1 = await fetch(`${baseUrl}/api/lobbies`);
+    const data1 = (await listRes1.json()) as { lobbies: Array<{ lobbyId: string; gameId?: string; status: string }> };
+    expect(data1.lobbies.some((l) => l.lobbyId === lobby.lobbyId && l.gameId === gameId)).toBe(true);
+
+    // 4. Terminate the game as spectator/host
+    const termRes = await fetch(`${baseUrl}/api/games/${gameId}/terminate`, {
+      method: 'POST'
+    });
+    expect(termRes.status).toBe(200);
+
+    // 5. Verify public lobbies list NO LONGER contains this game
+    const listRes2 = await fetch(`${baseUrl}/api/lobbies`);
+    const data2 = (await listRes2.json()) as { lobbies: Array<{ lobbyId: string; gameId?: string; status: string }> };
+    expect(data2.lobbies.some((l) => l.lobbyId === lobby.lobbyId || l.gameId === gameId)).toBe(false);
+  });
 });
