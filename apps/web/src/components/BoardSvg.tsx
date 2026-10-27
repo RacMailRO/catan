@@ -1077,9 +1077,12 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
               roadTransform = `translate(${midX}, ${midY}) rotate(${angleDeg})`;
             }
 
-            // Ship piece: isometric 3/4 front view matching the perspective of settlements and cities
-            const shipSize = 62;
-            const shipTransform = `translate(${midX - shipSize / 2}, ${midY - shipSize * 0.72})`;
+            // Ship piece: rotated and aligned to the edge orientation, matching road alignment logic
+            const shipSize = 58;
+            let shipAngleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+            if (shipAngleDeg > 90) shipAngleDeg -= 180;
+            if (shipAngleDeg <= -90) shipAngleDeg += 180;
+            const shipTransform = `translate(${midX}, ${midY}) rotate(${shipAngleDeg})`;
 
             return (
               <g
@@ -1110,8 +1113,8 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                   <g transform={shipTransform} style={{ pointerEvents: 'none' }}>
                     <image
                       href={SHIP_SVG_BY_COLOR[ownerPColor]}
-                      x={0}
-                      y={0}
+                      x={-shipSize / 2}
+                      y={-shipSize / 2}
                       width={shipSize}
                       height={shipSize}
                       preserveAspectRatio="xMidYMid meet"

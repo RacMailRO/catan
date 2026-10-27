@@ -142,60 +142,113 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
 
     if (placementMode === 'free') {
       if (selectedTool === 'robber') {
-        for (const hexId of Object.keys(board?.hexes || {})) {
-          if (hexId !== board?.robberHexId) hSet.add(hexId);
+        for (const [hexId, hex] of Object.entries(board.hexes)) {
+          if (hexId !== board.robberHexId && hex.terrain !== 'sea' && hex.terrain !== 'fog') {
+            hSet.add(hexId);
+          }
         }
+      } else if (selectedTool === 'settlement' || selectedTool === 'city') {
+        for (const [vId, v] of Object.entries(board.vertices || {})) {
+          const touchesLand = v.adjacentHexIds.some((hId) => {
+            const t = board.hexes[hId]?.terrain;
+            return t && t !== 'sea' && t !== 'fog';
+          });
+          if (touchesLand) vSet.add(vId);
+        }
+      } else if (selectedTool === 'road') {
+        for (const [eId, e] of Object.entries(board.edges || {})) {
+          // Roads can be placed on any land or coastal edge (not pure ocean)
+          const allSea =
+            e.adjacentHexIds.length > 1 &&
+            e.adjacentHexIds.every((hId) => {
+              const t = board.hexes[hId]?.terrain;
+              return t === 'sea' || t === 'fog';
+            });
+          if (!allSea) eSet.add(eId);
+        }
+      } else if (selectedTool === 'ship') {
+        for (const [eId, e] of Object.entries(board.edges || {})) {
+          // Ships CAN ONLY be placed on water edges (coastal or sea/fog)
+          const isWaterEdge =
+            e.adjacentHexIds.length === 1 ||
+            e.adjacentHexIds.some((hId) => {
+              const t = board.hexes[hId]?.terrain;
+              return t === 'sea' || t === 'fog';
+            });
+          if (isWaterEdge) eSet.add(eId);
+        }
+      } else if (selectedTool === 'eraser') {
+        for (const vId of Object.keys(board.buildings || {})) vSet.add(vId);
+        for (const eId of Object.keys(board.roads || {})) eSet.add(eId);
+        for (const eId of Object.keys(board.ships || {})) eSet.add(eId);
       }
       return { highlightedVertices: vSet, highlightedEdges: eSet, highlightedHexes: hSet };
     }
 
-    // Rules mode
-    if (selectedTool === 'settlement') {
-      const playerBuildings = Object.values(board?.buildings || {}).filter((b) => b.ownerId === activePlayerId);
-      const hasPlayerBuildings = playerBuildings.length > 0;
+    // Rules mode: identical to real Catan rules (piece counts, distance rule, connectivity)
+    const playerBuildings = Object.values(board.buildings || {}).filter((b) => b.ownerId === activePlayerId);
+    const settlementsCount = playerBuildings.filter((b) => b.type === 'settlement').length;
+    const citiesCount = playerBuildings.filter((b) => b.type === 'city').length;
+    const roadsCount = Object.values(board.roads || {}).filter((r) => r.ownerId === activePlayerId).length;
+    const shipsCount = Object.values(board.ships || {}).filter((s) => s.ownerId === activePlayerId).length;
 
-      for (const [vId] of Object.entries(board?.vertices || {})) {
+    if (selectedTool === 'settlement') {
+      if (settlementsCount >= 5) {
+        return { highlightedVertices: vSet, highlightedEdges: eSet, highlightedHexes: hSet };
+      }
+      // Initial placements (first 2 settlements) do not require an existing road
+      const isInitialPlacement = playerBuildings.length < 2;
+
+      for (const [vId] of Object.entries(board.vertices || {})) {
         if (isVertexAvailableForSettlement(board, vId)) {
-          if (!hasPlayerBuildings || isVertexConnectedToPlayerRoad(board, vId, activePlayerId)) {
+          if (isInitialPlacement || isVertexConnectedToPlayerRoad(board, vId, activePlayerId)) {
             vSet.add(vId);
           }
         }
       }
     } else if (selectedTool === 'city') {
-      for (const [vId, b] of Object.entries(board?.buildings || {})) {
+      if (citiesCount >= 4) {
+        return { highlightedVertices: vSet, highlightedEdges: eSet, highlightedHexes: hSet };
+      }
+      // Cities can ONLY be upgraded from an existing settlement of this player
+      for (const [vId, b] of Object.entries(board.buildings || {})) {
         if (b.ownerId === activePlayerId && b.type === 'settlement') {
           vSet.add(vId);
         }
       }
     } else if (selectedTool === 'road') {
-      for (const eId of Object.keys(board?.edges || {})) {
+      if (roadsCount >= 15) {
+        return { highlightedVertices: vSet, highlightedEdges: eSet, highlightedHexes: hSet };
+      }
+      for (const eId of Object.keys(board.edges || {})) {
         if (isEdgeLegalForPlayerRoad(board, eId, activePlayerId)) {
           eSet.add(eId);
         }
       }
     } else if (selectedTool === 'ship') {
-      for (const eId of Object.keys(board?.edges || {})) {
+      if (shipsCount >= 15) {
+        return { highlightedVertices: vSet, highlightedEdges: eSet, highlightedHexes: hSet };
+      }
+      for (const eId of Object.keys(board.edges || {})) {
         if (isEdgeLegalForPlayerShip(board, eId, activePlayerId)) {
           eSet.add(eId);
         }
       }
     } else if (selectedTool === 'robber') {
-      for (const [hexId, hex] of Object.entries(board?.hexes || {})) {
-        if (hexId !== board?.robberHexId && hex.terrain !== 'sea' && hex.terrain !== 'fog') {
+      for (const [hexId, hex] of Object.entries(board.hexes || {})) {
+        if (hexId !== board.robberHexId && hex.terrain !== 'sea' && hex.terrain !== 'fog') {
           hSet.add(hexId);
         }
       }
     } else if (selectedTool === 'eraser') {
-      for (const vId of Object.keys(board?.buildings || {})) {
+      for (const vId of Object.keys(board.buildings || {})) {
         vSet.add(vId);
       }
-      for (const eId of Object.keys(board?.roads || {})) {
+      for (const eId of Object.keys(board.roads || {})) {
         eSet.add(eId);
       }
-      if (board?.ships) {
-        for (const eId of Object.keys(board.ships)) {
-          eSet.add(eId);
-        }
+      for (const eId of Object.keys(board.ships || {})) {
+        eSet.add(eId);
       }
     }
 
@@ -204,8 +257,14 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
 
   // Click handlers
   const handleSelectVertex = (vertexId: string) => {
+    if (selectedTool !== 'eraser') {
+      if (!highlightedVertices.has(vertexId)) {
+        return;
+      }
+    }
+
     setBoard((prev) => {
-      const nextBuildings = { ...prev.buildings };
+      const nextBuildings = { ...(prev.buildings || {}) };
       if (selectedTool === 'eraser') {
         delete nextBuildings[vertexId];
         return { ...prev, buildings: nextBuildings };
@@ -214,16 +273,15 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
       if (selectedTool === 'settlement') {
         const existing = nextBuildings[vertexId];
         if (existing && existing.ownerId === activePlayerId && existing.type === 'settlement') {
-          // Toggle or upgrade to city if clicked again
-          nextBuildings[vertexId] = { type: 'city', ownerId: activePlayerId };
+          nextBuildings[vertexId] = { type: 'city', ownerId: activePlayerId, vertexId };
         } else {
-          nextBuildings[vertexId] = { type: 'settlement', ownerId: activePlayerId };
+          nextBuildings[vertexId] = { type: 'settlement', ownerId: activePlayerId, vertexId };
         }
         return { ...prev, buildings: nextBuildings };
       }
 
       if (selectedTool === 'city') {
-        nextBuildings[vertexId] = { type: 'city', ownerId: activePlayerId };
+        nextBuildings[vertexId] = { type: 'city', ownerId: activePlayerId, vertexId };
         return { ...prev, buildings: nextBuildings };
       }
 
@@ -232,8 +290,14 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
   };
 
   const handleSelectEdge = (edgeId: string) => {
+    if (selectedTool !== 'eraser') {
+      if (!highlightedEdges.has(edgeId)) {
+        return;
+      }
+    }
+
     setBoard((prev) => {
-      const nextRoads = { ...prev.roads };
+      const nextRoads = { ...(prev.roads || {}) };
       const nextShips = { ...(prev.ships || {}) };
 
       if (selectedTool === 'eraser') {
@@ -259,6 +323,9 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
   };
 
   const handleSelectHex = (hexId: string) => {
+    if (placementMode === 'rules' && !highlightedHexes.has(hexId)) {
+      return;
+    }
     setBoard((prev) => ({
       ...prev,
       robberHexId: hexId
@@ -469,7 +536,7 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
             onSelectVertex={handleSelectVertex}
             onSelectEdge={handleSelectEdge}
             onSelectHex={handleSelectHex}
-            interactiveAll={true}
+            interactiveAll={placementMode === 'free'}
           />
         </div>
 
