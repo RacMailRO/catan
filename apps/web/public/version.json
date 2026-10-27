@@ -1,9 +1,14 @@
 {
-  "version": "v1.118",
-  "commitCount": 118,
-  "shortHash": "e7a4179",
-  "buildDate": "2026-10-27T11:03:59.822Z",
+  "version": "v1.119",
+  "commitCount": 119,
+  "shortHash": "7c7dab5",
+  "buildDate": "2026-10-27T11:04:47.437Z",
   "releaseNotes": [
+    {
+      "hash": "7c7dab5",
+      "date": "2026-10-27",
+      "message": "fix: align 5-6 player expansion sea border & ports, add terminate game endpoint, fix spectator board height & resize, add explicit turn status and show built piece counts in HUD"
+    },
     {
       "hash": "e7a4179",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "1c1587f",
       "date": "2026-10-26",
       "message": "fix(server): copy web dist to server public, guard webDistDir with index.html check, and return 404 for missing static assets instead of text/html index.html"
-    },
-    {
-      "hash": "61d0e4d",
-      "date": "2026-10-26",
-      "message": "chore: bump version to v1.68"
     }
   ]
 }
