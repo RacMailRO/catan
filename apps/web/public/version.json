@@ -1,9 +1,14 @@
 {
-  "version": "v1.122",
-  "commitCount": 122,
-  "shortHash": "a11a294",
-  "buildDate": "2026-10-27T11:52:46.146Z",
+  "version": "v1.123",
+  "commitCount": 123,
+  "shortHash": "22e2eaa",
+  "buildDate": "2026-10-27T11:53:13.821Z",
   "releaseNotes": [
+    {
+      "hash": "22e2eaa",
+      "date": "2026-10-27",
+      "message": "feat: catan seafarers (navigatori) expansion, ships, gold fields, and custom scenarios (world map, shores, islands, fog)"
+    },
     {
       "hash": "a11a294",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "e99d22c",
       "date": "2026-10-26",
       "message": "merge: fix/map-panning-on-7-and-short-building-labels into main"
-    },
-    {
-      "hash": "930f2a3",
-      "date": "2026-10-26",
-      "message": "fix(ui): enable smooth map panning during robber placement on 7, add discard minimize button, and shorten construction button labels for mobile"
     }
   ]
 }
