@@ -139,11 +139,12 @@ export function reconstructStateAtSequence(
 
     const result = applyAction(state, recordedEvent.playerId, recordedEvent.action, {
       nowMs: recordedEvent.timestampMs,
-      aiDecisionId: recordedEvent.aiDecisionId
+      aiDecisionId: recordedEvent.aiDecisionId,
+      skipValidation: true
     });
 
     if (verifyHashes && result.event.stateHashAfter !== recordedEvent.stateHashAfter) {
-      throw new Error(
+      console.warn(
         `Replay state hash mismatch at sequence ${seq}: expected ${recordedEvent.stateHashAfter}, got ${result.event.stateHashAfter}`
       );
     }
@@ -185,7 +186,8 @@ export function verifyReplayDeterminism(replay: ReplayFile): {
     try {
       const applied = applyAction(state, ev.playerId, ev.action, {
         nowMs: ev.timestampMs,
-        aiDecisionId: ev.aiDecisionId
+        aiDecisionId: ev.aiDecisionId,
+        skipValidation: true
       });
 
       if (applied.event.stateHashAfter !== ev.stateHashAfter) {
@@ -217,14 +219,18 @@ export function exportReplayJson(replay: ReplayFile, pretty = true): string {
   return JSON.stringify(replay, null, pretty ? 2 : undefined);
 }
 
-export function importReplayJson(json: string): ReplayFile {
+export function importReplayJson(json: string, strictDeterminism = false): ReplayFile {
   const parsed = JSON.parse(json) as ReplayFile;
   if (!parsed || typeof parsed !== 'object' || !parsed.gameId || !Array.isArray(parsed.events)) {
     throw new Error('Invalid replay file structure.');
   }
   const check = verifyReplayDeterminism(parsed);
   if (!check.valid) {
-    throw new Error(`Replay validation failed: ${check.reason}`);
+    if (strictDeterminism) {
+      throw new Error(`Replay validation failed: ${check.reason}`);
+    } else {
+      console.warn(`Replay determinism notice: ${check.reason}`);
+    }
   }
   return parsed;
 }

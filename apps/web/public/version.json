@@ -1,9 +1,14 @@
 {
-  "version": "v1.142",
-  "commitCount": 142,
-  "shortHash": "3ce2127",
-  "buildDate": "2026-10-27T21:45:26.462Z",
+  "version": "v1.143",
+  "commitCount": 143,
+  "shortHash": "f3075cd",
+  "buildDate": "2026-10-27T22:07:58.901Z",
   "releaseNotes": [
+    {
+      "hash": "f3075cd",
+      "date": "2026-10-27",
+      "message": "Update version stamps v1.142"
+    },
     {
       "hash": "3ce2127",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "2b8741b",
       "date": "2026-10-26",
       "message": "test(core): cover Road Building dev card and AI trade negotiation"
-    },
-    {
-      "hash": "0368be5",
-      "date": "2026-10-26",
-      "message": "chore: bump build version to v1.92"
     }
   ]
 }

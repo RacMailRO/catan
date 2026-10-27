@@ -170,9 +170,13 @@ export function createGame(options: CreateGameOptions): GameState {
       knightsPlayed: 0,
       longestRoadLength: 0,
       remainingPieces: getInitialPlayerPieces(rules.boardScenario),
-      specialVictoryPoints: 0,
-      settledIslands: [],
-      hasMovedShipThisTurn: false
+      ...(isScenarioWithShips(rules.boardScenario)
+        ? {
+            specialVictoryPoints: 0,
+            settledIslands: [],
+            hasMovedShipThisTurn: false
+          }
+        : {})
     };
   });
 
@@ -1716,7 +1720,7 @@ export function applyAction(
   state: GameState,
   playerId: string,
   action: GameAction,
-  options?: { nowMs?: number; aiDecisionId?: string }
+  options?: { nowMs?: number; aiDecisionId?: string; skipValidation?: boolean }
 ): { state: GameState; event: GameEvent } {
   const nowMs = options?.nowMs ?? Date.now();
   const nextState: GameState = structuredClone(state);
@@ -1724,9 +1728,11 @@ export function applyAction(
   // Expire any timed-out trade offers before validating/applying
   expireStaleTradesInPlace(nextState, nowMs);
 
-  const validation = validateAction(nextState, playerId, action);
-  if (!validation.valid) {
-    throw new Error(`Invalid action (${validation.code}): ${validation.reason}`);
+  if (!options?.skipValidation) {
+    const validation = validateAction(nextState, playerId, action);
+    if (!validation.valid) {
+      throw new Error(`Invalid action (${validation.code}): ${validation.reason}`);
+    }
   }
 
   const phaseBefore = nextState.phase;
@@ -1762,13 +1768,15 @@ export function applyAction(
         details.startingResources = granted;
       }
 
-      if (!player.settledIslands) player.settledIslands = [];
-      const islands = getBoardIslands(nextState.board);
-      const isls = islands.vertexToIslands[action.vertexId] || [];
-      for (const islIdx of isls) {
-        const islId = `island_${islIdx}`;
-        if (!player.settledIslands.includes(islId)) {
-          player.settledIslands.push(islId);
+      if (isScenarioWithShips(nextState.rules.boardScenario)) {
+        if (!player.settledIslands) player.settledIslands = [];
+        const islands = getBoardIslands(nextState.board);
+        const isls = islands.vertexToIslands[action.vertexId] || [];
+        for (const islIdx of isls) {
+          const islId = `island_${islIdx}`;
+          if (!player.settledIslands.includes(islId)) {
+            player.settledIslands.push(islId);
+          }
         }
       }
 
@@ -2246,7 +2254,9 @@ export function applyAction(
       nextState.activeTradeOffers = [];
       player.hasPlayedDevCardThisTurn = false;
       player.playedDevCardTypesThisTurn = [];
-      player.hasMovedShipThisTurn = false;
+      if (isScenarioWithShips(nextState.rules.boardScenario)) {
+        player.hasMovedShipThisTurn = false;
+      }
       nextState.lastDiceRoll = undefined;
 
       const currentIdx = nextState.playerOrder.indexOf(playerId);
