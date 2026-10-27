@@ -19,6 +19,7 @@ export interface BoardSvgProps {
   onSelectVertex?: (vertexId: string) => void;
   onSelectEdge?: (edgeId: string) => void;
   onSelectHex?: (hexId: string) => void;
+  interactiveAll?: boolean;
 }
 
 const TERRAIN_FALLBACK_FILL: Record<TerrainType, string> = {
@@ -262,7 +263,8 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
   highlightedHexes,
   onSelectVertex,
   onSelectEdge,
-  onSelectHex
+  onSelectHex,
+  interactiveAll = false
 }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [zoom, setZoom] = useState<number>(1);
@@ -735,11 +737,11 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 data-hex-id={hex.id}
                 onClick={() => {
                   if (hasMovedRef.current) return;
-                  if (isHighlighted && onSelectHex) {
+                  if ((isHighlighted || interactiveAll) && onSelectHex) {
                     onSelectHex(hex.id);
                   }
                 }}
-                style={{ cursor: isHighlighted ? 'pointer' : 'inherit' }}
+                style={{ cursor: (isHighlighted || (interactiveAll && onSelectHex)) ? 'pointer' : 'inherit' }}
               >
                 {/* Fallback polygon + interactive hit target */}
                 <polygon
@@ -886,7 +888,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             const builtRoad = board.roads[edge.id];
             const builtShip = board.ships?.[edge.id];
             const isHighlighted = highlightedEdges?.has(edge.id) ?? false;
-            if (!builtRoad && !builtShip && !isHighlighted) return null;
+            if (!builtRoad && !builtShip && !isHighlighted && !interactiveAll) return null;
 
             const ownerPColor: PlayerColor = builtRoad
               ? playerColors[builtRoad.ownerId] ?? 'red'
@@ -919,11 +921,11 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 key={edge.id}
                 onClick={() => {
                   if (hasMovedRef.current) return;
-                  if (isHighlighted && onSelectEdge) {
+                  if ((isHighlighted || interactiveAll) && onSelectEdge) {
                     onSelectEdge(edge.id);
                   }
                 }}
-                style={{ cursor: isHighlighted ? 'pointer' : 'default' }}
+                style={{ cursor: (isHighlighted || (interactiveAll && onSelectEdge)) ? 'pointer' : 'default' }}
               >
                 {builtRoad && (
                   <g transform={roadTransform} style={{ pointerEvents: 'none' }}>
@@ -953,7 +955,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                   </g>
                 )}
 
-                {isHighlighted && (
+                {isHighlighted ? (
                   <g>
                     {/* Generous invisible touch target line (width 32) — flat (not round) caps,
                         so the hit area stays within the edge and doesn't bulge out over the
@@ -991,7 +993,19 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                       strokeWidth={2.5}
                     />
                   </g>
-                )}
+                ) : interactiveAll && onSelectEdge ? (
+                  <line
+                    data-interactive="true"
+                    x1={edge.x1}
+                    y1={edge.y1}
+                    x2={edge.x2}
+                    y2={edge.y2}
+                    stroke="transparent"
+                    strokeWidth={28}
+                    strokeLinecap="round"
+                    className="sandbox-hit-edge"
+                  />
+                ) : null}
               </g>
             );
           })}
@@ -1000,7 +1014,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
           {Object.values(board.vertices).map((vertex) => {
             const building = board.buildings[vertex.id];
             const isHighlighted = highlightedVertices?.has(vertex.id) ?? false;
-            if (!building && !isHighlighted) return null;
+            if (!building && !isHighlighted && !interactiveAll) return null;
 
             const pColor: PlayerColor = building
               ? playerColors[building.ownerId] ?? 'red'
@@ -1012,11 +1026,11 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 transform={`translate(${vertex.x}, ${vertex.y})`}
                 onClick={() => {
                   if (hasMovedRef.current) return;
-                  if (isHighlighted && onSelectVertex) {
+                  if ((isHighlighted || interactiveAll) && onSelectVertex) {
                     onSelectVertex(vertex.id);
                   }
                 }}
-                style={{ cursor: isHighlighted ? 'pointer' : 'default' }}
+                style={{ cursor: (isHighlighted || (interactiveAll && onSelectVertex)) ? 'pointer' : 'default' }}
               >
                 {building && building.type === 'settlement' && (
                   <image
@@ -1046,7 +1060,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                   />
                 )}
 
-                {isHighlighted && (
+                {isHighlighted ? (
                   <g>
                     {/* Generous touch hit circle */}
                     <circle
@@ -1066,7 +1080,16 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                       strokeWidth={3.5}
                     />
                   </g>
-                )}
+                ) : interactiveAll && onSelectVertex ? (
+                  <circle
+                    data-interactive="true"
+                    cx={0}
+                    cy={0}
+                    r={22}
+                    fill="transparent"
+                    className="sandbox-hit-vertex"
+                  />
+                ) : null}
               </g>
             );
           })}

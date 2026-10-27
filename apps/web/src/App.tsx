@@ -44,6 +44,7 @@ import {
   ResourceCardSprite
 } from './components/GameAssets';
 import { ReplayAndAnalysisView } from './components/ReplayAndAnalysisView';
+import { SandboxMode } from './components/SandboxMode';
 import { saveReplayToHistory } from './storage';
 import {
   GameSyncPayload,
@@ -78,14 +79,15 @@ import {
   FULL_RULES
 } from './i18n';
 
-type ActiveTab = 'lobby' | 'game' | 'replay' | 'benchmark' | 'spectate';
+type ActiveTab = 'lobby' | 'game' | 'replay' | 'benchmark' | 'spectate' | 'sandbox';
 
 const NAV_TAB_ICON: Record<ActiveTab, string> = {
   lobby: '⚙️',
   game: '🎲',
   replay: '🎬',
   benchmark: '📈',
-  spectate: '👁️'
+  spectate: '👁️',
+  sandbox: '🛠️'
 };
 
 const NAV_TAB_LABEL = (t: {
@@ -98,8 +100,29 @@ const NAV_TAB_LABEL = (t: {
   game: t.navGame,
   replay: t.navReplay,
   benchmark: t.navBenchmark,
-  spectate: 'Spectator'
+  spectate: 'Spectator',
+  sandbox: 'Mediu de Test'
 });
+
+export function isLocalEnvironment(): boolean {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '[::1]' ||
+    host.startsWith('192.168.') ||
+    host.startsWith('10.') ||
+    host.startsWith('172.16.') ||
+    host.startsWith('172.17.') ||
+    host.startsWith('172.18.') ||
+    host.startsWith('172.19.') ||
+    host.startsWith('172.2') ||
+    host.startsWith('172.30.') ||
+    host.startsWith('172.31.') ||
+    host.endsWith('.local')
+  );
+}
 
 // Remembers the player's own display name per device/browser, so it doesn't need retyping
 // every time — used both for the host's own seat and the "join by code" guest name field.
@@ -1827,6 +1850,18 @@ export const App: React.FC = () => {
                 >
                   📈 {t.navBenchmark}
                 </button>
+                {isLocalEnvironment() && (
+                  <button
+                    type="button"
+                    className={`nav-btn ${activeTab === 'sandbox' ? 'active' : ''}`}
+                    onClick={() => {
+                      setActiveTab('sandbox');
+                      setNavMenuOpen(false);
+                    }}
+                  >
+                    🛠️ {locale === 'ro' ? 'Mediu de Test' : 'Sandbox Mode'}
+                  </button>
+                )}
               </div>
             </>
           )}
@@ -4625,6 +4660,14 @@ export const App: React.FC = () => {
             </div>
           </section>
         </main>
+      )}
+
+      {/* TAB 5: SANDBOX / TEST ENVIRONMENT (Available locally) */}
+      {activeTab === 'sandbox' && (
+        <SandboxMode
+          locale={locale}
+          onExit={() => setActiveTab('lobby')}
+        />
       )}
 
       {/* Online Waiting Room — shown from the moment a lobby is created/joined until the game

@@ -1,9 +1,14 @@
 {
-  "version": "v1.124",
-  "commitCount": 124,
-  "shortHash": "7c61980",
-  "buildDate": "2026-10-27T12:06:44.031Z",
+  "version": "v1.125",
+  "commitCount": 125,
+  "shortHash": "625b1dd",
+  "buildDate": "2026-10-27T12:28:32.899Z",
   "releaseNotes": [
+    {
+      "hash": "625b1dd",
+      "date": "2026-10-27",
+      "message": "feat: isometric 3/4 front-perspective ship models with wooden hull and player-colored billowing sails"
+    },
     {
       "hash": "7c61980",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "8e1832f",
       "date": "2026-10-26",
       "message": "feat(web): display viewer's resource cards in incoming trade offer modal"
-    },
-    {
-      "hash": "129ccc9",
-      "date": "2026-10-26",
-      "message": "chore: bump version to v1.74"
     }
   ]
 }

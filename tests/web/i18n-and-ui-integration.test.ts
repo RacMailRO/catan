@@ -75,4 +75,24 @@ describe('Web UI Localization, Assets & Replay Persistence Integration', () => {
     expect(summary.eventsCount).toBe(12);
     expect(summary.participants).toHaveLength(3);
   });
+
+  it('correctly detects local network origins for Sandbox Test Mode', () => {
+    const checkHost = (h: string) => {
+      return (
+        h === 'localhost' ||
+        h === '127.0.0.1' ||
+        h === '[::1]' ||
+        h.startsWith('192.168.') ||
+        h.startsWith('10.') ||
+        h.endsWith('.local')
+      );
+    };
+
+    expect(checkHost('localhost')).toBe(true);
+    expect(checkHost('127.0.0.1')).toBe(true);
+    expect(checkHost('192.168.1.15')).toBe(true);
+    expect(checkHost('192.168.0.100')).toBe(true);
+    expect(checkHost('catan-online.com')).toBe(false);
+    expect(checkHost('45.33.32.156')).toBe(false);
+  });
 });
