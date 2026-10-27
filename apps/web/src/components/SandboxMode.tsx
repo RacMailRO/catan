@@ -97,7 +97,7 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
   const [placementMode, setPlacementMode] = useState<SandboxPlacementMode>('free');
 
   const [board, setBoard] = useState<BoardState>(() =>
-    generateStandardBoard(seed, layoutAlgorithm, scenario)
+    generateStandardBoard(seed, layoutAlgorithm, scenario).board
   );
 
   const activePlayerId = `player_${selectedColor}`;
@@ -106,18 +106,18 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
   const handleRegenerate = useCallback((newSeed?: number) => {
     const s = newSeed ?? Math.floor(Math.random() * 1000000);
     setSeed(s);
-    setBoard(generateStandardBoard(s, layoutAlgorithm, scenario));
+    setBoard(generateStandardBoard(s, layoutAlgorithm, scenario).board);
   }, [layoutAlgorithm, scenario]);
 
   // When scenario or layout changes, re-generate
   const handleScenarioChange = (newScenario: BoardScenario) => {
     setScenario(newScenario);
-    setBoard(generateStandardBoard(seed, layoutAlgorithm, newScenario));
+    setBoard(generateStandardBoard(seed, layoutAlgorithm, newScenario).board);
   };
 
   const handleLayoutChange = (newLayout: 'random_balanced' | 'official_beginner' | 'pure_random') => {
     setLayoutAlgorithm(newLayout);
-    setBoard(generateStandardBoard(seed, newLayout, scenario));
+    setBoard(generateStandardBoard(seed, newLayout, scenario).board);
   };
 
   // Clear all pieces from board
@@ -136,10 +136,14 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
     const eSet = new Set<string>();
     const hSet = new Set<string>();
 
+    if (!board || !board.hexes) {
+      return { highlightedVertices: vSet, highlightedEdges: eSet, highlightedHexes: hSet };
+    }
+
     if (placementMode === 'free') {
       if (selectedTool === 'robber') {
-        for (const hexId of Object.keys(board.hexes)) {
-          if (hexId !== board.robberHexId) hSet.add(hexId);
+        for (const hexId of Object.keys(board?.hexes || {})) {
+          if (hexId !== board?.robberHexId) hSet.add(hexId);
         }
       }
       return { highlightedVertices: vSet, highlightedEdges: eSet, highlightedHexes: hSet };
@@ -147,10 +151,10 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
 
     // Rules mode
     if (selectedTool === 'settlement') {
-      const playerBuildings = Object.values(board.buildings).filter((b) => b.ownerId === activePlayerId);
+      const playerBuildings = Object.values(board?.buildings || {}).filter((b) => b.ownerId === activePlayerId);
       const hasPlayerBuildings = playerBuildings.length > 0;
 
-      for (const [vId] of Object.entries(board.vertices)) {
+      for (const [vId] of Object.entries(board?.vertices || {})) {
         if (isVertexAvailableForSettlement(board, vId)) {
           if (!hasPlayerBuildings || isVertexConnectedToPlayerRoad(board, vId, activePlayerId)) {
             vSet.add(vId);
@@ -158,37 +162,37 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
         }
       }
     } else if (selectedTool === 'city') {
-      for (const [vId, b] of Object.entries(board.buildings)) {
+      for (const [vId, b] of Object.entries(board?.buildings || {})) {
         if (b.ownerId === activePlayerId && b.type === 'settlement') {
           vSet.add(vId);
         }
       }
     } else if (selectedTool === 'road') {
-      for (const eId of Object.keys(board.edges)) {
+      for (const eId of Object.keys(board?.edges || {})) {
         if (isEdgeLegalForPlayerRoad(board, eId, activePlayerId)) {
           eSet.add(eId);
         }
       }
     } else if (selectedTool === 'ship') {
-      for (const eId of Object.keys(board.edges)) {
+      for (const eId of Object.keys(board?.edges || {})) {
         if (isEdgeLegalForPlayerShip(board, eId, activePlayerId)) {
           eSet.add(eId);
         }
       }
     } else if (selectedTool === 'robber') {
-      for (const [hexId, hex] of Object.entries(board.hexes)) {
-        if (hexId !== board.robberHexId && hex.terrain !== 'sea' && hex.terrain !== 'fog') {
+      for (const [hexId, hex] of Object.entries(board?.hexes || {})) {
+        if (hexId !== board?.robberHexId && hex.terrain !== 'sea' && hex.terrain !== 'fog') {
           hSet.add(hexId);
         }
       }
     } else if (selectedTool === 'eraser') {
-      for (const vId of Object.keys(board.buildings)) {
+      for (const vId of Object.keys(board?.buildings || {})) {
         vSet.add(vId);
       }
-      for (const eId of Object.keys(board.roads)) {
+      for (const eId of Object.keys(board?.roads || {})) {
         eSet.add(eId);
       }
-      if (board.ships) {
+      if (board?.ships) {
         for (const eId of Object.keys(board.ships)) {
           eSet.add(eId);
         }
@@ -265,16 +269,17 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
   const activeStats = useMemo(() => {
     let settlements = 0;
     let cities = 0;
-    for (const b of Object.values(board.buildings)) {
-      if (b.ownerId === activePlayerId) {
+    const buildingsList = board?.buildings ? Object.values(board.buildings) : [];
+    for (const b of buildingsList) {
+      if (b && b.ownerId === activePlayerId) {
         if (b.type === 'settlement') settlements++;
         else if (b.type === 'city') cities++;
       }
     }
 
-    const roads = Object.values(board.roads).filter((r) => r.ownerId === activePlayerId).length;
-    const ships = Object.values(board.ships || {}).filter((s) => s.ownerId === activePlayerId).length;
-    const longestRoad = calculatePlayerLongestRoad(board, activePlayerId);
+    const roads = board?.roads ? Object.values(board.roads).filter((r) => r?.ownerId === activePlayerId).length : 0;
+    const ships = board?.ships ? Object.values(board.ships).filter((s) => s?.ownerId === activePlayerId).length : 0;
+    const longestRoad = board ? calculatePlayerLongestRoad(board, activePlayerId) : 0;
     const victoryPoints = settlements * 1 + cities * 2 + (longestRoad >= 5 ? 2 : 0);
 
     return { settlements, cities, roads, ships, longestRoad, victoryPoints };
@@ -283,11 +288,14 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
   // Board terrain distribution
   const terrainCounts = useMemo(() => {
     const counts: Partial<Record<TerrainType, number>> = {};
-    for (const h of Object.values(board.hexes)) {
-      counts[h.terrain] = (counts[h.terrain] || 0) + 1;
+    const hexesList = board?.hexes ? Object.values(board.hexes) : [];
+    for (const h of hexesList) {
+      if (h?.terrain) {
+        counts[h.terrain] = (counts[h.terrain] || 0) + 1;
+      }
     }
     return counts;
-  }, [board.hexes]);
+  }, [board?.hexes]);
 
   return (
     <div className="sandbox-container">
@@ -521,19 +529,19 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
             </div>
             <div className="sandbox-stat-row">
               <span>{isRo ? 'Hexuri totale' : 'Total hexes'}</span>
-              <strong>{Object.keys(board.hexes).length}</strong>
+              <strong>{board?.hexes ? Object.keys(board.hexes).length : 0}</strong>
             </div>
             <div className="sandbox-stat-row">
               <span>{isRo ? 'Muchii (Edges)' : 'Total edges'}</span>
-              <strong>{Object.keys(board.edges).length}</strong>
+              <strong>{board?.edges ? Object.keys(board.edges).length : 0}</strong>
             </div>
             <div className="sandbox-stat-row">
               <span>{isRo ? 'Noduri (Vertices)' : 'Total vertices'}</span>
-              <strong>{Object.keys(board.vertices).length}</strong>
+              <strong>{board?.vertices ? Object.keys(board.vertices).length : 0}</strong>
             </div>
             <div className="sandbox-stat-row">
               <span>{isRo ? 'Porturi maritime' : 'Harbors'}</span>
-              <strong>{Object.keys(board.harbors).length}</strong>
+              <strong>{board?.harbors ? board.harbors.length : 0}</strong>
             </div>
           </div>
 

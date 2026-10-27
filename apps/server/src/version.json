@@ -1,9 +1,14 @@
 {
-  "version": "v1.127",
-  "commitCount": 127,
-  "shortHash": "efd4372",
-  "buildDate": "2026-10-27T12:51:39.883Z",
+  "version": "v1.128",
+  "commitCount": 128,
+  "shortHash": "42111ba",
+  "buildDate": "2026-10-27T13:03:18.678Z",
   "releaseNotes": [
+    {
+      "hash": "42111ba",
+      "date": "2026-10-27",
+      "message": "fix(harbors): ancoreaza porturile exclusiv pe coasta insulelor de uscat si adauga ponton vizual catre apa"
+    },
     {
       "hash": "efd4372",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "11da121",
       "date": "2026-10-26",
       "message": "chore(release): v1.78 metadata"
-    },
-    {
-      "hash": "aaa7194",
-      "date": "2026-10-26",
-      "message": "chore(release): bump version to v1.77"
     }
   ]
 }
