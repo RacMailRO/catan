@@ -24,11 +24,13 @@ export type DevCardType =
   | 'monopoly'
   | 'victory_point';
 
-export type PlayerColor = 'red' | 'blue' | 'orange' | 'green' | 'brown' | 'gold';
+export type PlayerColor = 'red' | 'blue' | 'orange' | 'green' | 'brown' | 'white';
 
-// First 4 are the classic board's colors; 'brown' and 'gold' are only offered once the
+// First 4 are the classic board's colors; 'brown' and 'white' are only offered once the
 // 5-6 Player Expansion board scenario is selected (see GameRulesConfig.boardScenario).
-export const PLAYER_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'green', 'brown', 'gold'];
+// 'white' matches the physical expansion's own player color, not the gold/amber it replaced
+// here — which looked too close to 'orange' in-game.
+export const PLAYER_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'green', 'brown', 'white'];
 
 export const MAX_PLAYERS_BY_SCENARIO: Record<'classic' | 'expansion', number> = {
   classic: 4,

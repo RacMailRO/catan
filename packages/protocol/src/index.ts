@@ -34,7 +34,7 @@ export const AIStrategyStyleSchema = z.enum([
 
 export const ParticipantTypeSchema = z.enum(['human', 'ai', 'llm', 'passive']);
 
-export const PlayerColorSchema = z.enum(['red', 'blue', 'orange', 'green', 'brown', 'gold']);
+export const PlayerColorSchema = z.enum(['red', 'blue', 'orange', 'green', 'brown', 'white']);
 
 export const GameRulesConfigSchema = z
   .object({

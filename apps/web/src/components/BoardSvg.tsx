@@ -73,18 +73,18 @@ const HARBOR_VERTEX_COLOR: Record<HarborType, string> = {
 // proxy and left a small but visible aiming error.
 const PORT_ART_DEFAULT_ANGLE_DEG = 60.2;
 
-// 'gold' and 'brown' (only used by the 5-6 Player Expansion board) reuse existing sprite
-// art — 'gold' has real dedicated assets already (settlement.svg is in fact a gold/amber
-// gradient, matching city_gold/road_gold, just without a "_gold" suffix in its filename
-// since it predates that per-color naming convention), so it needs no filter. 'brown' has
-// no dedicated art, so it reuses the orange set with a filter (PIECE_COLOR_FILTER below)
-// that desaturates and darkens it toward brown.
+// 'white' and 'brown' (only used by the 5-6 Player Expansion board) have no dedicated
+// sprite art, so they reuse the closest existing color's set with a filter
+// (PIECE_COLOR_FILTER below): 'white' desaturates and brightens the blue set toward an
+// ivory/white tone (matching the real expansion's own white player color — an earlier gold
+// attempt reused a genuinely gold-colored asset, but that read too close to 'orange'
+// in-game), 'brown' desaturates and darkens the orange set toward brown.
 const SETTLEMENT_SVG_BY_COLOR: Record<PlayerColor, string> = {
   red: '/settlement_red.22949197b57f9cfd968b.svg',
   blue: '/settlement_blue.bad4cdb43d65c329deda.svg',
   orange: '/settlement_orange.774ddafc8cc0595acdb7.svg',
   green: '/settlement_green.1b78c696cd137be02fae.svg',
-  gold: '/settlement.svg',
+  white: '/settlement_blue.bad4cdb43d65c329deda.svg',
   brown: '/settlement_orange.774ddafc8cc0595acdb7.svg'
 };
 
@@ -93,7 +93,7 @@ const CITY_SVG_BY_COLOR: Record<PlayerColor, string> = {
   blue: '/city_blue.svg',
   orange: '/city_orange.svg',
   green: '/city_green.svg',
-  gold: '/city_gold.ae8ea43a6dc22d3aace7.svg',
+  white: '/city_blue.svg',
   brown: '/city_orange.svg'
 };
 
@@ -102,7 +102,7 @@ const ROAD_SVG_BY_COLOR: Record<PlayerColor, string> = {
   blue: '/road_blue.3301e2eed15cae5a6a05.svg',
   orange: '/road_orange.07bb26b8c1e63dd438c7.svg',
   green: '/road_green.d206aed3747b3687bc40.svg',
-  gold: '/road_gold.c48ddeff8c81a713c940.svg',
+  white: '/road_blue.3301e2eed15cae5a6a05.svg',
   brown: '/road_orange.07bb26b8c1e63dd438c7.svg'
 };
 
@@ -113,7 +113,7 @@ const PIECE_COLOR_FILTER: Record<PlayerColor, string> = {
   blue: '',
   orange: '',
   green: '',
-  gold: '',
+  white: 'grayscale(1) brightness(2.1) contrast(0.85) ',
   brown: 'hue-rotate(-18deg) saturate(0.6) brightness(0.72) '
 };
 // Native proportions of the road SVG art (a vertical plank, long axis = road length).

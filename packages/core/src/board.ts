@@ -199,6 +199,22 @@ export function generateStandardBoard(
   const terrainDistribution = isExpansion ? EXPANSION_TERRAIN_DISTRIBUTION : STANDARD_TERRAIN_DISTRIBUTION;
   const hexCount = hexCoords.length;
 
+  // Re-center the board around (0,0) up front, before anything below computes an angle
+  // relative to the origin (the harbor-placement coastal-edge sort does exactly that) — the
+  // classic board's STANDARD_HEX_COORDS is already centered by construction, but
+  // EXPANSION_HEX_COORDS isn't, and centering it only AFTER harbor placement (as this used
+  // to do) meant that angle-sort ran around the wrong point, scattering harbors unevenly
+  // around the coastline instead of spacing them out properly.
+  const rawCentroid = hexCoords.reduce(
+    (acc, c) => {
+      const { x, y } = axialToPixel(c.q, c.r, HEX_RADIUS);
+      return { x: acc.x + x, y: acc.y + y };
+    },
+    { x: 0, y: 0 }
+  );
+  const centerOffsetX = rawCentroid.x / hexCoords.length;
+  const centerOffsetY = rawCentroid.y / hexCoords.length;
+
   // 1. Shuffle terrain cards
   const shufTerrains = shuffleWithPrng(terrainDistribution, state);
   const shuffledTerrains = shufTerrains.items;
@@ -295,7 +311,9 @@ export function generateStandardBoard(
 
   hexCoords.forEach((coord, index) => {
     const id = `H${index}`;
-    const { x: cx, y: cy } = axialToPixel(coord.q, coord.r, HEX_RADIUS);
+    const raw = axialToPixel(coord.q, coord.r, HEX_RADIUS);
+    const cx = Number((raw.x - centerOffsetX).toFixed(3));
+    const cy = Number((raw.y - centerOffsetY).toFixed(3));
     const terrain = terrains[index]!;
     const numberToken = assignedTokens[index] ?? null;
 
@@ -482,35 +500,6 @@ export function generateStandardBoard(
     usedHarborVertices.add(chosen.edge.v2);
     vertices[chosen.edge.v1]!.harbor = hType;
     vertices[chosen.edge.v2]!.harbor = hType;
-  }
-
-  // Re-center the whole board around (0,0): the classic board's coordinates are already
-  // symmetric by construction, but the expansion board's elongated, non-hexagonal shape is
-  // not — and BoardSvg's viewBox/pan/zoom math assumes the board is centered at the origin.
-  // Shifting everything by the hex centroid here keeps that assumption true for any shape,
-  // without needing to touch the rendering layer's coordinate system at all.
-  const hexList = Object.values(hexes);
-  const centroidX = hexList.reduce((s, h) => s + h.x, 0) / hexList.length;
-  const centroidY = hexList.reduce((s, h) => s + h.y, 0) / hexList.length;
-  if (Math.abs(centroidX) > 0.001 || Math.abs(centroidY) > 0.001) {
-    for (const hex of hexList) {
-      hex.x = Number((hex.x - centroidX).toFixed(3));
-      hex.y = Number((hex.y - centroidY).toFixed(3));
-    }
-    for (const vertex of Object.values(vertices)) {
-      vertex.x = Number((vertex.x - centroidX).toFixed(3));
-      vertex.y = Number((vertex.y - centroidY).toFixed(3));
-    }
-    for (const edge of Object.values(edges)) {
-      edge.x1 = Number((edge.x1 - centroidX).toFixed(3));
-      edge.y1 = Number((edge.y1 - centroidY).toFixed(3));
-      edge.x2 = Number((edge.x2 - centroidX).toFixed(3));
-      edge.y2 = Number((edge.y2 - centroidY).toFixed(3));
-    }
-    for (const harbor of harbors) {
-      harbor.x = Number((harbor.x - centroidX).toFixed(3));
-      harbor.y = Number((harbor.y - centroidY).toFixed(3));
-    }
   }
 
   return {

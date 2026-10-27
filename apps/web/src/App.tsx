@@ -164,7 +164,15 @@ export const App: React.FC = () => {
         .then((data) => {
           if (data && typeof data.version === 'string' && data.version !== 'v1.0-dev') {
             setVersionInfo(data);
+            // Only meaningful for a production build: __BUILD_HASH__ is baked in once when
+            // vite starts, and in dev mode (npm run dev:web) that's whatever version.json
+            // happened to contain at that moment — not "the code this tab is running", which
+            // in dev mode is always current via HMR regardless of this constant. Comparing
+            // it against the live-advancing /api/version while developing just produces a
+            // permanent false "update available" banner that reloading can't fix (the vite
+            // dev server itself would need restarting, not the page).
             if (
+              import.meta.env.PROD &&
               typeof data.shortHash === 'string' &&
               __BUILD_HASH__ !== 'dev' &&
               data.shortHash !== __BUILD_HASH__
