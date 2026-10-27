@@ -34,7 +34,7 @@ export interface ReplayAndAnalysisViewProps {
   locale: Locale;
 }
 
-type ReplayModalType = 'none' | 'saved_games' | 'strategic_report' | 'event_log';
+type ReplayModalType = 'none' | 'saved_games' | 'strategic_report' | 'event_log' | 'ai_decision';
 
 export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
   replay,
@@ -272,8 +272,8 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
   return (
     <div className="replay-viewport">
       {/* Left Column: Transport Bar + Board + Compact Player Cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', minHeight: 0, overflow: 'hidden' }}>
-        <div className="panel" style={{ padding: '0.55rem 0.75rem', flexShrink: 0 }}>
+      <div className="replay-left-column">
+        <div className="panel replay-transport-panel">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
             <div style={{ fontSize: '0.82rem' }}>
               <strong>{replay.gameId}</strong> · Seed: <code>{replay.seed}</code> ·{' '}
@@ -303,6 +303,13 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                 onClick={() => setActiveModal('event_log')}
               >
                 📜 Jurnal ({replay.events.length})
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setActiveModal('ai_decision')}
+              >
+                🧠 Inspector AI
               </button>
               <button type="button" className="btn" onClick={handleSaveCurrentReplay} title="Salvează în istoric">
                 📌 Salvează
@@ -365,7 +372,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
         </div>
 
         {/* Interactive Board at Selected Step */}
-        <div className="board-stage">
+        <div className="replay-board-stage">
           <div className="board-top-banner">
             <div className="phase-pill">
               {PHASE_LABELS[locale][reconstructedState.phase]}
@@ -387,14 +394,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
         </div>
 
         {/* Compact 4-Player Resource Cards Row at bottom of Replay Board */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: '0.45rem',
-            flexShrink: 0
-          }}
-        >
+        <div className="replay-player-cards-row">
           {reconstructedState.players.map((p) => {
             const sc = calculateScore(reconstructedState, p.id);
             const isActive = reconstructedState.activePlayerId === p.id;
@@ -427,7 +427,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
       </div>
 
       {/* Right Column: Decision Inspector & Interactive Event Stream (Fits inside locked height) */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', minHeight: 0, overflow: 'hidden' }}>
+      <div className="replay-right-column">
         <div className="panel" style={{ flex: 1.15, minHeight: 0 }}>
           <h2>
             🧠 Inspector Decizie AI & Alternative (Pasul #{currentSeq})
