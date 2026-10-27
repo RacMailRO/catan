@@ -894,20 +894,25 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
               ? playerColors[builtShip.ownerId] ?? 'blue'
               : 'red';
 
-            let pieceTransform = '';
-            let pieceDisplayWidth = 0;
-            let pieceDisplayHeight = 0;
-            if (builtRoad || builtShip) {
-              const dx = edge.x2 - edge.x1;
-              const dy = edge.y2 - edge.y1;
-              const length = Math.hypot(dx, dy);
+            const dx = edge.x2 - edge.x1;
+            const dy = edge.y2 - edge.y1;
+            const length = Math.hypot(dx, dy);
+            const midX = (edge.x1 + edge.x2) / 2;
+            const midY = (edge.y1 + edge.y2) / 2;
+
+            let roadTransform = '';
+            let roadDisplayWidth = 0;
+            let roadDisplayHeight = 0;
+            if (builtRoad) {
               const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI - 90;
-              const midX = (edge.x1 + edge.x2) / 2;
-              const midY = (edge.y1 + edge.y2) / 2;
-              pieceDisplayHeight = length;
-              pieceDisplayWidth = length * (builtShip ? 0.45 : (ROAD_ART_WIDTH / ROAD_ART_HEIGHT));
-              pieceTransform = `translate(${midX}, ${midY}) rotate(${angleDeg})`;
+              roadDisplayHeight = length;
+              roadDisplayWidth = length * (ROAD_ART_WIDTH / ROAD_ART_HEIGHT);
+              roadTransform = `translate(${midX}, ${midY}) rotate(${angleDeg})`;
             }
+
+            // Ship piece: isometric 3/4 front view matching the perspective of settlements and cities
+            const shipSize = 62;
+            const shipTransform = `translate(${midX - shipSize / 2}, ${midY - shipSize * 0.72})`;
 
             return (
               <g
@@ -921,13 +926,13 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 style={{ cursor: isHighlighted ? 'pointer' : 'default' }}
               >
                 {builtRoad && (
-                  <g transform={pieceTransform} style={{ pointerEvents: 'none' }}>
+                  <g transform={roadTransform} style={{ pointerEvents: 'none' }}>
                     <image
                       href={ROAD_SVG_BY_COLOR[ownerPColor]}
-                      x={-pieceDisplayWidth / 2}
-                      y={-pieceDisplayHeight / 2}
-                      width={pieceDisplayWidth}
-                      height={pieceDisplayHeight}
+                      x={-roadDisplayWidth / 2}
+                      y={-roadDisplayHeight / 2}
+                      width={roadDisplayWidth}
+                      height={roadDisplayHeight}
                       preserveAspectRatio="none"
                       style={{ filter: `${PIECE_COLOR_FILTER[ownerPColor]}drop-shadow(0 2px 2px rgba(0,0,0,0.5))` }}
                     />
@@ -935,15 +940,15 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 )}
 
                 {builtShip && (
-                  <g transform={pieceTransform} style={{ pointerEvents: 'none' }}>
+                  <g transform={shipTransform} style={{ pointerEvents: 'none' }}>
                     <image
                       href={SHIP_SVG_BY_COLOR[ownerPColor]}
-                      x={-pieceDisplayWidth / 2}
-                      y={-pieceDisplayHeight / 2}
-                      width={pieceDisplayWidth}
-                      height={pieceDisplayHeight}
-                      preserveAspectRatio="none"
-                      style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.6))' }}
+                      x={0}
+                      y={0}
+                      width={shipSize}
+                      height={shipSize}
+                      preserveAspectRatio="xMidYMid meet"
+                      style={{ filter: 'drop-shadow(0 3px 5px rgba(0,0,0,0.75)) drop-shadow(0 0 2px rgba(255,255,255,0.45))' }}
                     />
                   </g>
                 )}
