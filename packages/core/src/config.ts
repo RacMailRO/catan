@@ -40,17 +40,19 @@ export const INITIAL_BANK_RESOURCES: ResourceCount = {
 export const INITIAL_PLAYER_PIECES = {
   roads: 15,
   settlements: 5,
-  cities: 4
+  cities: 4,
+  ships: 15
 };
 
 export const BUILDING_COSTS: Record<
-  'road' | 'settlement' | 'city' | 'dev_card',
+  'road' | 'settlement' | 'city' | 'dev_card' | 'ship',
   ResourceCount
 > = {
   road: { wood: 1, brick: 1, sheep: 0, wheat: 0, ore: 0 },
   settlement: { wood: 1, brick: 1, sheep: 1, wheat: 1, ore: 0 },
   city: { wood: 0, brick: 0, sheep: 0, wheat: 2, ore: 3 },
-  dev_card: { wood: 0, brick: 0, sheep: 1, wheat: 1, ore: 1 }
+  dev_card: { wood: 0, brick: 0, sheep: 1, wheat: 1, ore: 1 },
+  ship: { wood: 1, brick: 0, sheep: 1, wheat: 0, ore: 0 }
 };
 
 export const STANDARD_TERRAIN_DISTRIBUTION: TerrainType[] = [

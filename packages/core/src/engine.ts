@@ -235,6 +235,14 @@ export function isVertexAvailableForSettlement(board: BoardState, vertexId: stri
   const vertex = board.vertices[vertexId];
   if (!vertex) return false;
   if (board.buildings[vertexId]) return false;
+
+  // Vertex must touch at least one land hex (not deep sea or fog)
+  const hasLand = vertex.adjacentHexIds.some((hId) => {
+    const t = board.hexes[hId]?.terrain;
+    return t && t !== 'sea' && t !== 'fog';
+  });
+  if (!hasLand) return false;
+
   for (const adjV of vertex.adjacentVertexIds) {
     if (board.buildings[adjV]) return false;
   }
@@ -251,7 +259,9 @@ export function isVertexConnectedToPlayerRoad(
 ): boolean {
   const vertex = board.vertices[vertexId];
   if (!vertex) return false;
-  return vertex.adjacentEdgeIds.some((eId) => board.roads[eId]?.ownerId === playerId);
+  return vertex.adjacentEdgeIds.some(
+    (eId) => board.roads[eId]?.ownerId === playerId || board.ships?.[eId]?.ownerId === playerId
+  );
 }
 
 /**
@@ -259,6 +269,40 @@ export function isVertexConnectedToPlayerRoad(
  * Must be empty and connected either to a player's building or to a player's road at a vertex
  * not occupied by an opponent's building.
  */
+export function isEdgeLegalForPlayerShip(
+  board: BoardState,
+  edgeId: string,
+  playerId: string
+): boolean {
+  const edge = board.edges[edgeId];
+  if (!edge) return false;
+  if (board.roads[edgeId] || board.ships?.[edgeId]) return false;
+
+  // Must touch at least one water/sea/fog hex, or be a coastal border edge (adjacentHexIds.length === 1)
+  const isWaterEdge =
+    edge.adjacentHexIds.length === 1 ||
+    edge.adjacentHexIds.some((hId) => {
+      const t = board.hexes[hId]?.terrain;
+      return t === 'sea' || t === 'fog';
+    });
+  if (!isWaterEdge) return false;
+
+  for (const vId of [edge.v1, edge.v2]) {
+    const b = board.buildings[vId];
+    if (b) {
+      if (b.ownerId === playerId) return true;
+      continue;
+    }
+    const vert = board.vertices[vId];
+    if (!vert) continue;
+    const hasOwnAdjacentShip = vert.adjacentEdgeIds.some(
+      (adjEId) => adjEId !== edgeId && board.ships?.[adjEId]?.ownerId === playerId
+    );
+    if (hasOwnAdjacentShip) return true;
+  }
+  return false;
+}
+
 export function isEdgeLegalForPlayerRoad(
   board: BoardState,
   edgeId: string,
@@ -266,7 +310,15 @@ export function isEdgeLegalForPlayerRoad(
 ): boolean {
   const edge = board.edges[edgeId];
   if (!edge) return false;
-  if (board.roads[edgeId]) return false;
+  if (board.roads[edgeId] || board.ships?.[edgeId]) return false;
+
+  const allSea =
+    edge.adjacentHexIds.length > 1 &&
+    edge.adjacentHexIds.every((hId) => {
+      const t = board.hexes[hId]?.terrain;
+      return t === 'sea' || t === 'fog';
+    });
+  if (allSea) return false;
 
   for (const vId of [edge.v1, edge.v2]) {
     const b = board.buildings[vId];
@@ -316,10 +368,14 @@ export function getPlayerBankTradeRatio(
  * respecting road breaks caused by opponent settlements/cities on intermediate vertices.
  */
 export function calculatePlayerLongestRoad(board: BoardState, playerId: string): number {
-  const playerEdges = Object.values(board.roads)
+  const playerRoadEdges = Object.values(board.roads)
     .filter((r) => r.ownerId === playerId)
     .map((r) => board.edges[r.edgeId]!);
+  const playerShipEdges = Object.values(board.ships || {})
+    .filter((s) => s.ownerId === playerId)
+    .map((s) => board.edges[s.edgeId]!);
 
+  const playerEdges = [...playerRoadEdges, ...playerShipEdges];
   if (playerEdges.length === 0) return 0;
 
   const playerEdgeSet = new Set(playerEdges.map((e) => e.id));
@@ -609,6 +665,18 @@ export function getLegalActions(state: GameState, playerId: string): GameAction[
         for (const eId of Object.keys(state.board.edges)) {
           if (isEdgeLegalForPlayerRoad(state.board, eId, playerId)) {
             actions.push({ type: 'build_road', edgeId: eId });
+          }
+        }
+      }
+
+      // Build ship
+      if (
+        player.remainingPieces.ships > 0 &&
+        hasResources(player.resources, BUILDING_COSTS.ship)
+      ) {
+        for (const eId of Object.keys(state.board.edges)) {
+          if (isEdgeLegalForPlayerShip(state.board, eId, playerId)) {
+            actions.push({ type: 'build_ship', edgeId: eId });
           }
         }
       }
@@ -965,6 +1033,45 @@ export function validateAction(
       return { valid: true };
     }
 
+
+
+
+
+    case 'build_ship': {
+      if (state.phase !== 'main_actions') {
+        return { valid: false, code: 'WRONG_PHASE', reason: 'Construcțiile sunt permise doar în faza principală.' };
+      }
+      if (player.remainingPieces.ships <= 0) {
+        return { valid: false, code: 'NO_PIECES_LEFT', reason: 'Nu mai ai piese de corabie disponibile (maxim 15).' };
+      }
+      if (!hasResources(player.resources, BUILDING_COSTS.ship)) {
+        return { valid: false, code: 'INSUFFICIENT_RESOURCES', reason: 'Resurse insuficiente pentru corabie (1 lemn + 1 oaie).' };
+      }
+      if (!isEdgeLegalForPlayerShip(state.board, action.edgeId, playerId)) {
+        return { valid: false, code: 'ILLEGAL_SHIP_EDGE', reason: 'Muchie nevalidă sau neconectată pentru corabie.' };
+      }
+      return { valid: true };
+    }
+
+    case 'place_initial_ship': {
+      if (state.phase !== 'setup_road_1' && state.phase !== 'setup_road_2') {
+        return { valid: false, code: 'WRONG_PHASE', reason: 'Nu este faza de plasare a drumului/corabiei de început.' };
+      }
+      if (player.remainingPieces.ships <= 0) {
+        return { valid: false, code: 'NO_PIECES_LEFT', reason: 'Nu mai ai corăbii disponibile.' };
+      }
+      if (!state.lastPlacedSettlementVertexId) {
+        return { valid: false, code: 'INTERNAL_ERROR', reason: 'Lipsește așezarea recent plasată.' };
+      }
+      const v = state.board.vertices[state.lastPlacedSettlementVertexId];
+      if (!v || !v.adjacentEdgeIds.includes(action.edgeId)) {
+        return { valid: false, code: 'NOT_CONNECTED_TO_SETTLEMENT', reason: 'Corabia trebuie plasată adiacent așezării proaspăt construite.' };
+      }
+      if (!isEdgeLegalForPlayerShip(state.board, action.edgeId, playerId)) {
+        return { valid: false, code: 'ILLEGAL_SHIP_EDGE', reason: 'Muchie nevalidă pentru corabie.' };
+      }
+      return { valid: true };
+    }
     case 'build_road': {
       if (state.phase !== 'main_actions') {
         return { valid: false, code: 'WRONG_PHASE', reason: 'Construcțiile sunt permise doar în faza principală.' };
@@ -1367,6 +1474,60 @@ export function applyAction(
       break;
     }
 
+
+
+
+
+    case 'build_ship': {
+      subtractResourcesInPlace(player.resources, BUILDING_COSTS.ship);
+      addResourcesInPlace(nextState.bank, BUILDING_COSTS.ship);
+      nextState.board.ships = nextState.board.ships || {};
+      nextState.board.ships[action.edgeId] = {
+        ownerId: playerId,
+        edgeId: action.edgeId
+      };
+      player.remainingPieces.ships -= 1;
+      updateLongestRoadState(nextState);
+      checkVictory(nextState, nowMs);
+      break;
+    }
+
+    case 'place_initial_ship': {
+      nextState.board.ships = nextState.board.ships || {};
+      nextState.board.ships[action.edgeId] = {
+        ownerId: playerId,
+        edgeId: action.edgeId
+      };
+      player.remainingPieces.ships -= 1;
+      nextState.lastPlacedSettlementVertexId = undefined;
+      updateLongestRoadState(nextState);
+
+      const totalPlayers = nextState.players.length;
+      if (nextState.phase === 'setup_road_1') {
+        const isLastInForward = nextState.setupStepIndex === totalPlayers - 1;
+        if (isLastInForward) {
+          nextState.phase = 'setup_settlement_2';
+        } else {
+          nextState.setupStepIndex += 1;
+          nextState.activePlayerId = nextState.playerOrder[nextState.setupStepIndex]!;
+          nextState.phase = 'setup_settlement_1';
+        }
+      } else {
+        const isLastInReverse = nextState.setupStepIndex === totalPlayers * 2 - 1;
+        if (isLastInReverse) {
+          nextState.phase = 'turn_start';
+          nextState.setupStepIndex = totalPlayers * 2;
+          nextState.activePlayerId = nextState.playerOrder[0]!;
+          nextState.turn = 1;
+        } else {
+          nextState.setupStepIndex += 1;
+          const revIdx = totalPlayers * 2 - 1 - nextState.setupStepIndex;
+          nextState.activePlayerId = nextState.playerOrder[revIdx]!;
+          nextState.phase = 'setup_settlement_2';
+        }
+      }
+      break;
+    }
     case 'build_road': {
       subtractResourcesInPlace(player.resources, BUILDING_COSTS.road);
       addResourcesInPlace(nextState.bank, BUILDING_COSTS.road);
@@ -1671,6 +1832,31 @@ function distributeResourcesForRoll(
   for (const hex of Object.values(state.board.hexes)) {
     if (hex.numberToken !== diceTotal) continue;
     if (hex.id === state.board.robberHexId) continue;
+
+    // Handle gold field: produces chosen/rarest resource
+    if (hex.terrain === 'gold_field') {
+      for (const v of Object.values(state.board.vertices)) {
+        if (!v.adjacentHexIds.includes(hex.id)) continue;
+        const b = state.board.buildings[v.id];
+        if (!b) continue;
+        const amount = b.type === 'city' ? 2 : 1;
+        const p = state.players.find((pl) => pl.id === b.ownerId);
+        if (!p) continue;
+
+        // Auto-select resource player has least of that bank currently holds
+        for (let a = 0; a < amount; a++) {
+          const availableRes = ALL_RESOURCES.filter((r) => state.bank[r] > 0);
+          if (availableRes.length > 0) {
+            availableRes.sort((r1, r2) => (p.resources[r1] ?? 0) - (p.resources[r2] ?? 0));
+            const picked = availableRes[0]!;
+            owedByPlayer[b.ownerId]![picked] += 1;
+            totalOwedByResource[picked] += 1;
+          }
+        }
+      }
+      continue;
+    }
+
     const res = TERRAIN_TO_RESOURCE[hex.terrain];
     if (!res) continue;
 

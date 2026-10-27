@@ -122,7 +122,7 @@ function savePlayerName(name: string): void {
   }
 }
 
-type BuildSelectionMode = 'none' | 'road' | 'settlement' | 'city' | 'knight';
+type BuildSelectionMode = 'none' | 'road' | 'ship' | 'settlement' | 'city' | 'knight';
 type GameModalType =
   | 'none'
   | 'trade'
@@ -1474,7 +1474,7 @@ export const App: React.FC = () => {
         vSet.add(act.vertexId);
       } else if (
         (gameState.phase === 'setup_road_1' || gameState.phase === 'setup_road_2') &&
-        act.type === 'place_initial_road'
+        (act.type === 'place_initial_road' || act.type === 'place_initial_ship')
       ) {
         eSet.add(act.edgeId);
       } else if (gameState.phase === 'road_building_card' && act.type === 'place_free_road') {
@@ -1482,6 +1482,8 @@ export const App: React.FC = () => {
       } else if (gameState.phase === 'move_robber' && act.type === 'move_robber') {
         hSet.add(act.hexId);
       } else if (buildMode === 'road' && act.type === 'build_road') {
+        eSet.add(act.edgeId);
+      } else if (buildMode === 'ship' && act.type === 'build_ship') {
         eSet.add(act.edgeId);
       } else if (buildMode === 'settlement' && act.type === 'build_settlement') {
         vSet.add(act.vertexId);
@@ -1512,11 +1514,20 @@ export const App: React.FC = () => {
     if (!gameState || !isHumanTurn) return;
     const pId = gameState.activePlayerId;
     if (gameState.phase === 'setup_road_1' || gameState.phase === 'setup_road_2') {
-      executeAction(pId, { type: 'place_initial_road', edgeId });
+      const hasInitialShip = legalActionsForActive.some(
+        (a) => a.type === 'place_initial_ship' && a.edgeId === edgeId
+      );
+      if (hasInitialShip && buildMode === 'ship') {
+        executeAction(pId, { type: 'place_initial_ship', edgeId });
+      } else {
+        executeAction(pId, { type: 'place_initial_road', edgeId });
+      }
     } else if (gameState.phase === 'road_building_card') {
       executeAction(pId, { type: 'place_free_road', edgeId });
     } else if (buildMode === 'road') {
       executeAction(pId, { type: 'build_road', edgeId });
+    } else if (buildMode === 'ship') {
+      executeAction(pId, { type: 'build_ship', edgeId });
     }
   };
 
@@ -1548,7 +1559,7 @@ export const App: React.FC = () => {
     setBenchmarkReport(rep);
   };
 
-  const maxPlayers = rules.boardScenario === 'expansion' ? 6 : 4;
+  const maxPlayers = rules.boardScenario === 'expansion' || rules.boardScenario === 'world_map' ? 6 : 4;
 
   const playerColorsMap: Record<string, PlayerColor> = {};
   if (gameState) {
@@ -2306,10 +2317,22 @@ export const App: React.FC = () => {
                     }}
                   >
                     <option value="classic">
-                      {locale === 'ro' ? 'Clasică (19 hexagoane, până la 4 jucători)' : 'Classic (19 hexes, up to 4 players)'}
+                      {locale === 'ro' ? '🏝️ Clasică (19 hexagoane, până la 4 jucători)' : 'Classic (19 hexes, up to 4 players)'}
                     </option>
                     <option value="expansion">
-                      {locale === 'ro' ? 'Extensie 5-6 Jucători (30 hexagoane, până la 6 jucători)' : '5-6 Player Expansion (30 hexes, up to 6 players)'}
+                      {locale === 'ro' ? '🗺️ Extensie 5-6 Jucători (30 hexagoane, până la 6 jucători)' : '5-6 Player Expansion (30 hexes, up to 6 players)'}
+                    </option>
+                    <option value="seafarers_shores">
+                      {locale === 'ro' ? '⛵ Navigatori: Spre Țărmuri Noi (Arhipelag & Râuri de Aur)' : 'Seafarers: Heading to New Shores (Archipelago & Gold)'}
+                    </option>
+                    <option value="seafarers_islands">
+                      {locale === 'ro' ? '🏝️ Navigatori: Cele Patru Insule (4 Insule & Rute Maritime)' : 'Seafarers: The Four Islands (4 Islands & Trade Routes)'}
+                    </option>
+                    <option value="seafarers_fog">
+                      {locale === 'ro' ? '🌫️ Navigatori: Insulele în Ceață (Ape Neexplorate & Aur)' : 'Seafarers: The Fog Island (Uncharted Waters & Gold)'}
+                    </option>
+                    <option value="world_map">
+                      {locale === 'ro' ? '🌍 Harta Lumii (World Map - Continente, Oceane & Aur)' : 'World Map (Continents, Oceans & Gold)'}
                     </option>
                   </select>
                 </div>
@@ -2535,7 +2558,8 @@ export const App: React.FC = () => {
                           [
                             ['settlements', '🏠', locale === 'ro' ? 'Așezări' : 'Settlements'],
                             ['cities', '🏰', locale === 'ro' ? 'Orașe' : 'Cities'],
-                            ['roads', '🛣️', locale === 'ro' ? 'Drumuri' : 'Roads']
+                            ['roads', '🛣️', locale === 'ro' ? 'Drumuri' : 'Roads'],
+                            ['ships', '⛵', locale === 'ro' ? 'Corăbii' : 'Ships']
                           ] as const
                         ).map(([key, icon, label]) => {
                           const total = INITIAL_PLAYER_PIECES[key];
@@ -2812,6 +2836,18 @@ export const App: React.FC = () => {
                         onClick={() => setBuildMode((m) => (m === 'road' ? 'none' : 'road'))}
                       >
                         🛣️ {t.buildRoad}
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn ${buildMode === 'ship' ? 'btn-primary' : ''}`}
+                        disabled={
+                          !hasResources(activePlayerObj.resources, BUILDING_COSTS.ship) ||
+                          (activePlayerObj.remainingPieces.ships ?? 15) <= 0
+                        }
+                        onClick={() => setBuildMode((m) => (m === 'ship' ? 'none' : 'ship'))}
+                        title={locale === 'ro' ? 'Construiește Corabie (1 Lemn + 1 Oaie)' : 'Build Ship (1 Wood + 1 Sheep)'}
+                      >
+                        ⛵ {locale === 'ro' ? 'Corabie' : 'Ship'}
                       </button>
                       {/* Port Shortcut: if player has wood port and >= 2 wood, show quick conversion button */}
                       {isHumanTurn && activePlayerObj && activePlayerObj.resources.wood >= 2 && activePlayerObj.resources.brick === 0 && (() => {

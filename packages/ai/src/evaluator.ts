@@ -253,8 +253,10 @@ export function evaluateCandidateAction(
     }
 
     case 'place_initial_road':
+    case 'place_initial_ship':
     case 'place_free_road':
-    case 'build_road': {
+    case 'build_road':
+    case 'build_ship': {
       const edge = view.board.edges[action.edgeId];
       if (!edge) {
         return { action, score: -50, factors: {}, explanation: 'Muchie invalidă' };

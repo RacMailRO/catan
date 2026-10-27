@@ -62,7 +62,7 @@ export interface GameRulesConfig {
   // Expansion's larger 30-hex board, up to 6 players. Independent of boardLayout — the
   // expansion scenario always shuffles its number tokens with no fixed letter sequence
   // (the rulebook doesn't define one for the bigger board), regardless of boardLayout.
-  boardScenario: 'classic' | 'expansion';
+  boardScenario: BoardScenario;
   autoFillPassiveBotsMinPlayers: number;
 }
 

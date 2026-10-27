@@ -27,7 +27,10 @@ const TERRAIN_FALLBACK_FILL: Record<TerrainType, string> = {
   pasture: '#4d7c0f',
   fields: '#ca8a04',
   mountains: '#475569',
-  desert: '#d6bc8b'
+  desert: '#d6bc8b',
+  gold_field: '#eab308',
+  sea: '#0284c7',
+  fog: '#38bdf8'
 };
 
 // Per-terrain hex art variants (for visual variety across same-terrain hexes), cropped from
@@ -40,7 +43,10 @@ const TERRAIN_IMAGES: Record<TerrainType, string[]> = {
   fields: ['/terrain_fields_1.png', '/terrain_fields_2.png', '/terrain_fields_3.png', '/terrain_fields_4.png'],
   hills: ['/terrain_hills_1.png', '/terrain_hills_2.png', '/terrain_hills_3.png'],
   mountains: ['/terrain_mountains_1.png', '/terrain_mountains_2.png', '/terrain_mountains_3.png'],
-  desert: ['/terrain_desert_1.png']
+  desert: ['/terrain_desert_1.png'],
+  gold_field: ['/terrain_gold_field_1.png', '/terrain_gold_field_2.png'],
+  sea: ['/terrain_sea_1.png'],
+  fog: ['/terrain_fog_1.png']
 };
 
 // Original hex-tile artwork, cropped from /porturi-2.jpg (2:1 harbors) and /porturi-3.jpg
@@ -104,6 +110,15 @@ const ROAD_SVG_BY_COLOR: Record<PlayerColor, string> = {
   green: '/road_green.d206aed3747b3687bc40.svg',
   white: '/road_blue.3301e2eed15cae5a6a05.svg',
   brown: '/road_orange.07bb26b8c1e63dd438c7.svg'
+};
+
+const SHIP_SVG_BY_COLOR: Record<PlayerColor, string> = {
+  red: '/ship_red.svg',
+  blue: '/ship_blue.svg',
+  orange: '/ship_orange.svg',
+  green: '/ship_green.svg',
+  white: '/ship_white.svg',
+  brown: '/ship_brown.svg'
 };
 
 // Extra CSS filter applied before the drop-shadow chain below, only for colors reusing
@@ -869,26 +884,29 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
           {/* 3. Render Edges (Built Roads & Highlighted Legal Road Edges with Large Touch Hit Targets) */}
           {Object.values(board.edges).map((edge) => {
             const builtRoad = board.roads[edge.id];
+            const builtShip = board.ships?.[edge.id];
             const isHighlighted = highlightedEdges?.has(edge.id) ?? false;
-            if (!builtRoad && !isHighlighted) return null;
+            if (!builtRoad && !builtShip && !isHighlighted) return null;
 
             const ownerPColor: PlayerColor = builtRoad
               ? playerColors[builtRoad.ownerId] ?? 'red'
+              : builtShip
+              ? playerColors[builtShip.ownerId] ?? 'blue'
               : 'red';
 
-            let roadTransform = '';
-            let roadDisplayWidth = 0;
-            let roadDisplayHeight = 0;
-            if (builtRoad) {
+            let pieceTransform = '';
+            let pieceDisplayWidth = 0;
+            let pieceDisplayHeight = 0;
+            if (builtRoad || builtShip) {
               const dx = edge.x2 - edge.x1;
               const dy = edge.y2 - edge.y1;
               const length = Math.hypot(dx, dy);
               const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI - 90;
               const midX = (edge.x1 + edge.x2) / 2;
               const midY = (edge.y1 + edge.y2) / 2;
-              roadDisplayHeight = length;
-              roadDisplayWidth = length * (ROAD_ART_WIDTH / ROAD_ART_HEIGHT);
-              roadTransform = `translate(${midX}, ${midY}) rotate(${angleDeg})`;
+              pieceDisplayHeight = length;
+              pieceDisplayWidth = length * (builtShip ? 0.45 : (ROAD_ART_WIDTH / ROAD_ART_HEIGHT));
+              pieceTransform = `translate(${midX}, ${midY}) rotate(${angleDeg})`;
             }
 
             return (
@@ -903,15 +921,29 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 style={{ cursor: isHighlighted ? 'pointer' : 'default' }}
               >
                 {builtRoad && (
-                  <g transform={roadTransform} style={{ pointerEvents: 'none' }}>
+                  <g transform={pieceTransform} style={{ pointerEvents: 'none' }}>
                     <image
                       href={ROAD_SVG_BY_COLOR[ownerPColor]}
-                      x={-roadDisplayWidth / 2}
-                      y={-roadDisplayHeight / 2}
-                      width={roadDisplayWidth}
-                      height={roadDisplayHeight}
+                      x={-pieceDisplayWidth / 2}
+                      y={-pieceDisplayHeight / 2}
+                      width={pieceDisplayWidth}
+                      height={pieceDisplayHeight}
                       preserveAspectRatio="none"
                       style={{ filter: `${PIECE_COLOR_FILTER[ownerPColor]}drop-shadow(0 2px 2px rgba(0,0,0,0.5))` }}
+                    />
+                  </g>
+                )}
+
+                {builtShip && (
+                  <g transform={pieceTransform} style={{ pointerEvents: 'none' }}>
+                    <image
+                      href={SHIP_SVG_BY_COLOR[ownerPColor]}
+                      x={-pieceDisplayWidth / 2}
+                      y={-pieceDisplayHeight / 2}
+                      width={pieceDisplayWidth}
+                      height={pieceDisplayHeight}
+                      preserveAspectRatio="none"
+                      style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.6))' }}
                     />
                   </g>
                 )}

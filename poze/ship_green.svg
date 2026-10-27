@@ -1,0 +1,50 @@
+<svg width="80" height="194" viewBox="0 0 80 194" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Sail Gradient -->
+    <linearGradient id="sailGrad_green" x1="15" y1="40" x2="65" y2="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4ADE80" />
+      <stop offset="50%" stop-color="#16A34A" />
+      <stop offset="100%" stop-color="#15803D" />
+    </linearGradient>
+    <!-- Hull Gradient -->
+    <linearGradient id="hullGrad_green" x1="25" y1="97" x2="55" y2="97" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#8B4513" />
+      <stop offset="50%" stop-color="#A0522D" />
+      <stop offset="100%" stop-color="#5C2E0B" />
+    </linearGradient>
+    <!-- Shadow filter -->
+    <filter id="dropShadow_green" x="-20%" y="-10%" width="140%" height="130%">
+      <feDropShadow dx="2" dy="4" stdDeviation="3" flood-opacity="0.4" />
+    </filter>
+  </defs>
+
+  <g filter="url(#dropShadow_green)">
+    <!-- Wooden Hull -->
+    <path d="M40 10 Q60 60 60 135 Q60 178 40 186 Q20 178 20 135 Q20 60 40 10 Z" fill="#3D1F07" />
+    <path d="M40 14 Q56 62 56 133 Q56 173 40 181 Q24 173 24 133 Q24 62 40 14 Z" fill="url(#hullGrad_green)" />
+
+    <!-- Deck planks detail lines -->
+    <line x1="30" y1="60" x2="50" y2="60" stroke="#3D1F07" stroke-width="1.5" opacity="0.6" />
+    <line x1="28" y1="95" x2="52" y2="95" stroke="#3D1F07" stroke-width="1.5" opacity="0.6" />
+    <line x1="30" y1="130" x2="50" y2="130" stroke="#3D1F07" stroke-width="1.5" opacity="0.6" />
+
+    <!-- Center Keel / Mast Line -->
+    <rect x="38.5" y="28" width="3" height="138" rx="1.5" fill="#271202" />
+
+    <!-- Forward Jib Sail -->
+    <path d="M40 32 L40 80 Q24 70 16 78 Q26 50 40 32 Z" fill="url(#sailGrad_green)" stroke="#166534" stroke-width="2" stroke-linejoin="round" />
+
+    <!-- Main Lateen/Square Sail -->
+    <path d="M40 80 L72 88 Q65 140 40 146 Q44 115 40 80 Z" fill="url(#sailGrad_green)" stroke="#166534" stroke-width="2" stroke-linejoin="round" />
+    <!-- Secondary Aft Sail -->
+    <path d="M40 86 L14 94 Q20 138 40 143 Q36 117 40 86 Z" fill="url(#sailGrad_green)" stroke="#166534" stroke-width="2" stroke-linejoin="round" />
+
+    <!-- Mast Crossbeams -->
+    <line x1="18" y1="82" x2="68" y2="84" stroke="#271202" stroke-width="2.5" stroke-linecap="round" />
+    <line x1="22" y1="142" x2="62" y2="144" stroke="#271202" stroke-width="2" stroke-linecap="round" />
+
+    <!-- Pennant / Banner at Top of Mast -->
+    <path d="M40 24 L56 29 L40 34 Z" fill="#4ADE80" stroke="#166534" stroke-width="1" />
+    <circle cx="40" cy="24" r="2.5" fill="#FFD700" />
+  </g>
+</svg>

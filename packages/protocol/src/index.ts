@@ -46,7 +46,7 @@ export const GameRulesConfigSchema = z
     devCardsPerTurnRule: z.enum(['one_total', 'one_per_type']).optional(),
     tradeOfferTimeoutSec: z.number().int().min(5).max(300).optional(),
     boardLayout: z.enum(['random_balanced', 'random_pure', 'beginner_fixed']).optional(),
-    boardScenario: z.enum(['classic', 'expansion']).optional(),
+    boardScenario: z.enum(['classic', 'expansion', 'seafarers_shores', 'seafarers_islands', 'seafarers_fog', 'world_map']).optional(),
     autoFillPassiveBotsMinPlayers: z.number().int().min(1).max(6).optional()
   })
   .strict();

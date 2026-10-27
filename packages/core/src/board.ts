@@ -188,15 +188,215 @@ export function areHexesAdjacent(a: AxialCoord, b: AxialCoord): boolean {
  *   available building block, not offered as a player-facing choice since the real game
  *   doesn't have one here.
  */
+
+export const SEAFARERS_SHORES_HEXES: { q: number; r: number; terrain: TerrainType; token: number | null }[] = [
+  // North Islands
+  { q: -1, r: -3, terrain: 'gold_field', token: 9 },
+  { q: 0, r: -3, terrain: 'sea', token: null },
+  { q: 2, r: -3, terrain: 'fields', token: 4 },
+  { q: 3, r: -3, terrain: 'mountains', token: 10 },
+  // Row r = -2
+  { q: -2, r: -2, terrain: 'forest', token: 8 },
+  { q: -1, r: -2, terrain: 'pasture', token: 5 },
+  { q: 0, r: -2, terrain: 'sea', token: null },
+  { q: 1, r: -2, terrain: 'sea', token: null },
+  { q: 2, r: -2, terrain: 'gold_field', token: 6 },
+  { q: 3, r: -2, terrain: 'sea', token: null },
+  // Sea channel (r = -1)
+  { q: -2, r: -1, terrain: 'sea', token: null },
+  { q: -1, r: -1, terrain: 'sea', token: null },
+  { q: 0, r: -1, terrain: 'sea', token: null },
+  { q: 1, r: -1, terrain: 'sea', token: null },
+  { q: 2, r: -1, terrain: 'sea', token: null },
+  { q: 3, r: -1, terrain: 'sea', token: null },
+  // Main Island North (r = 0)
+  { q: -2, r: 0, terrain: 'hills', token: 5 },
+  { q: -1, r: 0, terrain: 'forest', token: 3 },
+  { q: 0, r: 0, terrain: 'fields', token: 11 },
+  { q: 1, r: 0, terrain: 'pasture', token: 4 },
+  { q: 2, r: 0, terrain: 'mountains', token: 8 },
+  { q: 3, r: 0, terrain: 'hills', token: 10 },
+  // Main Island Mid (r = 1)
+  { q: -2, r: 1, terrain: 'pasture', token: 9 },
+  { q: -1, r: 1, terrain: 'mountains', token: 6 },
+  { q: 0, r: 1, terrain: 'desert', token: null },
+  { q: 1, r: 1, terrain: 'forest', token: 2 },
+  { q: 2, r: 1, terrain: 'fields', token: 5 },
+  // Main Island South (r = 2)
+  { q: -1, r: 2, terrain: 'forest', token: 10 },
+  { q: 0, r: 2, terrain: 'pasture', token: 8 },
+  { q: 1, r: 2, terrain: 'hills', token: 3 }
+];
+
+export const SEAFARERS_ISLANDS_HEXES: { q: number; r: number; terrain: TerrainType; token: number | null }[] = [
+  // Top-West & Top-East Islands (r = -2)
+  { q: -2, r: -2, terrain: 'forest', token: 9 },
+  { q: -1, r: -2, terrain: 'pasture', token: 4 },
+  { q: 0, r: -2, terrain: 'sea', token: null },
+  { q: 2, r: -2, terrain: 'mountains', token: 6 },
+  { q: 3, r: -2, terrain: 'fields', token: 10 },
+  // Row r = -1
+  { q: -3, r: -1, terrain: 'hills', token: 5 },
+  { q: -2, r: -1, terrain: 'gold_field', token: 8 },
+  { q: -1, r: -1, terrain: 'sea', token: null },
+  { q: 0, r: -1, terrain: 'sea', token: null },
+  { q: 1, r: -1, terrain: 'sea', token: null },
+  { q: 2, r: -1, terrain: 'forest', token: 3 },
+  { q: 3, r: -1, terrain: 'gold_field', token: 8 },
+  // Sea channel (r = 0)
+  { q: -3, r: 0, terrain: 'sea', token: null },
+  { q: -2, r: 0, terrain: 'sea', token: null },
+  { q: -1, r: 0, terrain: 'sea', token: null },
+  { q: 0, r: 0, terrain: 'sea', token: null },
+  { q: 1, r: 0, terrain: 'sea', token: null },
+  { q: 2, r: 0, terrain: 'sea', token: null },
+  { q: 3, r: 0, terrain: 'sea', token: null },
+  // Bottom-West & Bottom-East Islands (r = 1)
+  { q: -3, r: 1, terrain: 'mountains', token: 10 },
+  { q: -2, r: 1, terrain: 'fields', token: 6 },
+  { q: -1, r: 1, terrain: 'sea', token: null },
+  { q: 0, r: 1, terrain: 'sea', token: null },
+  { q: 1, r: 1, terrain: 'sea', token: null },
+  { q: 2, r: 1, terrain: 'pasture', token: 5 },
+  { q: 3, r: 1, terrain: 'hills', token: 9 },
+  // Row r = 2
+  { q: -2, r: 2, terrain: 'pasture', token: 3 },
+  { q: -1, r: 2, terrain: 'forest', token: 11 },
+  { q: 0, r: 2, terrain: 'sea', token: null },
+  { q: 2, r: 2, terrain: 'gold_field', token: 4 },
+  { q: 3, r: 2, terrain: 'fields', token: 2 }
+];
+
+export const SEAFARERS_FOG_HEXES: { q: number; r: number; terrain: TerrainType; token: number | null }[] = [
+  // Row r = -2
+  { q: -2, r: -2, terrain: 'forest', token: 6 },
+  { q: -1, r: -2, terrain: 'pasture', token: 3 },
+  { q: 0, r: -2, terrain: 'sea', token: null },
+  { q: 1, r: -2, terrain: 'fog', token: null },
+  { q: 2, r: -2, terrain: 'fog', token: null },
+  // Row r = -1
+  { q: -3, r: -1, terrain: 'hills', token: 4 },
+  { q: -2, r: -1, terrain: 'mountains', token: 8 },
+  { q: -1, r: -1, terrain: 'sea', token: null },
+  { q: 0, r: -1, terrain: 'sea', token: null },
+  { q: 1, r: -1, terrain: 'fog', token: null },
+  { q: 2, r: -1, terrain: 'fog', token: null },
+  // Row r = 0
+  { q: -3, r: 0, terrain: 'pasture', token: 10 },
+  { q: -2, r: 0, terrain: 'desert', token: null },
+  { q: -1, r: 0, terrain: 'fields', token: 5 },
+  { q: 0, r: 0, terrain: 'sea', token: null },
+  { q: 1, r: 0, terrain: 'fog', token: null },
+  { q: 2, r: 0, terrain: 'fog', token: null },
+  { q: 3, r: 0, terrain: 'fog', token: null },
+  // Row r = 1
+  { q: -3, r: 1, terrain: 'forest', token: 9 },
+  { q: -2, r: 1, terrain: 'fields', token: 11 },
+  { q: -1, r: 1, terrain: 'sea', token: null },
+  { q: 0, r: 1, terrain: 'sea', token: null },
+  { q: 1, r: 1, terrain: 'fog', token: null },
+  { q: 2, r: 1, terrain: 'fog', token: null },
+  // Row r = 2
+  { q: -2, r: 2, terrain: 'hills', token: 2 },
+  { q: -1, r: 2, terrain: 'mountains', token: 5 },
+  { q: 0, r: 2, terrain: 'sea', token: null },
+  { q: 1, r: 2, terrain: 'fog', token: null },
+  { q: 2, r: 2, terrain: 'fog', token: null }
+];
+
+export const WORLD_MAP_HEXES: { q: number; r: number; terrain: TerrainType; token: number | null }[] = [
+  // Row -3: North America & Eurasia North
+  { q: -3, r: -3, terrain: 'mountains', token: 8 },
+  { q: -2, r: -3, terrain: 'forest', token: 4 },
+  { q: 0, r: -3, terrain: 'sea', token: null },
+  { q: 1, r: -3, terrain: 'forest', token: 5 },
+  { q: 2, r: -3, terrain: 'mountains', token: 9 },
+  { q: 3, r: -3, terrain: 'pasture', token: 10 },
+  // Row -2: North America & Europe/Asia
+  { q: -3, r: -2, terrain: 'hills', token: 6 },
+  { q: -2, r: -2, terrain: 'gold_field', token: 9 },
+  { q: -1, r: -2, terrain: 'sea', token: null },
+  { q: 0, r: -2, terrain: 'hills', token: 3 },
+  { q: 1, r: -2, terrain: 'fields', token: 6 },
+  { q: 2, r: -2, terrain: 'forest', token: 8 },
+  { q: 3, r: -2, terrain: 'fields', token: 11 },
+  // Row -1: Central America, Atlantic, Med/Mid-East, Asia
+  { q: -3, r: -1, terrain: 'pasture', token: 5 },
+  { q: -2, r: -1, terrain: 'sea', token: null },
+  { q: -1, r: -1, terrain: 'sea', token: null },
+  { q: 0, r: -1, terrain: 'pasture', token: 2 },
+  { q: 1, r: -1, terrain: 'desert', token: null },
+  { q: 2, r: -1, terrain: 'mountains', token: 4 },
+  { q: 3, r: -1, terrain: 'gold_field', token: 5 },
+  // Row 0: South America, Atlantic, Africa, Indian Ocean, SE Asia
+  { q: -3, r: 0, terrain: 'forest', token: 3 },
+  { q: -2, r: 0, terrain: 'gold_field', token: 10 },
+  { q: -1, r: 0, terrain: 'sea', token: null },
+  { q: 0, r: 0, terrain: 'desert', token: null },
+  { q: 1, r: 0, terrain: 'hills', token: 8 },
+  { q: 2, r: 0, terrain: 'sea', token: null },
+  { q: 3, r: 0, terrain: 'forest', token: 6 },
+  // Row 1: South America South, South Atlantic, Africa South, Australia
+  { q: -2, r: 1, terrain: 'fields', token: 8 },
+  { q: -1, r: 1, terrain: 'sea', token: null },
+  { q: 0, r: 1, terrain: 'pasture', token: 11 },
+  { q: 1, r: 1, terrain: 'sea', token: null },
+  { q: 2, r: 1, terrain: 'gold_field', token: 8 },
+  { q: 3, r: 1, terrain: 'pasture', token: 4 },
+  // Row 2: Southern Oceans & Australia
+  { q: -1, r: 2, terrain: 'sea', token: null },
+  { q: 0, r: 2, terrain: 'sea', token: null },
+  { q: 1, r: 2, terrain: 'sea', token: null },
+  { q: 2, r: 2, terrain: 'hills', token: 10 },
+  { q: 3, r: 2, terrain: 'desert', token: null }
+];
+
 export function generateStandardBoard(
   prngState: number,
   layoutMode: GameRulesConfig['boardLayout'] = 'random_balanced',
   scenario: GameRulesConfig['boardScenario'] = 'classic'
 ): { board: BoardState; nextPrngState: number } {
   let state = prngState;
+  const isCustomScenario =
+    scenario === 'seafarers_shores' ||
+    scenario === 'seafarers_islands' ||
+    scenario === 'seafarers_fog' ||
+    scenario === 'world_map';
   const isExpansion = scenario === 'expansion';
-  const hexCoords = isExpansion ? EXPANSION_HEX_COORDS : STANDARD_HEX_COORDS;
-  const terrainDistribution = isExpansion ? EXPANSION_TERRAIN_DISTRIBUTION : STANDARD_TERRAIN_DISTRIBUTION;
+
+  let hexCoords: AxialCoord[];
+  let terrainDistribution: TerrainType[];
+  let customTerrains: TerrainType[] | null = null;
+  let customTokens: (number | null)[] | null = null;
+
+  if (scenario === 'seafarers_shores') {
+    hexCoords = SEAFARERS_SHORES_HEXES.map((h) => ({ q: h.q, r: h.r }));
+    customTerrains = SEAFARERS_SHORES_HEXES.map((h) => h.terrain);
+    customTokens = SEAFARERS_SHORES_HEXES.map((h) => h.token);
+    terrainDistribution = customTerrains;
+  } else if (scenario === 'seafarers_islands') {
+    hexCoords = SEAFARERS_ISLANDS_HEXES.map((h) => ({ q: h.q, r: h.r }));
+    customTerrains = SEAFARERS_ISLANDS_HEXES.map((h) => h.terrain);
+    customTokens = SEAFARERS_ISLANDS_HEXES.map((h) => h.token);
+    terrainDistribution = customTerrains;
+  } else if (scenario === 'seafarers_fog') {
+    hexCoords = SEAFARERS_FOG_HEXES.map((h) => ({ q: h.q, r: h.r }));
+    customTerrains = SEAFARERS_FOG_HEXES.map((h) => h.terrain);
+    customTokens = SEAFARERS_FOG_HEXES.map((h) => h.token);
+    terrainDistribution = customTerrains;
+  } else if (scenario === 'world_map') {
+    hexCoords = WORLD_MAP_HEXES.map((h) => ({ q: h.q, r: h.r }));
+    customTerrains = WORLD_MAP_HEXES.map((h) => h.terrain);
+    customTokens = WORLD_MAP_HEXES.map((h) => h.token);
+    terrainDistribution = customTerrains;
+  } else if (isExpansion) {
+    hexCoords = EXPANSION_HEX_COORDS;
+    terrainDistribution = EXPANSION_TERRAIN_DISTRIBUTION;
+  } else {
+    hexCoords = STANDARD_HEX_COORDS;
+    terrainDistribution = STANDARD_TERRAIN_DISTRIBUTION;
+  }
+
   const hexCount = hexCoords.length;
 
   // Re-center the board around (0,0) up front, before anything below computes an angle
@@ -225,7 +425,9 @@ export function generateStandardBoard(
   //    terrains/tokens are placed in plain array order (already fully randomized by the
   //    shuffle above / token shuffle below — the order itself carries no meaning here).
   let placementOrder: number[];
-  if (isExpansion) {
+  if (isCustomScenario) {
+    placementOrder = hexCoords.map((_, idx) => idx);
+  } else if (isExpansion) {
     placementOrder = hexCoords.map((_, idx) => idx);
   } else {
     const cornerPick = nextPrngInt(state, 0, 5);
@@ -238,14 +440,25 @@ export function generateStandardBoard(
   const assignedTokens = new Array<number | null>(hexCount).fill(null);
   const assignedLetters = new Array<string | null>(hexCount).fill(null);
 
-  for (let step = 0; step < placementOrder.length; step++) {
-    const hexIdx = placementOrder[step]!;
-    terrains[hexIdx] = shuffledTerrains[step]!;
+  if (isCustomScenario && customTerrains && customTokens) {
+    for (let i = 0; i < hexCount; i++) {
+      terrains[i] = customTerrains[i]!;
+      assignedTokens[i] = customTokens[i] ?? null;
+    }
+  } else {
+    for (let step = 0; step < placementOrder.length; step++) {
+      const hexIdx = placementOrder[step]!;
+      terrains[hexIdx] = shuffledTerrains[step]!;
+    }
   }
 
   const nonDesertHexIndices = placementOrder.filter((idx) => terrains[idx] !== 'desert');
 
-  if (isExpansion) {
+  if (isCustomScenario) {
+
+    // Custom scenarios have their balanced token assignments pre-defined
+
+  } else if (isExpansion) {
     // The real 5-6 Player Expansion's 28 number tokens are pre-printed (lettered A-Y, Za,
     // Zb, Zc) and placed in that fixed alphabetical order along the same kind of
     // outer-ring-to-center spiral the classic board uses — which is precisely what gives the
@@ -510,6 +723,7 @@ export function generateStandardBoard(
       harbors,
       buildings: {},
       roads: {},
+      ships: {},
       robberHexId
     },
     nextPrngState: state

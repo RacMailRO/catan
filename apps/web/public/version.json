@@ -1,9 +1,14 @@
 {
-  "version": "v1.121",
-  "commitCount": 121,
-  "shortHash": "f15a97a",
-  "buildDate": "2026-10-27T11:11:28.663Z",
+  "version": "v1.122",
+  "commitCount": 122,
+  "shortHash": "a11a294",
+  "buildDate": "2026-10-27T11:52:46.146Z",
   "releaseNotes": [
+    {
+      "hash": "a11a294",
+      "date": "2026-10-27",
+      "message": "chore: bump version to v1.121"
+    },
     {
       "hash": "f15a97a",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "930f2a3",
       "date": "2026-10-26",
       "message": "fix(ui): enable smooth map panning during robber placement on 7, add discard minimize button, and shorten construction button labels for mobile"
-    },
-    {
-      "hash": "953a5b4",
-      "date": "2026-10-26",
-      "message": "chore: bump version to v1.71"
     }
   ]
 }
