@@ -57,19 +57,27 @@ export const STANDARD_HEX_COORDS: AxialCoord[] = [
 // STANDARD_HEX_COORDS there's no official fixed spiral/letter->value token mapping sourced
 // for this board (see generateStandardBoard's doc comment), so number tokens are placed via
 // a balanced shuffle instead of literally replaying the unknown official sequence.
+// Each row's q-range is chosen so that avg(q) + r/2 is the SAME constant (0.5) for every
+// row — that's what a hex row's true horizontal center is in pixel space (axialToPixel's
+// x = sqrt3*(q + r/2)), so picking q-ranges without checking this consistently is exactly
+// what produces a sheared/skewed silhouette instead of a clean hexagon (caught by visually
+// comparing a rendered game to the rulebook: the first version here had centers that
+// drifted per row instead of lining up). Board generation also re-centers the whole board
+// around (0,0) afterward (see generateStandardBoard), so the absolute offset (0.5 here)
+// doesn't matter — only that every row shares the same one.
 export const EXPANSION_HEX_COORDS: AxialCoord[] = [
   // Row r = -3 (3 hexes)
-  { q: -1, r: -3 }, { q: 0, r: -3 }, { q: 1, r: -3 },
+  { q: 1, r: -3 }, { q: 2, r: -3 }, { q: 3, r: -3 },
   // Row r = -2 (4 hexes)
-  { q: -2, r: -2 }, { q: -1, r: -2 }, { q: 0, r: -2 }, { q: 1, r: -2 },
+  { q: 0, r: -2 }, { q: 1, r: -2 }, { q: 2, r: -2 }, { q: 3, r: -2 },
   // Row r = -1 (5 hexes)
-  { q: -2, r: -1 }, { q: -1, r: -1 }, { q: 0, r: -1 }, { q: 1, r: -1 }, { q: 2, r: -1 },
+  { q: -1, r: -1 }, { q: 0, r: -1 }, { q: 1, r: -1 }, { q: 2, r: -1 }, { q: 3, r: -1 },
   // Row r = 0 (6 hexes)
-  { q: -3, r: 0 }, { q: -2, r: 0 }, { q: -1, r: 0 }, { q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 },
+  { q: -2, r: 0 }, { q: -1, r: 0 }, { q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }, { q: 3, r: 0 },
   // Row r = 1 (5 hexes)
-  { q: -3, r: 1 }, { q: -2, r: 1 }, { q: -1, r: 1 }, { q: 0, r: 1 }, { q: 1, r: 1 },
+  { q: -2, r: 1 }, { q: -1, r: 1 }, { q: 0, r: 1 }, { q: 1, r: 1 }, { q: 2, r: 1 },
   // Row r = 2 (4 hexes)
-  { q: -3, r: 2 }, { q: -2, r: 2 }, { q: -1, r: 2 }, { q: 0, r: 2 },
+  { q: -2, r: 2 }, { q: -1, r: 2 }, { q: 0, r: 2 }, { q: 1, r: 2 },
   // Row r = 3 (3 hexes)
   { q: -2, r: 3 }, { q: -1, r: 3 }, { q: 0, r: 3 }
 ];
