@@ -52,6 +52,7 @@ import {
   createOnlineLobby,
   fetchGameState,
   stepOnlineAi,
+  terminateOnlineGame,
   fetchLobby,
   fetchSpectatorGameState,
   joinOnlineLobbyByCode,
@@ -133,6 +134,74 @@ type GameModalType =
   | 'full_rules'
   | 'score_bank'
   | 'starting_order';
+
+function getExplicitTurnStatusDescription(
+  phase: string,
+  activePlayerName: string,
+  openOffer?: { status: string; fromPlayerId: string } | null,
+  locale: Locale = 'ro'
+): string {
+  if (locale === 'ro') {
+    switch (phase) {
+      case 'setup_settlement_1':
+        return 'așază prima așezare pe tablă';
+      case 'setup_road_1':
+        return 'așază primul drum pe tablă';
+      case 'setup_settlement_2':
+        return 'așază a doua așezare (resurse de start)';
+      case 'setup_road_2':
+        return 'așază al doilea drum pe tablă';
+      case 'turn_start':
+        return 'urmează să dea cu zarul';
+      case 'discard_resources':
+        return 'jaf hoț: jucătorii cu >7 cărți trebuie să decarteze';
+      case 'move_robber':
+        return 'mută hoțul pe un hexagon advers';
+      case 'steal_resource':
+        return 'fură o resursă de la un adversar adiacent';
+      case 'road_building_card':
+        return 'plasează 2 drumuri gratuite (carte Progres)';
+      case 'main_actions':
+        if (openOffer && openOffer.status === 'open') {
+          return 'negociază o ofertă comercială de schimb';
+        }
+        return 'faza de construcții, comerț & cărți';
+      case 'game_over':
+        return 'partidă încheiată';
+      default:
+        return phase;
+    }
+  }
+  switch (phase) {
+    case 'setup_settlement_1':
+      return 'placing first settlement';
+    case 'setup_road_1':
+      return 'placing first road';
+    case 'setup_settlement_2':
+      return 'placing second settlement (starting resources)';
+    case 'setup_road_2':
+      return 'placing second road';
+    case 'turn_start':
+      return 'ready to roll dice';
+    case 'discard_resources':
+      return 'robber: discard cards (>7)';
+    case 'move_robber':
+      return 'moving the robber';
+    case 'steal_resource':
+      return 'stealing a resource';
+    case 'road_building_card':
+      return 'placing 2 free roads';
+    case 'main_actions':
+      if (openOffer && openOffer.status === 'open') {
+        return 'negotiating a trade offer';
+      }
+      return 'building, trading & dev cards';
+    case 'game_over':
+      return 'game over';
+    default:
+      return phase;
+  }
+}
 
 export const App: React.FC = () => {
   const [locale, setLocale] = useState<Locale>('ro');
@@ -1656,10 +1725,15 @@ export const App: React.FC = () => {
               style={{ backgroundColor: activePlayerObj?.color, width: 10, height: 10, flexShrink: 0 }}
             />
             <span className="turn-label">
-              T{gameState.turn} ({activePlayerObj?.name}):
+              T{gameState.turn} — La rând: <strong>{activePlayerObj?.name}</strong>:
             </span>
-            <span className="phase-label">
-              {PHASE_LABELS[locale][gameState.phase]}
+            <span className="phase-label" style={{ fontWeight: 500 }}>
+              {getExplicitTurnStatusDescription(
+                gameState.phase,
+                activePlayerObj?.name ?? '',
+                gameState.activeTradeOffers?.find((o) => o.status === 'open'),
+                locale
+              )}
             </span>
             {Boolean(onlineSession?.gameId) && (
               <span
@@ -2455,7 +2529,32 @@ export const App: React.FC = () => {
                         </div>
                       )}
 
-                      <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', fontSize: '0.73rem', marginTop: '0.3rem', color: 'var(--text-muted)' }}>
+                      {/* Piece Counts: Settlements, Cities, Roads */}
+                      <div className="player-grid-pieces" style={{ display: 'flex', gap: 4, marginTop: '0.25rem', marginBottom: '0.2rem' }}>
+                        {(
+                          [
+                            ['settlements', '🏠', locale === 'ro' ? 'Așezări' : 'Settlements'],
+                            ['cities', '🏰', locale === 'ro' ? 'Orașe' : 'Cities'],
+                            ['roads', '🛣️', locale === 'ro' ? 'Drumuri' : 'Roads']
+                          ] as const
+                        ).map(([key, icon, label]) => {
+                          const total = INITIAL_PLAYER_PIECES[key];
+                          const used = total - p.remainingPieces[key];
+                          const exhausted = used >= total;
+                          return (
+                            <span
+                              key={key}
+                              className={`piece-count-pill ${exhausted ? 'exhausted' : ''}`}
+                              title={`${label}: ${used}/${total} construite`}
+                              style={{ fontSize: '0.72rem', padding: '1px 6px' }}
+                            >
+                              {icon} {used}/{total}
+                            </span>
+                          );
+                        })}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', fontSize: '0.73rem', color: 'var(--text-muted)' }}>
                         <span>🛣️ Drum: {p.longestRoadLength}</span>
                         <span>⚔️ Cavaleri: {p.knightsPlayed}</span>
                         {hasLongestRoad && (
@@ -2604,11 +2703,41 @@ export const App: React.FC = () => {
           <footer className="game-bottom-dock">
             {/* Header row: player name, card count, and mobile collapse toggle */}
             <div className="dock-title-bar">
-              <div className="dock-player-name">
-                <span>Cărțile lui</span> <strong>{(viewerPlayerObj ?? activePlayerObj)?.name}</strong>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 4 }}>
-                  ({totalResourceCount((viewerPlayerObj ?? activePlayerObj)?.resources ?? createEmptyResources())} resurse)
-                </span>
+              <div className="dock-player-name" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <div>
+                  <span>Cărțile lui</span> <strong>{(viewerPlayerObj ?? activePlayerObj)?.name}</strong>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 4 }}>
+                    ({totalResourceCount((viewerPlayerObj ?? activePlayerObj)?.resources ?? createEmptyResources())} resurse)
+                  </span>
+                </div>
+                {(viewerPlayerObj ?? activePlayerObj) && (() => {
+                  const pObj = (viewerPlayerObj ?? activePlayerObj)!;
+                  return (
+                    <div style={{ display: 'flex', gap: 4, marginLeft: 6 }}>
+                      {(
+                        [
+                          ['settlements', '🏠', locale === 'ro' ? 'Așezări' : 'Settlements'],
+                          ['cities', '🏰', locale === 'ro' ? 'Orașe' : 'Cities'],
+                          ['roads', '🛣️', locale === 'ro' ? 'Drumuri' : 'Roads']
+                        ] as const
+                      ).map(([key, icon, label]) => {
+                        const total = INITIAL_PLAYER_PIECES[key];
+                        const used = total - pObj.remainingPieces[key];
+                        const exhausted = used >= total;
+                        return (
+                          <span
+                            key={key}
+                            className={`piece-count-pill ${exhausted ? 'exhausted' : ''}`}
+                            title={`${label}: ${used}/${total} construite`}
+                            style={{ fontSize: '0.7rem', padding: '1px 5px' }}
+                          >
+                            {icon} {used}/{total}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
               <button
                 type="button"
@@ -4203,20 +4332,44 @@ export const App: React.FC = () => {
         </main>
       )}
 
-      {/* SPECTATOR MODE: read-only view of someone else's public online game, entered from the
-          lobby's "Partide Publice Active" list. No action buttons anywhere — every player's
-          hand (including what would be "your own") is redacted, since getPlayerView never
-          matches the '__spectator__' viewer id against a real player. */}
+      {/* SPECTATOR MODE: full-height layout with unclipped board and explicit live turn status */}
       {activeTab === 'spectate' && (
-        <main className="lobby-container">
-          <section className="panel" style={{ flex: '2 1 560px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-              <h2 style={{ margin: 0, border: 'none', padding: 0 }}>
-                👁️ {locale === 'ro' ? 'Mod Spectator' : 'Spectator Mode'}
-              </h2>
-              <button type="button" className="btn" onClick={handleStopSpectating}>
-                ✕ {locale === 'ro' ? 'Părăsește' : 'Leave'}
-              </button>
+        <main className="lobby-container" style={{ height: 'calc(100vh - 58px)', minHeight: 0, padding: '0.5rem 0.75rem' }}>
+          <section className="panel" style={{ flex: '2 1 0', display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem', flexWrap: 'wrap', gap: '0.5rem', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <h2 style={{ margin: 0, border: 'none', padding: 0 }}>
+                  👁️ {locale === 'ro' ? 'Mod Spectator' : 'Spectator Mode'}
+                </h2>
+                {spectateGameId && (
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                    ({spectateGameId})
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {spectateGameId && (
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    style={{ padding: '0.25rem 0.6rem', fontSize: '0.78rem' }}
+                    onClick={async () => {
+                      if (!window.confirm('Sigur dorești să oprești definitiv această partidă pe server?')) return;
+                      try {
+                        await terminateOnlineGame(spectateGameId);
+                        handleStopSpectating();
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : 'Eroare la oprirea partidei');
+                      }
+                    }}
+                  >
+                    ⏹️ {locale === 'ro' ? 'Oprește Partida' : 'Stop Game'}
+                  </button>
+                )}
+                <button type="button" className="btn" onClick={handleStopSpectating}>
+                  ✕ {locale === 'ro' ? 'Părăsește' : 'Leave'}
+                </button>
+              </div>
             </div>
 
             {spectateError && (
@@ -4231,18 +4384,38 @@ export const App: React.FC = () => {
               </div>
             ) : (
               <>
-                <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', marginBottom: '0.6rem', flexWrap: 'wrap', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                  <span>{locale === 'ro' ? 'Tura' : 'Turn'} {spectateView.turn}</span>
-                  <span>·</span>
-                  <span>{PHASE_LABELS[locale][spectateView.phase]}</span>
-                  {spectateView.lastDiceRoll && (
-                    <>
+                {(() => {
+                  const activeP = spectateView.players.find((p) => p.id === spectateView.activePlayerId);
+                  const openOffer = spectateView.activeTradeOffers?.find((o) => o.status === 'open');
+                  return (
+                    <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', marginBottom: '0.45rem', flexWrap: 'wrap', fontSize: '0.84rem', flexShrink: 0 }}>
+                      <span><strong>{locale === 'ro' ? 'Tura' : 'Turn'} {spectateView.turn}</strong></span>
                       <span>·</span>
-                      <span>🎲 {spectateView.lastDiceRoll.die1} + {spectateView.lastDiceRoll.die2} = {spectateView.lastDiceRoll.total}</span>
-                    </>
-                  )}
-                </div>
-                <div style={{ aspectRatio: '16 / 13', width: '100%' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span>{locale === 'ro' ? 'La rând:' : 'Turn:'}</span>
+                        {activeP && (
+                          <span
+                            className="color-dot"
+                            style={{ backgroundColor: activeP.color, width: 10, height: 10, display: 'inline-block' }}
+                          />
+                        )}
+                        <strong>{activeP?.name ?? spectateView.activePlayerId}</strong>
+                        <span style={{ color: 'var(--text-muted)' }}>
+                          ({getExplicitTurnStatusDescription(spectateView.phase, activeP?.name ?? '', openOffer, locale)})
+                        </span>
+                      </div>
+                      {spectateView.lastDiceRoll && (
+                        <>
+                          <span>·</span>
+                          <span style={{ color: 'var(--accent-gold)' }}>
+                            🎲 {spectateView.lastDiceRoll.die1} + {spectateView.lastDiceRoll.die2} = {spectateView.lastDiceRoll.total}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
+                <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', position: 'relative' }}>
                   <BoardSvg
                     board={spectateView.board}
                     playerColors={Object.fromEntries(spectateView.players.map((p) => [p.id, p.color]))}

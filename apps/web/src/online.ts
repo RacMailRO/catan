@@ -141,6 +141,13 @@ export async function startOnlineLobby(lobbyId: string): Promise<GameSyncPayload
   return data;
 }
 
+export async function terminateOnlineGame(gameId: string): Promise<{ success: boolean; status: string }> {
+  const res = await fetch(`/api/games/${gameId}/terminate`, { method: 'POST' });
+  const data = await parseJsonResponse(res);
+  if (!res.ok) throw new Error(data.error ?? 'Nu s-a putut opri partida.');
+  return data;
+}
+
 export async function stepOnlineAi(gameId: string, steps = 1, viewerId?: string): Promise<GameSyncPayload> {
   const res = await fetch(`/api/games/${gameId}/step-ai`, {
     method: 'POST',

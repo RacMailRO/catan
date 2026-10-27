@@ -187,17 +187,26 @@ const AXIAL_NEIGHBOR_DELTAS: Array<[number, number]> = [
 ];
 
 function generateOuterSeaRing(board: BoardState): OuterSeaHex[] {
-  const landKeys = new Set(Object.values(board.hexes).map((h) => `${h.q}_${h.r}`));
+  const hexList = Object.values(board.hexes);
+  if (hexList.length === 0) return [];
+  const sampleHex = hexList[0]!;
+  const rawSample = axialToPixel(sampleHex.q, sampleHex.r, HEX_RADIUS);
+  const centerOffsetX = rawSample.x - sampleHex.x;
+  const centerOffsetY = rawSample.y - sampleHex.y;
+
+  const landKeys = new Set(hexList.map((h) => `${h.q}_${h.r}`));
   const seaKeys = new Set<string>();
   const ring: OuterSeaHex[] = [];
-  for (const hex of Object.values(board.hexes)) {
+  for (const hex of hexList) {
     for (const [dq, dr] of AXIAL_NEIGHBOR_DELTAS) {
       const nq = hex.q + dq;
       const nr = hex.r + dr;
       const key = `${nq}_${nr}`;
       if (landKeys.has(key) || seaKeys.has(key)) continue;
       seaKeys.add(key);
-      const { x, y } = axialToPixel(nq, nr, HEX_RADIUS);
+      const raw = axialToPixel(nq, nr, HEX_RADIUS);
+      const x = Number((raw.x - centerOffsetX).toFixed(3));
+      const y = Number((raw.y - centerOffsetY).toFixed(3));
       ring.push({ id: `sea_${nq}_${nr}`, x, y, q: nq, r: nr });
     }
   }

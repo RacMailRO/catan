@@ -1,9 +1,49 @@
 {
-  "version": "v1.110",
-  "commitCount": 110,
-  "shortHash": "b516c2b",
-  "buildDate": "2026-10-26T23:22:56.422Z",
+  "version": "v1.118",
+  "commitCount": 118,
+  "shortHash": "e7a4179",
+  "buildDate": "2026-10-27T11:03:59.822Z",
   "releaseNotes": [
+    {
+      "hash": "e7a4179",
+      "date": "2026-10-27",
+      "message": "fix(board,web): harbor placement centering bug, dev-mode false update banner, gold->white color"
+    },
+    {
+      "hash": "3c2c064",
+      "date": "2026-10-27",
+      "message": "fix(board): correct a shear bug in the expansion board's hex coordinates"
+    },
+    {
+      "hash": "568c0fd",
+      "date": "2026-10-27",
+      "message": "fix(board): correct the 5-6 Player Expansion's hex shape to match the real board"
+    },
+    {
+      "hash": "640f37f",
+      "date": "2026-10-27",
+      "message": "feat(web): update-available banner, revert board-layout choice, balance expansion tokens, real special-card art"
+    },
+    {
+      "hash": "74fd552",
+      "date": "2026-10-27",
+      "message": "docs(deploy): rewrite DEPLOY.md for the actual FTP-only workflow"
+    },
+    {
+      "hash": "b102ad3",
+      "date": "2026-10-27",
+      "message": "feat(board): add the 5-6 Player Expansion board scenario"
+    },
+    {
+      "hash": "c3b77b1",
+      "date": "2026-10-27",
+      "message": "feat(board): wire up a real second map-generation scenario (Aleatoriu Pur)"
+    },
+    {
+      "hash": "bf68c4e",
+      "date": "2026-10-27",
+      "message": "chore: bump version to v1.110"
+    },
     {
       "hash": "b516c2b",
       "date": "2026-10-27",
@@ -213,46 +253,6 @@
       "hash": "61d0e4d",
       "date": "2026-10-26",
       "message": "chore: bump version to v1.68"
-    },
-    {
-      "hash": "51957f4",
-      "date": "2026-10-26",
-      "message": "merge: feat/reveal-dev-card-and-victory-breakdown into main"
-    },
-    {
-      "hash": "382c3d2",
-      "date": "2026-10-26",
-      "message": "feat(ui): reveal drawn dev card in toast/journal and show victory points breakdown in game over modal"
-    },
-    {
-      "hash": "fd11b98",
-      "date": "2026-10-26",
-      "message": "chore: bump version to v1.65"
-    },
-    {
-      "hash": "3f4cfe5",
-      "date": "2026-10-26",
-      "message": "merge: fix/allow-cancel-rejected-trade into main"
-    },
-    {
-      "hash": "e1789bc",
-      "date": "2026-10-26",
-      "message": "fix(core): allow canceling and closing trade offers that have been rejected by all players"
-    },
-    {
-      "hash": "5dd1f8c",
-      "date": "2026-10-26",
-      "message": "chore: update version to v1.62"
-    },
-    {
-      "hash": "518d840",
-      "date": "2026-10-26",
-      "message": "merge: fix/dismiss-trade-modal-and-reject-counteroffer into main"
-    },
-    {
-      "hash": "8638edc",
-      "date": "2026-10-26",
-      "message": "fix(web): add explicit close button, backdrop dismissal, immediate local state cleanup, and 409 retry for trade offers"
     }
   ]
 }

@@ -565,7 +565,14 @@ export function createCatanServer(options?: {
 
       // List lobbies
       if (req.method === 'GET' && pathname === '/api/lobbies') {
-        const lobbies = storage.listLobbies().filter((l) => !l.isPrivate);
+        const now = Date.now();
+        const maxAgeMs = 24 * 3600 * 1000;
+        const lobbies = storage.listLobbies().filter((l) => {
+          if (l.isPrivate) return false;
+          if (l.status === 'finished') return false;
+          if (l.createdAtMs && now - l.createdAtMs > maxAgeMs) return false;
+          return true;
+        });
         sendJson(res, 200, { lobbies });
         return;
       }
@@ -1091,6 +1098,33 @@ export function createCatanServer(options?: {
           recentEvents: runtime.events.slice(-30),
           aiDecisions: runtime.aiDecisions.slice(-20)
         });
+        return;
+      }
+
+      // Terminate / Stop an in-progress game
+      const terminateMatch = pathname.match(/^\/api\/games\/([^/]+)\/terminate$/);
+      if (req.method === 'POST' && terminateMatch) {
+        const gameId = terminateMatch[1]!;
+        const runtime = loadOrGetGameRuntime(gameId);
+        if (!runtime) {
+          sendJson(res, 404, { error: 'Game not found' });
+          return;
+        }
+
+        runtime.state.phase = 'game_over';
+        persistRuntime(runtime);
+
+        if (runtime.lobbyId) {
+          const lobby = storage.getLobby(runtime.lobbyId);
+          if (lobby) {
+            lobby.status = 'finished';
+            storage.saveLobby(lobby);
+          }
+        }
+
+        activeGames.delete(gameId);
+        broadcastGameSync(runtime);
+        sendJson(res, 200, { success: true, gameId, status: 'finished' });
         return;
       }
 
