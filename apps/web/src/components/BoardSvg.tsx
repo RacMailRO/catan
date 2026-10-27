@@ -449,40 +449,23 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
     return map;
   }, [board?.harbors, board?.hexes, board?.vertices, outerSeaRing]);
 
-  // The true island outline, walked from the coastal edges (the same ones board.ts uses to
-  // place harbors) rather than drawn as 19 separate per-hex halos. Those separate halos
-  // overlapped inconsistently at corners where hexes meet, leaving small gaps/overlaps in the
-  // sandy border; one continuous loop with round joins reads as a single clean coastline.
-  const coastlineLoopPoints = useMemo(() => {
-    const coastalEdges = Object.values(board.edges).filter((e) => e.adjacentHexIds.length === 1);
-    if (coastalEdges.length === 0) return '';
+  // The true island shoreline along the boundary between land and water.
+  // Filters exclusively for edges that touch at least one land hex and face water.
+  // This guarantees the coastline hugs the islands properly and never veers out into the ocean around sea hexes.
+  const landCoastalEdges = useMemo(() => {
+    return Object.values(board.edges || {}).filter((e) => {
+      const hasLand = e.adjacentHexIds.some((hId) => {
+        const t = board.hexes[hId]?.terrain;
+        return t && t !== 'sea' && t !== 'fog';
+      });
+      if (!hasLand) return false;
 
-    const edgesByVertex = new Map<string, typeof coastalEdges>();
-    for (const e of coastalEdges) {
-      for (const vId of [e.v1, e.v2]) {
-        const list = edgesByVertex.get(vId);
-        if (list) list.push(e);
-        else edgesByVertex.set(vId, [e]);
-      }
-    }
-
-    const visited = new Set<string>();
-    const firstEdge = coastalEdges[0]!;
-    const path: string[] = [];
-    let currentVertexId = firstEdge.v1;
-    let currentEdge: (typeof coastalEdges)[number] | undefined = firstEdge;
-
-    while (currentEdge && !visited.has(currentEdge.id)) {
-      visited.add(currentEdge.id);
-      const v = board.vertices[currentVertexId];
-      if (v) path.push(`${v.x},${v.y}`);
-      const nextVertexId: string = currentEdge.v1 === currentVertexId ? currentEdge.v2 : currentEdge.v1;
-      currentVertexId = nextVertexId;
-      currentEdge = (edgesByVertex.get(nextVertexId) ?? []).find((e) => !visited.has(e.id));
-    }
-
-    return path.join(' ');
-  }, [board.edges, board.vertices]);
+      const facesWater =
+        e.adjacentHexIds.length === 1 ||
+        e.adjacentHexIds.some((hId) => board.hexes[hId]?.terrain === 'sea');
+      return facesWater;
+    });
+  }, [board.edges, board.hexes]);
 
   // Native non-passive listeners for desktop mouse wheel AND mobile pinch-to-zoom + touch drag
   useEffect(() => {
@@ -774,20 +757,20 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
               />
             ))}
 
-          {/* 0C. One continuous coastline stroke along the island's true outer boundary
-              (walked from its coastal edges), drawn over the per-hex fill above so the
-              border reads as a single smooth shoreline instead of 19 separate hex outlines
-              whose corners don't quite line up. */}
-          {coastlineLoopPoints && (
-            <polygon
-              points={coastlineLoopPoints}
-              fill="none"
+          {/* 0C. Shoreline stroke along all land-water boundaries (strictly hugs the land, never encompasses sea hexes or ports) */}
+          {landCoastalEdges.map((e) => (
+            <line
+              key={`coast-${e.id}`}
+              x1={e.x1}
+              y1={e.y1}
+              x2={e.x2}
+              y2={e.y2}
               stroke="#d97706"
-              strokeWidth={6}
-              strokeLinejoin="round"
+              strokeWidth={5}
+              strokeLinecap="round"
               style={{ pointerEvents: 'none' }}
             />
-          )}
+          ))}
 
           {/* 1. Render 19 Island Hex Tiles using the per-terrain tile art & /numbers.png */}
           {Object.values(board.hexes).map((hex, hexIdx) => {

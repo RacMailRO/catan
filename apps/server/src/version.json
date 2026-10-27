@@ -1,9 +1,14 @@
 {
-  "version": "v1.131",
-  "commitCount": 131,
-  "shortHash": "7b85d10",
-  "buildDate": "2026-10-27T13:37:32.953Z",
+  "version": "v1.132",
+  "commitCount": 132,
+  "shortHash": "c6ae734",
+  "buildDate": "2026-10-27T13:41:35.451Z",
   "releaseNotes": [
+    {
+      "hash": "c6ae734",
+      "date": "2026-10-27",
+      "message": "feat(sandbox): enforce exact Catan placement rules and align boat angles with edge directions"
+    },
     {
       "hash": "7b85d10",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "41ce2d6",
       "date": "2026-10-26",
       "message": "chore(release): v1.82 metadata"
-    },
-    {
-      "hash": "93068b9",
-      "date": "2026-10-26",
-      "message": "chore(release): bump version to v1.81"
     }
   ]
 }
