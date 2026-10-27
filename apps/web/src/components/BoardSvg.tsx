@@ -203,7 +203,7 @@ const AXIAL_NEIGHBOR_DELTAS: Array<[number, number]> = [
 ];
 
 function generateOuterSeaRing(board: BoardState): OuterSeaHex[] {
-  const hexList = Object.values(board.hexes);
+  const hexList = Object.values(board.hexes || {});
   // Complete boards (like authentic 97-hex Seafarers Fog Island) already include their own full perimeter sea frame
   if (hexList.length === 0 || hexList.length >= 70) return [];
   const sampleHex = hexList[0]!;
@@ -238,22 +238,6 @@ const SEA_TILE_ROTATIONS = [0, 60, 120, 180, 240, 300];
 function seaTileRotationDeg(q: number, r: number): number {
   const hash = Math.abs((q * 374761393 + r * 668265263) ^ (q * 2654435761));
   return SEA_TILE_ROTATIONS[hash % SEA_TILE_ROTATIONS.length]!;
-}
-
-// Angle from this outer sea hex to the midpoint of its harbor's two coastal vertices —
-// the exact direction the dock needs to face. (The island center is NOT a safe stand-in:
-// a harbor's coastal edge is often tangentially offset from the pure hex-to-center
-// radial, which visibly misaimed the dock art.)
-function harborFacingAngleDeg(
-  sea: OuterSeaHex,
-  harbor: BoardState['harbors'][number],
-  vertices: BoardState['vertices']
-): number {
-  const v1 = vertices[harbor.vertexIds[0]];
-  const v2 = vertices[harbor.vertexIds[1]];
-  const tx = v1 && v2 ? (v1.x + v2.x) / 2 : sea.x;
-  const ty = v1 && v2 ? (v1.y + v2.y) / 2 : sea.y;
-  return (Math.atan2(ty - sea.y, tx - sea.x) * 180) / Math.PI;
 }
 
 export const BoardSvg: React.FC<BoardSvgProps> = ({
@@ -372,23 +356,98 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
       .join(' ');
   }, [outerSeaRing, board.hexes]);
 
-  // Each harbor sits on whichever outer sea hex is nearest to its dock position.
-  const harborBySeaHexId = useMemo(() => {
-    const map = new Map<string, (typeof board.harbors)[number]>();
+  // Unified Harbor Assignment & Orientation:
+  // Maps each harbor to its EXACT adjacent sea hex (whether in board.hexes or outerSeaRing).
+  // Computes the rotation so that the dock artwork points directly toward the coastal edge midpoint.
+  const harborAssignmentByHexId = useMemo(() => {
+    const map = new Map<string, { harbor: (typeof board.harbors)[number]; rotationDeg: number }>();
+    if (!board?.harbors || board.harbors.length === 0) return map;
+
+    const hexList = Object.values(board.hexes || {});
+
     for (const harbor of board.harbors) {
-      let nearest: OuterSeaHex | undefined;
-      let nearestDist = Infinity;
-      for (const sea of outerSeaRing) {
-        const dist = Math.hypot(sea.x - harbor.x, sea.y - harbor.y);
-        if (dist < nearestDist) {
-          nearestDist = dist;
-          nearest = sea;
+      const landHex = board.hexes?.[harbor.hexId];
+      const v1 = board.vertices?.[harbor.vertexIds[0]];
+      const v2 = board.vertices?.[harbor.vertexIds[1]];
+      if (!v1 || !v2 || !landHex) continue;
+
+      // Midpoint of coastal edge
+      const mx = (v1.x + v2.x) / 2;
+      const my = (v1.y + v2.y) / 2;
+
+      // Direction vector from land hex center to coastal edge midpoint
+      const dx = mx - landHex.x;
+      const dy = my - landHex.y;
+
+      // Center of the adjacent sea hex across that edge
+      const expectedSeaX = landHex.x + 2 * dx;
+      const expectedSeaY = landHex.y + 2 * dy;
+
+      let assignedHexId: string | null = null;
+      let seaCenterX = expectedSeaX;
+      let seaCenterY = expectedSeaY;
+
+      // 1. Check if the adjacent sea hex is in board.hexes (e.g. Seafarers internal waters)
+      const boardSeaHex = hexList.find(
+        (h) => h.terrain === 'sea' && Math.hypot(h.x - expectedSeaX, h.y - expectedSeaY) < 25
+      );
+
+      if (boardSeaHex) {
+        assignedHexId = boardSeaHex.id;
+        seaCenterX = boardSeaHex.x;
+        seaCenterY = boardSeaHex.y;
+      } else {
+        // 2. Check if the adjacent sea hex is in outerSeaRing (e.g. Classic / perimeter coast)
+        const ringSeaHex = outerSeaRing.find(
+          (s) => Math.hypot(s.x - expectedSeaX, s.y - expectedSeaY) < 25
+        );
+        if (ringSeaHex) {
+          assignedHexId = ringSeaHex.id;
+          seaCenterX = ringSeaHex.x;
+          seaCenterY = ringSeaHex.y;
+        } else {
+          // Fallback: nearest sea hex in outerSeaRing or board.hexes
+          let bestDist = Infinity;
+          for (const s of outerSeaRing) {
+            const d = Math.hypot(s.x - expectedSeaX, s.y - expectedSeaY);
+            if (d < bestDist) {
+              bestDist = d;
+              assignedHexId = s.id;
+              seaCenterX = s.x;
+              seaCenterY = s.y;
+            }
+          }
+          if (!assignedHexId) {
+            for (const h of hexList) {
+              if (h.terrain === 'sea') {
+                const d = Math.hypot(h.x - expectedSeaX, h.y - expectedSeaY);
+                if (d < bestDist) {
+                  bestDist = d;
+                  assignedHexId = h.id;
+                  seaCenterX = h.x;
+                  seaCenterY = h.y;
+                }
+              }
+            }
+          }
         }
       }
-      if (nearest) map.set(nearest.id, harbor);
+
+      if (assignedHexId) {
+        // Angle from sea hex center to coastal edge midpoint
+        const angleRad = Math.atan2(my - seaCenterY, mx - seaCenterX);
+        const angleDeg = (angleRad * 180) / Math.PI;
+        // Snap to nearest 60° multiple to ensure perfect hex alignment
+        const snappedAngleDeg = Math.round(angleDeg / 60) * 60;
+        // Tile art dock is on South-East edge (60°), so rotation is snappedAngleDeg - 60
+        const rotationDeg = snappedAngleDeg - 60;
+
+        map.set(assignedHexId, { harbor, rotationDeg });
+      }
     }
+
     return map;
-  }, [board.harbors, outerSeaRing]);
+  }, [board?.harbors, board?.hexes, board?.vertices, outerSeaRing]);
 
   // The true island outline, walked from the coastal edges (the same ones board.ts uses to
   // place harbors) rather than drawn as 19 separate per-hex halos. Those separate halos
@@ -662,10 +721,11 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
               /porturi-3.jpg), rotated to face the island; the rest get the plain open-sea
               tile cropped from /porturi-3.jpg, for a consistent look across the sea ring. */}
           {outerSeaRing.map((sea) => {
-            const harbor = harborBySeaHexId.get(sea.id);
+            const assignment = harborAssignmentByHexId.get(sea.id);
+            const harbor = assignment?.harbor;
             const href = harbor ? PORT_HARBOR_IMAGE[harbor.type] : SEA_TILE_IMAGE;
-            const rotationDeg = harbor
-              ? harborFacingAngleDeg(sea, harbor, board.vertices) - PORT_ART_DEFAULT_ANGLE_DEG
+            const rotationDeg = assignment
+              ? assignment.rotationDeg
               : seaTileRotationDeg(sea.q, sea.r);
             // A rotated image must be oversized (a square at least as wide as the hex is
             // tall) so its corners still cover the hex's own corners at every angle —
@@ -756,16 +816,48 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 />
 
                 {/* Clipped Terrain Artwork */}
-                <g clipPath={`url(#clip-hex-${hex.id})`} style={{ pointerEvents: 'none' }}>
-                  <image
-                    href={terrainHref}
-                    x={hex.x - hexCellW / 2}
-                    y={hex.y - hexCellH / 2}
-                    width={hexCellW}
-                    height={hexCellH}
-                    preserveAspectRatio="none"
-                  />
-                </g>
+                {(() => {
+                  if (hex.terrain === 'sea') {
+                    const assignment = harborAssignmentByHexId.get(hex.id);
+                    const isHarbor = Boolean(assignment);
+                    const href = isHarbor ? PORT_HARBOR_IMAGE[assignment!.harbor.type] : terrainHref;
+                    const rotationDeg = isHarbor
+                      ? assignment!.rotationDeg
+                      : seaTileRotationDeg(hex.q, hex.r);
+                    const imgSize = hexCellH * 1.1;
+
+                    return (
+                      <g
+                        clipPath={`url(#clip-hex-${hex.id})`}
+                        transform={`rotate(${rotationDeg}, ${hex.x}, ${hex.y})`}
+                        style={{ pointerEvents: 'none' }}
+                      >
+                        <image
+                          href={href}
+                          x={hex.x - imgSize / 2}
+                          y={hex.y - imgSize / 2}
+                          width={imgSize}
+                          height={imgSize}
+                          preserveAspectRatio="none"
+                          filter={isHarbor ? undefined : 'url(#seaTileColorMatch)'}
+                        />
+                      </g>
+                    );
+                  }
+
+                  return (
+                    <g clipPath={`url(#clip-hex-${hex.id})`} style={{ pointerEvents: 'none' }}>
+                      <image
+                        href={terrainHref}
+                        x={hex.x - hexCellW / 2}
+                        y={hex.y - hexCellH / 2}
+                        width={hexCellW}
+                        height={hexCellH}
+                        preserveAspectRatio="none"
+                      />
+                    </g>
+                  );
+                })()}
 
                 {/* Hexagon Border (or glowing blue if selectable for Robber) */}
                 <polygon
@@ -1168,19 +1260,6 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
           })}
         </g>
 
-        {/* Outer Frame Border (Seafarers deep blue ocean frame) */}
-        {outerHexMaskPoints && (
-          <polygon
-            transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}
-            points={outerHexMaskPoints}
-            fill="none"
-            stroke="#0369a1"
-            strokeWidth={12}
-            strokeLinejoin="round"
-            strokeOpacity={0.85}
-            style={{ pointerEvents: 'none' }}
-          />
-        )}
       </svg>
     </div>
   );

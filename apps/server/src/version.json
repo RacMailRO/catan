@@ -1,9 +1,14 @@
 {
-  "version": "v1.128",
-  "commitCount": 128,
-  "shortHash": "42111ba",
-  "buildDate": "2026-10-27T13:03:18.678Z",
+  "version": "v1.129",
+  "commitCount": 129,
+  "shortHash": "9997d50",
+  "buildDate": "2026-10-27T13:22:32.832Z",
   "releaseNotes": [
+    {
+      "hash": "9997d50",
+      "date": "2026-10-27",
+      "message": "fix(sandbox): guard board properties and fix generateStandardBoard state unwrapping"
+    },
     {
       "hash": "42111ba",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "9621ace",
       "date": "2026-10-26",
       "message": "feat: AI trading, header lobby link, guest player rename, and playerOrder alignment"
-    },
-    {
-      "hash": "11da121",
-      "date": "2026-10-26",
-      "message": "chore(release): v1.78 metadata"
     }
   ]
 }
