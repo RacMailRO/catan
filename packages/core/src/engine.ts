@@ -278,6 +278,11 @@ export function isEdgeLegalForPlayerShip(
   if (!edge) return false;
   if (board.roads[edgeId] || board.ships?.[edgeId]) return false;
 
+  // In Catan Seafarers: Pirate blocks building ships on all edges bordering the pirate's hex
+  if (board.pirateHexId && edge.adjacentHexIds.includes(board.pirateHexId)) {
+    return false;
+  }
+
   // Must touch at least one water/sea/fog hex, or be a coastal border edge (adjacentHexIds.length === 1)
   const isWaterEdge =
     edge.adjacentHexIds.length === 1 ||
@@ -534,14 +539,30 @@ export function getEligibleRobberTargetsOnHex(
   hexId: string,
   actingPlayerId: string
 ): string[] {
+  const hex = state.board.hexes[hexId];
   const targets = new Set<string>();
-  for (const v of Object.values(state.board.vertices)) {
-    if (!v.adjacentHexIds.includes(hexId)) continue;
-    const b = state.board.buildings[v.id];
-    if (!b || b.ownerId === actingPlayerId) continue;
-    const targetPlayer = getPlayerById(state, b.ownerId);
-    if (targetPlayer && totalResourceCount(targetPlayer.resources) > 0) {
-      targets.add(b.ownerId);
+
+  if (hex?.terrain === 'sea') {
+    // Pirate on sea hex: steals from players who have a ship on any edge bordering this sea hex
+    for (const e of Object.values(state.board.edges)) {
+      if (!e.adjacentHexIds.includes(hexId)) continue;
+      const ship = state.board.ships?.[e.id];
+      if (!ship || ship.ownerId === actingPlayerId) continue;
+      const targetPlayer = getPlayerById(state, ship.ownerId);
+      if (targetPlayer && totalResourceCount(targetPlayer.resources) > 0) {
+        targets.add(ship.ownerId);
+      }
+    }
+  } else {
+    // Robber on land hex: steals from players with a building on any vertex bordering this land hex
+    for (const v of Object.values(state.board.vertices)) {
+      if (!v.adjacentHexIds.includes(hexId)) continue;
+      const b = state.board.buildings[v.id];
+      if (!b || b.ownerId === actingPlayerId) continue;
+      const targetPlayer = getPlayerById(state, b.ownerId);
+      if (targetPlayer && totalResourceCount(targetPlayer.resources) > 0) {
+        targets.add(b.ownerId);
+      }
     }
   }
   return Array.from(targets);
@@ -626,7 +647,13 @@ export function getLegalActions(state: GameState, playerId: string): GameAction[
           : state.rules.robber7StealRule;
 
       for (const hexId of Object.keys(state.board.hexes)) {
-        if (hexId === state.board.robberHexId) continue;
+        const hex = state.board.hexes[hexId]!;
+        const isSea = hex.terrain === 'sea';
+        if (isSea) {
+          if (hexId === state.board.pirateHexId) continue;
+        } else {
+          if (hexId === state.board.robberHexId) continue;
+        }
         const targets = getEligibleRobberTargetsOnHex(state, hexId, playerId);
         if (stealRule === 'single' && targets.length > 0) {
           for (const tId of targets) {
@@ -995,16 +1022,19 @@ export function validateAction(
 
     case 'move_robber': {
       if (state.phase !== 'move_robber') {
-        return { valid: false, code: 'WRONG_PHASE', reason: 'Nu este faza de mutare a hoțului.' };
+        return { valid: false, code: 'WRONG_PHASE', reason: 'Nu este faza de mutare a hoțului/piratului.' };
       }
-      if (!state.board.hexes[action.hexId]) {
+      const targetHex = state.board.hexes[action.hexId];
+      if (!targetHex) {
         return { valid: false, code: 'INVALID_HEX', reason: 'Hexagon invalid.' };
       }
-      if (action.hexId === state.board.robberHexId) {
+      const isSea = targetHex.terrain === 'sea';
+      const currentPieceHexId = isSea ? state.board.pirateHexId : state.board.robberHexId;
+      if (action.hexId === currentPieceHexId) {
         return {
           valid: false,
-          code: 'SAME_ROBBER_HEX',
-          reason: 'Hoțul trebuie mutat pe un alt hexagon.'
+          code: isSea ? 'SAME_PIRATE_HEX' : 'SAME_ROBBER_HEX',
+          reason: isSea ? 'Piratul trebuie mutat pe un alt hexagon de mare.' : 'Hoțul trebuie mutat pe un alt hexagon de uscat.'
         };
       }
       const targets = getEligibleRobberTargetsOnHex(state, action.hexId, playerId);
@@ -1012,7 +1042,9 @@ export function validateAction(
         return {
           valid: false,
           code: 'INVALID_STEAL_TARGET',
-          reason: 'Jucătorul țintă nu are construcții adiacente sau nu are resurse.'
+          reason: isSea
+            ? 'Jucătorul țintă nu are corăbii adiacente sau nu are resurse.'
+            : 'Jucătorul țintă nu are construcții adiacente sau nu are resurse.'
         };
       }
       return { valid: true };
@@ -1145,11 +1177,14 @@ export function validateAction(
           reason: 'Nu poți juca o carte Cavaler în acest moment.'
         };
       }
-      if (!state.board.hexes[action.hexId] || action.hexId === state.board.robberHexId) {
+      const targetHex = state.board.hexes[action.hexId];
+      const isSea = targetHex?.terrain === 'sea';
+      const currentPieceHexId = isSea ? state.board.pirateHexId : state.board.robberHexId;
+      if (!targetHex || action.hexId === currentPieceHexId) {
         return {
           valid: false,
-          code: 'INVALID_ROBBER_HEX',
-          reason: 'Hoțul trebuie mutat pe un alt hexagon.'
+          code: isSea ? 'SAME_PIRATE_HEX' : 'INVALID_ROBBER_HEX',
+          reason: isSea ? 'Piratul trebuie mutat pe un alt hexagon de mare.' : 'Hoțul trebuie mutat pe un alt hexagon de uscat.'
         };
       }
       const targets = getEligibleRobberTargetsOnHex(state, action.hexId, playerId);
@@ -1440,8 +1475,16 @@ export function applyAction(
     }
 
     case 'move_robber': {
-      const prevHex = nextState.board.robberHexId;
-      nextState.board.robberHexId = action.hexId;
+      const targetHex = nextState.board.hexes[action.hexId];
+      const isSea = targetHex?.terrain === 'sea';
+      const prevHex = isSea ? nextState.board.pirateHexId : nextState.board.robberHexId;
+      if (isSea) {
+        nextState.board.pirateHexId = action.hexId;
+        details.movedPiece = 'pirate';
+      } else {
+        nextState.board.robberHexId = action.hexId;
+        details.movedPiece = 'robber';
+      }
       details.fromHexId = prevHex;
       details.toHexId = action.hexId;
 
@@ -1592,8 +1635,16 @@ export function applyAction(
       player.knightsPlayed += 1;
       updateLargestArmyState(nextState);
 
-      const prevHex = nextState.board.robberHexId;
-      nextState.board.robberHexId = action.hexId;
+      const targetHex = nextState.board.hexes[action.hexId];
+      const isSea = targetHex?.terrain === 'sea';
+      const prevHex = isSea ? nextState.board.pirateHexId : nextState.board.robberHexId;
+      if (isSea) {
+        nextState.board.pirateHexId = action.hexId;
+        details.movedPiece = 'pirate';
+      } else {
+        nextState.board.robberHexId = action.hexId;
+        details.movedPiece = 'robber';
+      }
       details.fromHexId = prevHex;
       details.toHexId = action.hexId;
 

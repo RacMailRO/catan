@@ -197,4 +197,78 @@ describe('Catan Seafarers (Navigatori) & Custom Map Scenarios', () => {
     const routeLen = calculatePlayerLongestRoad(game.board, 'p1');
     expect(routeLen).toBe(2);
   });
+
+  it('handles Pirate on sea hex and Robber on land hex according to official rules', () => {
+    const game = createGame({
+      gameId: 'test-pirate-robber',
+      seed: 'pirate-seed-1',
+      rules: createRulesConfig({ boardScenario: 'seafarers_shores' }),
+      participants: [
+        { id: 'p1', name: 'Alice', type: 'human' },
+        { id: 'p2', name: 'Bob', type: 'human' }
+      ]
+    });
+
+    // Both Robber and Pirate exist in Seafarers
+    expect(game.board.robberHexId).toBeDefined();
+    expect(game.board.hexes[game.board.robberHexId]!.terrain).not.toBe('sea');
+    expect(game.board.pirateHexId).toBeDefined();
+    expect(game.board.hexes[game.board.pirateHexId!]!.terrain).toBe('sea');
+
+    const initialRobber = game.board.robberHexId;
+    const initialPirate = game.board.pirateHexId!;
+
+    // Find another sea hex
+    const otherSeaHex = Object.values(game.board.hexes).find(
+      (h) => h.terrain === 'sea' && h.id !== initialPirate
+    )!;
+
+    // Give Bob a ship on an edge bordering otherSeaHex and 1 resource
+    const seaEdge = Object.values(game.board.edges).find((e) =>
+      e.adjacentHexIds.includes(otherSeaHex.id)
+    )!;
+    game.board.ships[seaEdge.id] = { ownerId: 'p2', edgeId: seaEdge.id };
+    game.players[1]!.resources.wood = 1;
+
+    // Moving to sea hex moves the PIRATE (not the robber!)
+    game.phase = 'move_robber';
+    game.activePlayerId = 'p1';
+
+    const valMovePirate = validateAction(game, 'p1', {
+      type: 'move_robber',
+      hexId: otherSeaHex.id,
+      targetPlayerId: 'p2'
+    });
+    expect(valMovePirate.valid).toBe(true);
+
+    const res1 = applyAction(game, 'p1', {
+      type: 'move_robber',
+      hexId: otherSeaHex.id,
+      targetPlayerId: 'p2'
+    });
+    // Pirate moved to otherSeaHex, Robber stayed on initial land hex
+    expect(res1.state.board.pirateHexId).toBe(otherSeaHex.id);
+    expect(res1.state.board.robberHexId).toBe(initialRobber);
+    // Pirate stole 1 resource from Bob (p2)
+    expect(res1.state.players[1]!.resources.wood).toBe(0);
+    expect(res1.state.players[0]!.resources.wood).toBe(1);
+
+    // Pirate on otherSeaHex BLOCKS ship construction on all adjacent edges
+    expect(isEdgeLegalForPlayerShip(res1.state.board, seaEdge.id, 'p1')).toBe(false);
+
+    // Now test moving ROBBER to a different land hex
+    const landHex = Object.values(game.board.hexes).find(
+      (h) => h.terrain !== 'sea' && h.terrain !== 'fog' && h.id !== initialRobber
+    )!;
+    res1.state.phase = 'move_robber';
+    res1.state.activePlayerId = 'p1';
+
+    const res2 = applyAction(res1.state, 'p1', {
+      type: 'move_robber',
+      hexId: landHex.id
+    });
+    // Robber moved to landHex, Pirate stayed on otherSeaHex
+    expect(res2.state.board.robberHexId).toBe(landHex.id);
+    expect(res2.state.board.pirateHexId).toBe(otherSeaHex.id);
+  });
 });

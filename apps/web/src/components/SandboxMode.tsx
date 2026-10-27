@@ -147,6 +147,18 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
             hSet.add(hexId);
           }
         }
+      } else if (selectedTool === 'pirate') {
+        for (const [hexId, hex] of Object.entries(board.hexes)) {
+          if (hexId !== board.pirateHexId && hex.terrain === 'sea') {
+            hSet.add(hexId);
+          }
+        }
+      } else if (selectedTool === 'pirate') {
+        for (const [hexId, hex] of Object.entries(board.hexes)) {
+          if (hexId !== board.pirateHexId && hex.terrain === 'sea') {
+            hSet.add(hexId);
+          }
+        }
       } else if (selectedTool === 'settlement' || selectedTool === 'city') {
         for (const [vId, v] of Object.entries(board.vertices || {})) {
           const touchesLand = v.adjacentHexIds.some((hId) => {
@@ -326,10 +338,18 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
     if (placementMode === 'rules' && !highlightedHexes.has(hexId)) {
       return;
     }
-    setBoard((prev) => ({
-      ...prev,
-      robberHexId: hexId
-    }));
+    const hex = board.hexes[hexId];
+    if (hex?.terrain === 'sea' || selectedTool === 'pirate') {
+      setBoard((prev) => ({
+        ...prev,
+        pirateHexId: hexId
+      }));
+    } else {
+      setBoard((prev) => ({
+        ...prev,
+        robberHexId: hexId
+      }));
+    }
   };
 
   // Live Statistics
@@ -464,9 +484,17 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
             type="button"
             className={`sandbox-btn ${selectedTool === 'robber' ? 'active' : ''}`}
             onClick={() => setSelectedTool('robber')}
-            title={isRo ? 'Mută hoțul pe un alt hex' : 'Move robber to another hex'}
+            title={isRo ? 'Mută hoțul pe un hex de uscat' : 'Move robber to land hex'}
           >
             🦹 {isRo ? 'Hoț' : 'Robber'}
+          </button>
+          <button
+            type="button"
+            className={`sandbox-btn ${selectedTool === 'pirate' ? 'active' : ''}`}
+            onClick={() => setSelectedTool('pirate')}
+            title={isRo ? 'Mută piratul pe un hex de mare' : 'Move pirate to sea hex'}
+          >
+            🏴‍☠️ {isRo ? 'Pirat' : 'Pirate'}
           </button>
           <button
             type="button"

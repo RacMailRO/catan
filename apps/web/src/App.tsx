@@ -76,7 +76,9 @@ import {
   DEV_CARD_ICONS,
   DEV_CARD_LABELS,
   DEV_CARD_RULE_TEXT,
-  FULL_RULES
+  FULL_RULES,
+  getScenarioRules,
+  SCENARIO_LABELS
 } from './i18n';
 
 type ActiveTab = 'lobby' | 'game' | 'replay' | 'benchmark' | 'spectate' | 'sandbox';
@@ -1862,6 +1864,17 @@ export const App: React.FC = () => {
                     🛠️ {locale === 'ro' ? 'Mediu de Test' : 'Sandbox Mode'}
                   </button>
                 )}
+                <div style={{ height: 1, background: 'var(--border-color)', margin: '4px 0' }} />
+                <button
+                  type="button"
+                  className="nav-btn"
+                  onClick={() => {
+                    setActiveModal('full_rules');
+                    setNavMenuOpen(false);
+                  }}
+                >
+                  📖 {locale === 'ro' ? 'Regulament' : 'Rulebook'}
+                </button>
               </div>
             </>
           )}
@@ -4869,34 +4882,45 @@ export const App: React.FC = () => {
 
       {/* Full rulebook — reachable from the lobby's card gallery button, for players who have
           never played Catan and want to learn the game before (or during) their first game. */}
-      {activeModal === 'full_rules' && (
-        <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
-          <div
-            className="modal-dialog"
-            style={{ maxWidth: 640, maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <h3>📖 {locale === 'ro' ? 'Regulile Jocului' : 'Full Rules'}</h3>
-              <button type="button" className="btn" onClick={() => setActiveModal('none')}>
-                ✕ {locale === 'ro' ? 'Închide' : 'Close'}
-              </button>
-            </div>
-            <div className="modal-body" style={{ overflowY: 'auto' }}>
-              {FULL_RULES[locale].map((section) => (
-                <div key={section.title} className="rules-section">
-                  <h4>{section.title}</h4>
-                  <ul>
-                    {section.body.map((line, idx) => (
-                      <li key={idx}>{line}</li>
-                    ))}
-                  </ul>
+      {activeModal === 'full_rules' && (() => {
+        const activeScenario = gameState?.rules?.boardScenario ?? rules.boardScenario ?? 'classic';
+        const scenarioLabel = SCENARIO_LABELS[activeScenario]?.[locale] ?? activeScenario;
+        const scenarioSections = getScenarioRules(activeScenario, locale);
+
+        return (
+          <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
+            <div
+              className="modal-dialog"
+              style={{ maxWidth: 680, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-header">
+                <div>
+                  <h3 style={{ margin: 0 }}>📖 {locale === 'ro' ? 'Regulament Oficial' : 'Official Rules'}</h3>
+                  <small style={{ color: 'var(--accent-gold)', fontSize: '0.8rem' }}>
+                    {scenarioLabel}
+                  </small>
                 </div>
-              ))}
+                <button type="button" className="btn" onClick={() => setActiveModal('none')}>
+                  ✕ {locale === 'ro' ? 'Închide' : 'Close'}
+                </button>
+              </div>
+              <div className="modal-body" style={{ overflowY: 'auto' }}>
+                {scenarioSections.map((section) => (
+                  <div key={section.title} className="rules-section" style={{ marginBottom: '1.25rem' }}>
+                    <h4 style={{ color: 'var(--accent-gold)', marginBottom: '0.4rem', fontSize: '0.95rem' }}>{section.title}</h4>
+                    <ul style={{ margin: 0, paddingLeft: '1.2rem', lineHeight: '1.5', fontSize: '0.85rem' }}>
+                      {section.body.map((line, idx) => (
+                        <li key={idx} style={{ marginBottom: '0.35rem' }}>{line}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

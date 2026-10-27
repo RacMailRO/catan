@@ -140,20 +140,37 @@ export function evaluateRobberPlacement(
     ...view.players.filter((p) => p.id !== playerId).map((p) => p.publicScore)
   );
 
-  for (const vId of Object.keys(view.board.vertices)) {
-    const v = view.board.vertices[vId]!;
-    if (!v.adjacentHexIds.includes(hexId)) continue;
-    const b = view.board.buildings[vId];
-    if (!b) continue;
-    const mult = b.type === 'city' ? 2 : 1;
-    if (b.ownerId === playerId) {
-      ownPenalty += pips * mult * 8.0;
-    } else {
-      const opp = view.players.find((p) => p.id === b.ownerId);
-      const isLeader = opp && opp.publicScore === maxOppScore;
-      opponentImpact += pips * mult * (isLeader ? 2.5 : 1.4);
-      if (isLeader) {
-        leaderBonus += 3.0;
+  if (hex.terrain === 'sea') {
+    for (const eId of Object.keys(view.board.edges)) {
+      const e = view.board.edges[eId]!;
+      if (!e.adjacentHexIds.includes(hexId)) continue;
+      const ship = view.board.ships?.[eId];
+      if (!ship) continue;
+      if (ship.ownerId === playerId) {
+        ownPenalty += 6.0;
+      } else {
+        const opp = view.players.find((p) => p.id === ship.ownerId);
+        const isLeader = opp && opp.publicScore === maxOppScore;
+        opponentImpact += isLeader ? 4.0 : 2.0;
+        if (isLeader) leaderBonus += 2.0;
+      }
+    }
+  } else {
+    for (const vId of Object.keys(view.board.vertices)) {
+      const v = view.board.vertices[vId]!;
+      if (!v.adjacentHexIds.includes(hexId)) continue;
+      const b = view.board.buildings[vId];
+      if (!b) continue;
+      const mult = b.type === 'city' ? 2 : 1;
+      if (b.ownerId === playerId) {
+        ownPenalty += pips * mult * 8.0;
+      } else {
+        const opp = view.players.find((p) => p.id === b.ownerId);
+        const isLeader = opp && opp.publicScore === maxOppScore;
+        opponentImpact += pips * mult * (isLeader ? 2.5 : 1.4);
+        if (isLeader) {
+          leaderBonus += 3.0;
+        }
       }
     }
   }

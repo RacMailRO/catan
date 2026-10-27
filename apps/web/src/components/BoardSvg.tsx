@@ -776,6 +776,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
           {Object.values(board.hexes).map((hex, hexIdx) => {
             const isHighlighted = highlightedHexes?.has(hex.id) ?? false;
             const hasRobber = board.robberHexId === hex.id;
+            const hasPirate = board.pirateHexId === hex.id;
             const terrainVariants = TERRAIN_IMAGES[hex.terrain];
             const terrainHref = terrainVariants[hexIdx % terrainVariants.length]!;
 
@@ -937,7 +938,7 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                   </g>
                 )}
 
-                {/* Robber Pawn */}
+                {/* Robber Pawn (Land) */}
                 {hasRobber && (
                   <g
                     transform={`translate(${hex.x + 32}, ${hex.y - 24})`}
@@ -950,15 +951,28 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                   </g>
                 )}
 
-                {/* Highlight ring when moving robber */}
+                {/* Pirate Pawn (Sea) */}
+                {hasPirate && (
+                  <g
+                    transform={`translate(${hex.x + 32}, ${hex.y - 24})`}
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    <circle cx={0} cy={0} r={20} fill="#0f172a" stroke="#ef4444" strokeWidth={3} />
+                    <text x={0} y={7} textAnchor="middle" fontSize="19">
+                      🏴‍☠️
+                    </text>
+                  </g>
+                )}
+
+                {/* Highlight ring when moving robber or pirate */}
                 {isHighlighted && (
                   <circle
                     data-interactive="true"
                     cx={hex.x}
                     cy={hex.y + 2}
                     r={42}
-                    fill="rgba(56, 189, 248, 0.3)"
-                    stroke="#38bdf8"
+                    fill={hex.terrain === 'sea' ? "rgba(239, 68, 68, 0.3)" : "rgba(56, 189, 248, 0.3)"}
+                    stroke={hex.terrain === 'sea' ? "#ef4444" : "#38bdf8"}
                     strokeWidth={4}
                     strokeDasharray="6,3"
                   />
@@ -1017,12 +1031,40 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
               roadTransform = `translate(${midX}, ${midY}) rotate(${angleDeg})`;
             }
 
-            // Ship piece: rotated and aligned to the edge orientation, matching road alignment logic
+            // Ship piece: rotated and aligned to edge, with hull facing water and sail facing land
             const shipSize = 58;
             let shipAngleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
-            if (shipAngleDeg > 90) shipAngleDeg -= 180;
-            if (shipAngleDeg <= -90) shipAngleDeg += 180;
-            const shipTransform = `translate(${midX}, ${midY}) rotate(${shipAngleDeg})`;
+
+            // Vector pointing from adjacent land hex center toward edge midpoint (direction of water)
+            const landHexId = edge.adjacentHexIds.find((hId) => {
+              const t = board.hexes[hId]?.terrain;
+              return t && t !== 'sea' && t !== 'fog';
+            });
+            let vWaterX = 0;
+            let vWaterY = 0;
+            if (landHexId && board.hexes[landHexId]) {
+              const landHex = board.hexes[landHexId]!;
+              vWaterX = midX - landHex.x;
+              vWaterY = midY - landHex.y;
+            } else {
+              vWaterX = midX;
+              vWaterY = midY;
+            }
+
+            // In ship SVG: local +y is hull/base, local -y is sail/top.
+            // A rotation of shipAngleDeg maps local +y to (-sin(rad), cos(rad)).
+            // We orient so hull (+y) points toward water:
+            const rad = (shipAngleDeg * Math.PI) / 180;
+            const hullX = -Math.sin(rad);
+            const hullY = Math.cos(rad);
+            if (hullX * vWaterX + hullY * vWaterY < 0) {
+              shipAngleDeg += 180;
+            }
+
+            const vWaterLen = Math.hypot(vWaterX, vWaterY) || 1;
+            const shipMidX = midX + (vWaterX / vWaterLen) * 3;
+            const shipMidY = midY + (vWaterY / vWaterLen) * 3;
+            const shipTransform = `translate(${shipMidX}, ${shipMidY}) rotate(${shipAngleDeg})`;
 
             return (
               <g

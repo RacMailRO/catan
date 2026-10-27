@@ -127,6 +127,7 @@ export interface BoardState {
   buildings: Record<string, Building>; // key: vertexId
   roads: Record<string, Road>; // key: edgeId
   robberHexId: string;
+  pirateHexId?: string;
 }
 
 export interface DevCardInstance {

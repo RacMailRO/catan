@@ -1,9 +1,14 @@
 {
-  "version": "v1.134",
-  "commitCount": 134,
-  "shortHash": "9a4b3b8",
-  "buildDate": "2026-10-27T15:53:06.207Z",
+  "version": "v1.135",
+  "commitCount": 135,
+  "shortHash": "2131d32",
+  "buildDate": "2026-10-27T16:10:02.269Z",
   "releaseNotes": [
+    {
+      "hash": "2131d32",
+      "date": "2026-10-27",
+      "message": "fix(board): remove pier overlay on harbors and enable variable map generation for seafarers"
+    },
     {
       "hash": "9a4b3b8",
       "date": "2026-10-27",
@@ -248,11 +253,6 @@
       "hash": "e700e5c",
       "date": "2026-10-26",
       "message": "chore(release): v1.85 metadata"
-    },
-    {
-      "hash": "d18cbfa",
-      "date": "2026-10-26",
-      "message": "chore(release): bump version to v1.84"
     }
   ]
 }

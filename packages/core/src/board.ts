@@ -875,6 +875,9 @@ export function generateStandardBoard(
     vertices[chosen.edge.v2]!.harbor = hType;
   }
 
+  const seaHexes = Object.values(hexes).filter((h) => h.terrain === 'sea');
+  const pirateHexId = seaHexes.length > 0 ? seaHexes[0]!.id : undefined;
+
   return {
     board: {
       hexes,
@@ -884,7 +887,8 @@ export function generateStandardBoard(
       buildings: {},
       roads: {},
       ships: {},
-      robberHexId
+      robberHexId,
+      pirateHexId
     },
     nextPrngState: state
   };
