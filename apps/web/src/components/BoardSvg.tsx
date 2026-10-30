@@ -1232,10 +1232,10 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                 {building && building.type === 'city' && (
                   <image
                     href={CITY_SVG_BY_COLOR[pColor]}
-                    x={-28}
-                    y={-32}
-                    width={56}
-                    height={56}
+                    x={-37.5}
+                    y={-42}
+                    width={75}
+                    height={75}
                     style={{
                       pointerEvents: 'none',
                       filter: `${PIECE_COLOR_FILTER[pColor]}drop-shadow(0 3px 5px rgba(0,0,0,0.9)) drop-shadow(0 0 2px rgba(255,255,255,0.8))`
