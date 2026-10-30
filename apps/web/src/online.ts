@@ -43,6 +43,8 @@ export interface LobbyState {
   seats: LobbySeatState[];
   status: 'waiting' | 'in_progress' | 'finished';
   gameId?: string;
+  pendingTermination?: boolean;
+  terminationDismissed?: boolean;
 }
 
 export interface OnlineSession {
@@ -91,7 +93,7 @@ export async function createOnlineLobby(params: {
       name: 'Partidă Catan',
       hostName: params.hostName,
       mode: 'lan',
-      isPrivate: true,
+      isPrivate: false,
       seed: params.seed,
       rules: params.rules,
       seats: params.seats

@@ -42,9 +42,12 @@ import {
 import { BoardSvg } from './components/BoardSvg';
 import {
   AnimatedDiceWidget,
+  ResourceIcon,
+  renderResourceTokens,
   Confetti,
   DevCardSprite,
-  ResourceCardSprite
+  ResourceCardSprite,
+  playerBadgeStyle
 } from './components/GameAssets';
 import { ReplayAndAnalysisView } from './components/ReplayAndAnalysisView';
 import { HallOfFameView } from './components/HallOfFameView';
@@ -87,7 +90,6 @@ import {
   Locale,
   PARTICIPANT_TYPE_LABELS,
   PHASE_LABELS,
-  RESOURCE_ICONS,
   RESOURCE_LABELS,
   TRANSLATIONS,
   formatActionDescription,
@@ -100,36 +102,6 @@ import {
 } from './i18n';
 
 type ActiveTab = 'lobby' | 'game' | 'replay' | 'benchmark' | 'spectate' | 'sandbox' | 'hall_of_fame';
-
-// Readable text color on top of each player's own board color as a filled badge background -
-// 'blue'/'green'/'red'/'brown' are dark enough for white text, 'orange'/'white' need black
-// instead (plain colored text on the app's own dark background, used before this, was too low
-// contrast to read at a glance - a blue name on navy panels in particular).
-const PLAYER_BADGE_TEXT_COLOR: Record<PlayerColor, string> = {
-  red: '#ffffff',
-  blue: '#ffffff',
-  green: '#ffffff',
-  brown: '#ffffff',
-  orange: '#1a1206',
-  white: '#1a1206'
-};
-
-// Shared "player name as a filled badge" style - used anywhere a player's name needs to be
-// identifiable by board color at a glance (trade banners/modals, rejection lists...) without
-// the low-contrast "colored text on a dark panel" problem plain `color: p.color` text had.
-function playerBadgeStyle(color?: PlayerColor): React.CSSProperties {
-  return color
-    ? {
-        display: 'inline-block',
-        background: color,
-        color: PLAYER_BADGE_TEXT_COLOR[color],
-        fontWeight: 700,
-        padding: '1px 7px',
-        borderRadius: 999,
-        fontSize: '0.92em'
-      }
-    : { fontWeight: 700 };
-}
 
 const NAV_TAB_ICON: Record<ActiveTab, string> = {
   lobby: '⚙️',
@@ -1277,19 +1249,19 @@ export const App: React.FC = () => {
 
   // Pushes one more notification onto the stack (see actionFeedbackQueue above) instead of
   // replacing whatever is currently shown - capped so a long burst of bot actions doesn't
-  // pile up indefinitely, and each entry fades itself out independently after its own 3.6s.
+  // pile up indefinitely, and each entry fades itself out independently after its own 6.5s.
   const showActionFeedback = (content: React.ReactNode) => {
     const id = `fb-${Date.now()}-${Math.random()}`;
     setActionFeedbackQueue((prev) => {
-      const next = [...prev, { id, content }];
+      const next = [...prev, { id, content: typeof content === 'string' ? renderResourceTokens(content) : content }];
       return next.length > 5 ? next.slice(next.length - 5) : next;
     });
     setTimeout(() => {
       setActionFeedbackQueue((prev) => prev.map((f) => (f.id === id ? { ...f, fading: true } : f)));
-    }, 3600);
+    }, 8000);
     setTimeout(() => {
       setActionFeedbackQueue((prev) => prev.filter((f) => f.id !== id));
-    }, 3900);
+    }, 8400);
   };
 
   // Robber steals and mass discards only ever exist as a momentary event, not persistent state
@@ -1318,7 +1290,7 @@ export const App: React.FC = () => {
       if (!stolenResource || !stolenFrom) return;
       showActionFeedback(
         <>
-          🥷 {nameBadge(event.playerId)} {locale === 'ro' ? 'a furat' : 'stole'} 1 {RESOURCE_ICONS[stolenResource]}{' '}
+          🥷 {nameBadge(event.playerId)} {locale === 'ro' ? 'a furat' : 'stole'} 1 <ResourceIcon resource={stolenResource} />{' '}
           {RESOURCE_LABELS[locale][stolenResource]} {locale === 'ro' ? 'de la' : 'from'} {nameBadge(stolenFrom)}!
         </>
       );
@@ -1335,8 +1307,7 @@ export const App: React.FC = () => {
         <>
           🗑️ {nameBadge(event.playerId)} {locale === 'ro' ? `a aruncat ${total} cărți:` : `discarded ${total} cards:`}{' '}
           {ALL_RESOURCES.filter((r) => (discarded[r] ?? 0) > 0)
-            .map((r) => `${RESOURCE_ICONS[r]}${discarded[r]}`)
-            .join(' ')}
+            .map((r) => (<span key={r} className="res-count"><ResourceIcon resource={r} />{discarded[r]}</span>))}
         </>
       );
       requestAnimationFrame(() =>
@@ -1381,8 +1352,7 @@ export const App: React.FC = () => {
           ? 'a ship'
           : 'a road';
       const costText = ALL_RESOURCES.filter((r) => cost[r] > 0)
-        .map((r) => `${RESOURCE_ICONS[r]}${cost[r]}`)
-        .join(' ');
+        .map((r) => (<span key={r} className="res-count"><ResourceIcon resource={r} />{cost[r]}</span>));
       showActionFeedback(
         <>
           {icon} {nameBadge(event.playerId)} {locale === 'ro' ? `a construit ${nameRo}` : `built ${nameEn}`} ({costText})
@@ -1411,7 +1381,7 @@ export const App: React.FC = () => {
         <>
           ⚓ {nameBadge(event.playerId)}{' '}
           {locale === 'ro' ? 'a schimbat cu banca' : 'traded with the bank'}: {event.action.giveAmount}
-          {RESOURCE_ICONS[event.action.give]} → 1{RESOURCE_ICONS[event.action.receive]}
+          <ResourceIcon resource={event.action.give} /> → 1<ResourceIcon resource={event.action.receive} />
         </>
       );
       requestAnimationFrame(() =>
@@ -1449,7 +1419,7 @@ export const App: React.FC = () => {
       showActionFeedback(
         <>
           👑 {nameBadge(event.playerId)} {locale === 'ro' ? 'a declarat Monopol pe' : 'declared Monopoly on'}{' '}
-          {RESOURCE_ICONS[event.action.resource]} {RESOURCE_LABELS[locale][event.action.resource]} ({totalTaken}{' '}
+          <ResourceIcon resource={event.action.resource} /> {RESOURCE_LABELS[locale][event.action.resource]} ({totalTaken}{' '}
           {locale === 'ro' ? 'cărți confiscate' : 'cards taken'})
         </>
       );
@@ -1459,7 +1429,7 @@ export const App: React.FC = () => {
       showActionFeedback(
         <>
           🎁 {nameBadge(event.playerId)} {locale === 'ro' ? 'a jucat Anul Abundenței' : 'played Year of Plenty'} (+1{' '}
-          {RESOURCE_ICONS[r1]}, +1 {RESOURCE_ICONS[r2]})
+          <ResourceIcon resource={r1} />, +1 <ResourceIcon resource={r2} />)
         </>
       );
     } else if (event.action.type === 'play_road_building') {
@@ -1533,7 +1503,7 @@ export const App: React.FC = () => {
         const thief = newView.players.find((p) => p.id === actingPlayerId);
         const victim = stolenFrom ? newView.players.find((p) => p.id === stolenFrom) : undefined;
         if (stolenResource && victim) {
-          const resText = `${RESOURCE_ICONS[stolenResource]} ${RESOURCE_LABELS[locale][stolenResource]}`;
+          const resText = `{{res:${stolenResource}}} ${RESOURCE_LABELS[locale][stolenResource]}`;
           if (actingPlayerId === myId) {
             const isSingleHexTarget = action.type === 'move_robber';
             showActionFeedback(
@@ -1566,7 +1536,7 @@ export const App: React.FC = () => {
       } else if (action.type === 'play_monopoly') {
         const lastEv = data.recentEvents?.[data.recentEvents.length - 1];
         const res = action.resource;
-        const resText = `${RESOURCE_ICONS[res]} ${RESOURCE_LABELS[locale][res]}`;
+        const resText = `{{res:${res}}} ${RESOURCE_LABELS[locale][res]}`;
         const totalTaken = Number(lastEv?.details?.totalTaken ?? 0);
         const takenByPlayer = (lastEv?.details?.takenByPlayer ?? {}) as Record<string, number>;
         const actingPlayer = newView.players.find((p) => p.id === actingPlayerId);
@@ -1592,7 +1562,7 @@ export const App: React.FC = () => {
         const r1 = action.resources[0];
         const r2 = action.resources[1];
         const actingPlayer = newView.players.find((p) => p.id === actingPlayerId);
-        showActionFeedback(`🎁 ${actingPlayer?.name ?? actingPlayerId} a jucat Anul Abundenței (+1 ${RESOURCE_ICONS[r1]} ${RESOURCE_LABELS[locale][r1]}, +1 ${RESOURCE_ICONS[r2]} ${RESOURCE_LABELS[locale][r2]})`);
+        showActionFeedback(`🎁 ${actingPlayer?.name ?? actingPlayerId} a jucat Anul Abundenței (+1 {{res:${r1}}} ${RESOURCE_LABELS[locale][r1]}, +1 {{res:${r2}}} ${RESOURCE_LABELS[locale][r2]})`);
       } else if (action.type === 'buy_dev_card') {
         const lastEv = data.recentEvents?.[data.recentEvents.length - 1];
         const drawnType = lastEv?.details?.drawnType as DevCardType | undefined;
@@ -1753,7 +1723,7 @@ export const App: React.FC = () => {
         const thief = getPlayerById(newState, playerId);
         const victim = stolenFrom ? getPlayerById(newState, stolenFrom) : undefined;
         if (stolenResource && victim) {
-          const resText = `${RESOURCE_ICONS[stolenResource]} ${RESOURCE_LABELS[locale][stolenResource]}`;
+          const resText = `{{res:${stolenResource}}} ${RESOURCE_LABELS[locale][stolenResource]}`;
           if (playerId === viewerId) {
             const isSingleHexTarget = action.type === 'move_robber';
             showActionFeedback(
@@ -1787,7 +1757,7 @@ export const App: React.FC = () => {
         const events = recorder.getEvents();
         const lastEv = events[events.length - 1];
         const res = action.resource;
-        const resText = `${RESOURCE_ICONS[res]} ${RESOURCE_LABELS[locale][res]}`;
+        const resText = `{{res:${res}}} ${RESOURCE_LABELS[locale][res]}`;
         const totalTaken = Number(lastEv?.details?.totalTaken ?? 0);
         const takenByPlayer = (lastEv?.details?.takenByPlayer ?? {}) as Record<string, number>;
         const actingPlayer = getPlayerById(newState, playerId);
@@ -1802,7 +1772,7 @@ export const App: React.FC = () => {
       } else if (action.type === 'play_year_of_plenty') {
         const r1 = action.resources[0];
         const r2 = action.resources[1];
-        showActionFeedback(`🎁 Anul Abundenței: Ai primit 1x ${RESOURCE_ICONS[r1]} ${RESOURCE_LABELS[locale][r1]} și 1x ${RESOURCE_ICONS[r2]} ${RESOURCE_LABELS[locale][r2]} direct din bancă!`);
+        showActionFeedback(`🎁 Anul Abundenței: Ai primit 1x {{res:${r1}}} ${RESOURCE_LABELS[locale][r1]} și 1x {{res:${r2}}} ${RESOURCE_LABELS[locale][r2]} direct din bancă!`);
       } else if (action.type === 'buy_dev_card') {
         const events = recorder.getEvents();
         const lastEv = events[events.length - 1];
@@ -2350,7 +2320,7 @@ export const App: React.FC = () => {
           className="flying-resource-card"
           style={{ left: c.launched ? c.endX : c.startX, top: c.launched ? c.endY : c.startY }}
         >
-          {RESOURCE_ICONS[c.resource]}
+          <ResourceIcon resource={c.resource} height={36} />
         </div>
       ))}
 
@@ -2543,7 +2513,19 @@ export const App: React.FC = () => {
               ? `O versiune nouă e disponibilă (${versionInfo?.version ?? ''}).`
               : `A new version is available (${versionInfo?.version ?? ''}).`}
           </span>
-          <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>
+          <button type="button" className="btn btn-primary" onClick={() => {
+              // A plain reload can be answered by the service worker's cached index.html (old
+              // bundle) so the banner would never go away: drop the SW + its caches first.
+              const cleanup: Promise<unknown>[] = [];
+              if ('serviceWorker' in navigator) {
+                cleanup.push(navigator.serviceWorker.getRegistrations().then((regs) => Promise.all(regs.map((r) => r.unregister()))));
+              }
+              if ('caches' in window) {
+                cleanup.push(caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))));
+              }
+              Promise.allSettled(cleanup).finally(() => window.location.reload());
+            }}
+          >
             {locale === 'ro' ? '↻ Reîncarcă' : '↻ Reload'}
           </button>
         </div>
@@ -3513,7 +3495,7 @@ export const App: React.FC = () => {
               <div className="bank-single-row">
                 {ALL_RESOURCES.map((r) => (
                   <span key={r} className="res-badge" title={RESOURCE_LABELS[locale][r]}>
-                    {RESOURCE_ICONS[r]} {playerView.bank[r]}
+                    <ResourceIcon resource={r} /> {playerView.bank[r]}
                   </span>
                 ))}
                 <span className="res-badge" title="Cărți de dezvoltare în pachet">
@@ -3960,7 +3942,7 @@ export const App: React.FC = () => {
                 <div className="bank-single-row" style={{ margin: 0 }}>
                   {ALL_RESOURCES.map((r) => (
                     <span key={r} className="res-badge" title={RESOURCE_LABELS[locale][r]}>
-                      {RESOURCE_ICONS[r]} {playerView.bank[r]}
+                      <ResourceIcon resource={r} /> {playerView.bank[r]}
                     </span>
                   ))}
                   <span className="res-badge" title="Cărți de dezvoltare în pachet">
@@ -4219,38 +4201,44 @@ export const App: React.FC = () => {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
                     <div style={{ textAlign: 'center' }}>
                       <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
                         {locale === 'ro' ? 'Prima resursă:' : 'First resource:'}
                       </span>
-                      <select
-                        value={yopResources[0]}
-                        onChange={(e) => setYopResources([e.target.value as ResourceType, yopResources[1]])}
-                        style={{ fontSize: '0.86rem', padding: '0.3rem 0.6rem' }}
-                      >
-                        {ALL_RESOURCES.map((r) => (
-                          <option key={r} value={r}>
-                            {RESOURCE_ICONS[r]} {RESOURCE_LABELS[locale][r]} ({gameState.bank[r]} în bancă)
-                          </option>
-                        ))}
-                      </select>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.25)', padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <ResourceIcon resource={yopResources[0]} height={26} />
+                        <select
+                          value={yopResources[0]}
+                          onChange={(e) => setYopResources([e.target.value as ResourceType, yopResources[1]])}
+                          style={{ fontSize: '0.86rem', padding: '0.3rem 0.6rem', margin: 0 }}
+                        >
+                          {ALL_RESOURCES.map((r) => (
+                            <option key={r} value={r}>
+                              {RESOURCE_LABELS[locale][r]} ({gameState.bank[r]} în bancă)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
                       <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
                         {locale === 'ro' ? 'A doua resursă:' : 'Second resource:'}
                       </span>
-                      <select
-                        value={yopResources[1]}
-                        onChange={(e) => setYopResources([yopResources[0], e.target.value as ResourceType])}
-                        style={{ fontSize: '0.86rem', padding: '0.3rem 0.6rem' }}
-                      >
-                        {ALL_RESOURCES.map((r) => (
-                          <option key={r} value={r}>
-                            {RESOURCE_ICONS[r]} {RESOURCE_LABELS[locale][r]} ({gameState.bank[r]} în bancă)
-                          </option>
-                        ))}
-                      </select>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.25)', padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <ResourceIcon resource={yopResources[1]} height={26} />
+                        <select
+                          value={yopResources[1]}
+                          onChange={(e) => setYopResources([yopResources[0], e.target.value as ResourceType])}
+                          style={{ fontSize: '0.86rem', padding: '0.3rem 0.6rem', margin: 0 }}
+                        >
+                          {ALL_RESOURCES.map((r) => (
+                            <option key={r} value={r}>
+                              {RESOURCE_LABELS[locale][r]} ({gameState.bank[r]} în bancă)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   </div>
 
@@ -4362,35 +4350,43 @@ export const App: React.FC = () => {
                         gameState.bank[bankReceiveRes] >= 1;
 
                       return (
-                        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                          <select
-                            value={bankGiveRes}
-                            onChange={(e) => setBankGiveRes(e.target.value as ResourceType)}
-                          >
-                            {ALL_RESOURCES.map((r) => {
-                              const rRatio = getPlayerBankTradeRatio(
-                                gameState.board,
-                                activePlayerObj.id,
-                                r
-                              );
-                              return (
+                        <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.25)', padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <ResourceIcon resource={bankGiveRes} height={26} />
+                            <select
+                              value={bankGiveRes}
+                              onChange={(e) => setBankGiveRes(e.target.value as ResourceType)}
+                              style={{ margin: 0 }}
+                            >
+                              {ALL_RESOURCES.map((r) => {
+                                const rRatio = getPlayerBankTradeRatio(
+                                  gameState.board,
+                                  activePlayerObj.id,
+                                  r
+                                );
+                                return (
+                                  <option key={r} value={r}>
+                                    Oferă {rRatio}x {RESOURCE_LABELS[locale][r]} (ai {activePlayerObj.resources[r]})
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+                          <span style={{ fontSize: '1.25rem', color: 'var(--accent-gold)' }}>➔</span>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.25)', padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <ResourceIcon resource={bankReceiveRes} height={26} />
+                            <select
+                              value={bankReceiveRes}
+                              onChange={(e) => setBankReceiveRes(e.target.value as ResourceType)}
+                              style={{ margin: 0 }}
+                            >
+                              {ALL_RESOURCES.map((r) => (
                                 <option key={r} value={r}>
-                                  Oferă {rRatio}x {RESOURCE_LABELS[locale][r]} (ai {activePlayerObj.resources[r]})
+                                  Primește 1x {RESOURCE_LABELS[locale][r]} (bancă: {gameState.bank[r]})
                                 </option>
-                              );
-                            })}
-                          </select>
-                          <span>➔</span>
-                          <select
-                            value={bankReceiveRes}
-                            onChange={(e) => setBankReceiveRes(e.target.value as ResourceType)}
-                          >
-                            {ALL_RESOURCES.map((r) => (
-                              <option key={r} value={r}>
-                                Primește 1x {RESOURCE_LABELS[locale][r]}
-                              </option>
-                            ))}
-                          </select>
+                              ))}
+                            </select>
+                          </div>
                           <button
                             type="button"
                             className="btn btn-primary"
@@ -4455,7 +4451,14 @@ export const App: React.FC = () => {
                           </div>
                           {suggestions.map((sug, idx) => (
                             <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: '0.78rem' }}>{sug.label}</span>
+                              <span style={{ fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+  <ResourceIcon resource={sug.give} height={20} />
+  <strong>{sug.giveAmount}x</strong>
+  <span>➔</span>
+  <ResourceIcon resource={sug.receive} height={20} />
+  <strong>1x</strong>
+  <span style={{ color: 'var(--text-muted)', fontSize: '0.76rem' }}>({sug.label})</span>
+</span>
                               <button
                                 type="button"
                                 className="btn btn-primary"
@@ -4499,7 +4502,7 @@ export const App: React.FC = () => {
                         {ALL_RESOURCES.map((r) => (
                           <div key={r} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                             <span style={{ fontSize: '0.8rem' }}>
-                              {RESOURCE_ICONS[r]} {RESOURCE_LABELS[locale][r]}: <strong>{p2pOffer[r]}</strong>
+                              <ResourceIcon resource={r} /> {RESOURCE_LABELS[locale][r]}: <strong>{p2pOffer[r]}</strong>
                             </span>
                             <div style={{ display: 'flex', gap: 4 }}>
                               <button
@@ -4532,7 +4535,7 @@ export const App: React.FC = () => {
                         {ALL_RESOURCES.map((r) => (
                           <div key={r} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                             <span style={{ fontSize: '0.8rem' }}>
-                              {RESOURCE_ICONS[r]} {RESOURCE_LABELS[locale][r]}: <strong>{p2pRequest[r]}</strong>
+                              <ResourceIcon resource={r} /> {RESOURCE_LABELS[locale][r]}: <strong>{p2pRequest[r]}</strong>
                             </span>
                             <div style={{ display: 'flex', gap: 4 }}>
                               <button
@@ -4644,12 +4647,10 @@ export const App: React.FC = () => {
                         ? 'Oferta lor: oferă'
                         : 'Their offer: offers'}{' '}
                       {ALL_RESOURCES.filter((r) => originalOffer.offering[r] > 0)
-                        .map((r) => `${RESOURCE_ICONS[r]}${originalOffer.offering[r]}`)
-                        .join(' ')}{' '}
+                        .map((r) => (<span key={r} className="res-count"><ResourceIcon resource={r} />{originalOffer.offering[r]}</span>))}{' '}
                       · {locale === 'ro' ? 'cere' : 'asks'}{' '}
                       {ALL_RESOURCES.filter((r) => originalOffer.requesting[r] > 0)
-                        .map((r) => `${RESOURCE_ICONS[r]}${originalOffer.requesting[r]}`)
-                        .join(' ')}
+                        .map((r) => (<span key={r} className="res-count"><ResourceIcon resource={r} />{originalOffer.requesting[r]}</span>))}
                       {' — '}
                       {locale === 'ro'
                         ? 'alege mai jos ce vrei TU să oferi/ceri în loc:'
@@ -4663,7 +4664,7 @@ export const App: React.FC = () => {
                         {ALL_RESOURCES.map((r) => (
                           <div key={r} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                             <span style={{ fontSize: '0.8rem' }}>
-                              {RESOURCE_ICONS[r]} {RESOURCE_LABELS[locale][r]}: <strong>{p2pOffer[r]}</strong>
+                              <ResourceIcon resource={r} /> {RESOURCE_LABELS[locale][r]}: <strong>{p2pOffer[r]}</strong>
                             </span>
                             <div style={{ display: 'flex', gap: 4 }}>
                               <button
@@ -4696,7 +4697,7 @@ export const App: React.FC = () => {
                         {ALL_RESOURCES.map((r) => (
                           <div key={r} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                             <span style={{ fontSize: '0.8rem' }}>
-                              {RESOURCE_ICONS[r]} {RESOURCE_LABELS[locale][r]}: <strong>{p2pRequest[r]}</strong>
+                              <ResourceIcon resource={r} /> {RESOURCE_LABELS[locale][r]}: <strong>{p2pRequest[r]}</strong>
                             </span>
                             <div style={{ display: 'flex', gap: 4 }}>
                               <button
@@ -4813,7 +4814,7 @@ export const App: React.FC = () => {
                           <div style={{ display: 'flex', gap: 10, flex: 1, justifyContent: 'center' }}>
                             {ALL_RESOURCES.filter((r) => row.cost[r] > 0).map((r) => (
                               <span key={r} style={{ fontSize: '0.86rem' }}>
-                                {RESOURCE_ICONS[r]} {row.cost[r]}
+                                <ResourceIcon resource={r} /> {row.cost[r]}
                               </span>
                             ))}
                           </div>
@@ -5109,7 +5110,7 @@ export const App: React.FC = () => {
                         </h4>
                         {ALL_RESOURCES.filter((r) => incomingOffer.offering[r] > 0).map((r) => (
                           <div key={r} style={{ fontSize: '0.84rem', fontWeight: 600, marginTop: 2 }}>
-                            {RESOURCE_ICONS[r]} {incomingOffer.offering[r]}x {RESOURCE_LABELS[locale][r]}
+                            <ResourceIcon resource={r} /> {incomingOffer.offering[r]}x {RESOURCE_LABELS[locale][r]}
                           </div>
                         ))}
                       </div>
@@ -5126,7 +5127,7 @@ export const App: React.FC = () => {
                         </h4>
                         {ALL_RESOURCES.filter((r) => incomingOffer.requesting[r] > 0).map((r) => (
                           <div key={r} style={{ fontSize: '0.84rem', fontWeight: 600, marginTop: 2 }}>
-                            {RESOURCE_ICONS[r]} {incomingOffer.requesting[r]}x {RESOURCE_LABELS[locale][r]}
+                            <ResourceIcon resource={r} /> {incomingOffer.requesting[r]}x {RESOURCE_LABELS[locale][r]}
                           </div>
                         ))}
                       </div>
@@ -5412,9 +5413,11 @@ export const App: React.FC = () => {
           {(() => {
             const nameStyle = playerBadgeStyle;
             const resourceList = (counts: ResourceCount) =>
-              ALL_RESOURCES.filter((r) => counts[r] > 0)
-                .map((r) => `${RESOURCE_ICONS[r]}${counts[r]}`)
-                .join(' ');
+              {
+                const items = ALL_RESOURCES.filter((r) => counts[r] > 0)
+                .map((r) => (<span key={r} className="res-count"><ResourceIcon resource={r} />{counts[r]}</span>));
+                return items.length > 0 ? items : '-';
+              };
 
             const entry = Object.values(visibleTradeOffers)
               .sort((a, b) => b.firstShownAtMs - a.firstShownAtMs)
@@ -5807,7 +5810,7 @@ export const App: React.FC = () => {
                 <div className="bank-single-row" style={{ margin: 0 }}>
                   {ALL_RESOURCES.map((r) => (
                     <span key={r} className="res-badge" title={RESOURCE_LABELS[locale][r]}>
-                      {RESOURCE_ICONS[r]} {spectateView.bank[r]}
+                      <ResourceIcon resource={r} /> {spectateView.bank[r]}
                     </span>
                   ))}
                   <span className="res-badge" title={locale === 'ro' ? 'Cărți de dezvoltare în pachet' : 'Dev cards left in deck'}>

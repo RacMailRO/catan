@@ -4,7 +4,24 @@ export const ALL_RESOURCES: ResourceType[] = ['wood', 'brick', 'sheep', 'wheat',
 
 export type ResourceCount = Record<ResourceType, number>;
 
-export type TerrainType = 'forest' | 'hills' | 'pasture' | 'fields' | 'mountains' | 'desert';
+export type TerrainType =
+  | 'forest'
+  | 'hills'
+  | 'pasture'
+  | 'fields'
+  | 'mountains'
+  | 'desert'
+  | 'gold_field'
+  | 'sea'
+  | 'fog';
+
+export type BoardScenario =
+  | 'classic'
+  | 'expansion'
+  | 'seafarers_shores'
+  | 'seafarers_islands'
+  | 'seafarers_fog'
+  | 'world_map';
 
 export const TERRAIN_TO_RESOURCE: Record<TerrainType, ResourceType | null> = {
   forest: 'wood',
@@ -12,7 +29,11 @@ export const TERRAIN_TO_RESOURCE: Record<TerrainType, ResourceType | null> = {
   pasture: 'sheep',
   fields: 'wheat',
   mountains: 'ore',
-  desert: null
+  desert: null,
+  // Gold fields pay a resource of the player's choice, so they have no fixed resource here.
+  gold_field: null,
+  sea: null,
+  fog: null
 };
 
 export type HarborType = 'generic' | ResourceType;
@@ -32,9 +53,13 @@ export type PlayerColor = 'red' | 'blue' | 'orange' | 'green' | 'brown' | 'white
 // here — which looked too close to 'orange' in-game.
 export const PLAYER_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'green', 'brown', 'white'];
 
-export const MAX_PLAYERS_BY_SCENARIO: Record<'classic' | 'expansion', number> = {
+export const MAX_PLAYERS_BY_SCENARIO: Record<BoardScenario, number> = {
   classic: 4,
-  expansion: 6
+  expansion: 6,
+  seafarers_shores: 4,
+  seafarers_islands: 4,
+  seafarers_fog: 4,
+  world_map: 4
 };
 
 export type ParticipantType = 'human' | 'ai' | 'llm' | 'passive';
@@ -51,7 +76,7 @@ export type AIStrategyStyle =
 
 export interface GameRulesConfig {
   presetId: 'standard' | 'small_group' | 'custom';
-  victoryPointsToWin: 10 | 12 | 14;
+  victoryPointsToWin: number;
   startingResourcesRule: 'second_settlement' | 'both_settlements';
   knightStealRule: 'single' | 'all_adjacent';
   robber7StealRule: 'single' | 'all_adjacent';
@@ -295,6 +320,7 @@ export interface PlayerView {
 export type GameAction =
   | { type: 'place_initial_settlement'; vertexId: string }
   | { type: 'place_initial_road'; edgeId: string }
+  | { type: 'place_initial_ship'; edgeId: string }
   | { type: 'roll_dice' }
   | { type: 'discard_cards'; resources: Partial<ResourceCount> }
   | { type: 'move_robber'; hexId: string; targetPlayerId?: string }

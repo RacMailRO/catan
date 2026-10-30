@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ALL_RESOURCES,
   GameAction,
   PlayerColor,
   ReplayFile,
+  ResourceType,
   calculateScore,
   exportReplayJson,
   importReplayJson,
@@ -15,7 +16,7 @@ import {
   runSimulatedGame
 } from '@catan/ai';
 import { BoardSvg } from './BoardSvg';
-import { AnimatedDiceWidget, ResourceCardSprite } from './GameAssets';
+import { AnimatedDiceWidget, ResourceCardSprite, ResourceIcon, playerBadgeStyle } from './GameAssets';
 import {
   SavedReplaySummary,
   deleteSavedReplay,
@@ -116,6 +117,19 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
   const [savedReplays, setSavedReplays] = useState<SavedReplaySummary[]>(() =>
     loadSavedReplays()
   );
+  // Keeps the current step centered in the event log as you scrub through the replay, instead
+  // of it staying wherever it happened to be scrolled to (or off-screen entirely) while
+  // currentSeq moves - one ref per rendered event list (the compact side panel, and the
+  // full-screen event_log modal), scrolled in the effect below whenever the step changes.
+  const eventListRef = useRef<HTMLDivElement | null>(null);
+  const eventListModalRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    for (const container of [eventListRef.current, eventListModalRef.current]) {
+      if (!container) continue;
+      const selected = container.querySelector(`[data-sequence="${currentSeq}"]`);
+      selected?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }, [currentSeq, activeModal]);
   // Which candidate action's board location the user picked to inspect in the Decision
   // Inspector panel below - drives the ghost marker on the board (see actionBoardTarget).
   const [ghostCandidateIdx, setGhostCandidateIdx] = useState<number | null>(null);
@@ -463,6 +477,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
               turn={reconstructedState.turn}
               rollTriggerKey={`replay-${currentSeq}-${reconstructedState.lastDiceRoll?.total ?? 0}`}
               locale={locale}
+              animate={false}
             />
           </div>
           {(() => {
@@ -542,7 +557,10 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', fontSize: '0.82rem' }}>
                   <strong>
-                    {stepComparison.playerName}:{' '}
+                    <span style={playerBadgeStyle(replay.initialState.players.find((p) => p.id === stepComparison.playerId)?.color)}>
+                      {stepComparison.playerName}
+                    </span>
+                    :{' '}
                     {formatActionDescription(stepComparison.actualAction, locale, replay?.events[currentSeq - 1]?.details)}
                   </strong>
                   <span
@@ -662,14 +680,14 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
               ))}
             </select>
           </div>
-          <div className="panel-scroll event-list">
+          <div className="panel-scroll event-list" ref={eventListRef}>
             {filteredEvents.map((ev) => {
-              const pName =
-                replay.initialState.players.find((p) => p.id === ev.playerId)?.name ?? ev.playerId;
+              const evPlayer = replay.initialState.players.find((p) => p.id === ev.playerId);
               const isSelected = ev.sequence === currentSeq;
               return (
                 <div
                   key={ev.sequence}
+                  data-sequence={ev.sequence}
                   className="event-item"
                   onClick={() => setCurrentSeq(ev.sequence)}
                   style={{
@@ -678,7 +696,8 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                     background: isSelected ? 'rgba(245, 158, 11, 0.16)' : '#0d1a29'
                   }}
                 >
-                  <strong>#{ev.sequence}</strong> [T{ev.turn}] <strong>{pName}</strong>:{' '}
+                  <strong>#{ev.sequence}</strong> [T{ev.turn}]{' '}
+                  <span style={playerBadgeStyle(evPlayer?.color)}>{evPlayer?.name ?? ev.playerId}</span>:{' '}
                   {formatActionDescription(ev.action, locale, ev.details)}
                 </div>
               );
@@ -1190,7 +1209,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                                       borderRadius: 4
                                     }}
                                   >
-                                    {res === 'wood' ? '🪵 Lemn' : res === 'brick' ? '🧱 Argilă' : res === 'wheat' ? '🌾 Grâu' : res === 'sheep' ? '🐑 Lână' : '⛰️ Minereu'}
+                                    <ResourceIcon resource={res as ResourceType} height={16} />{' '}{res === 'wood' ? 'Lemn' : res === 'brick' ? 'Argilă' : res === 'wheat' ? 'Grâu' : res === 'sheep' ? 'Lână' : 'Minereu'}
                                   </span>
                                 ))}
                               </div>
@@ -1662,22 +1681,27 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                   <option value="trade_bank">trade_bank</option>
                 </select>
               </div>
-              <div className="event-list">
+              <div className="event-list" ref={eventListModalRef}>
                 {filteredEvents.map((ev) => {
-                  const pName =
-                    replay.initialState.players.find((p) => p.id === ev.playerId)?.name ??
-                    ev.playerId;
+                  const evPlayer = replay.initialState.players.find((p) => p.id === ev.playerId);
+                  const isSelected = ev.sequence === currentSeq;
                   return (
                     <div
                       key={ev.sequence}
+                      data-sequence={ev.sequence}
                       className="event-item"
-                      style={{ cursor: 'pointer' }}
+                      style={{
+                        cursor: 'pointer',
+                        borderLeftColor: isSelected ? 'var(--accent-gold)' : undefined,
+                        background: isSelected ? 'rgba(245, 158, 11, 0.16)' : undefined
+                      }}
                       onClick={() => {
                         setCurrentSeq(ev.sequence);
                         setActiveModal('none');
                       }}
                     >
-                      <strong>#{ev.sequence}</strong> [T{ev.turn}] <strong>{pName}</strong>:{' '}
+                      <strong>#{ev.sequence}</strong> [T{ev.turn}]{' '}
+                      <span style={playerBadgeStyle(evPlayer?.color)}>{evPlayer?.name ?? ev.playerId}</span>:{' '}
                       {formatActionDescription(ev.action, locale, ev.details)}
                     </div>
                   );

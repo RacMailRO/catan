@@ -15,7 +15,12 @@ import {
 import { BoardSvg } from './BoardSvg';
 import { Locale } from '../i18n';
 
-export type SandboxTool = 'settlement' | 'city' | 'road' | 'ship' | 'robber' | 'eraser';
+export type SandboxTool = 'settlement' | 'city' | 'road' | 'ship' | 'robber' | 'pirate' | 'eraser';
+// The sandbox's layout picker uses friendlier names than the engine's boardLayout values.
+function toEngineLayout(l: 'random_balanced' | 'official_beginner' | 'pure_random'): 'random_balanced' | 'beginner_fixed' | 'random_pure' {
+  return l === 'official_beginner' ? 'beginner_fixed' : l === 'pure_random' ? 'random_pure' : 'random_balanced';
+}
+
 export type SandboxPlacementMode = 'rules' | 'free';
 
 export interface SandboxModeProps {
@@ -97,7 +102,7 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
   const [placementMode, setPlacementMode] = useState<SandboxPlacementMode>('free');
 
   const [board, setBoard] = useState<BoardState>(() =>
-    generateStandardBoard(seed, layoutAlgorithm, scenario).board
+    generateStandardBoard(seed, toEngineLayout(layoutAlgorithm), scenario).board
   );
 
   const activePlayerId = `player_${selectedColor}`;
@@ -106,18 +111,18 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
   const handleRegenerate = useCallback((newSeed?: number) => {
     const s = newSeed ?? Math.floor(Math.random() * 1000000);
     setSeed(s);
-    setBoard(generateStandardBoard(s, layoutAlgorithm, scenario).board);
+    setBoard(generateStandardBoard(s, toEngineLayout(layoutAlgorithm), scenario).board);
   }, [layoutAlgorithm, scenario]);
 
   // When scenario or layout changes, re-generate
   const handleScenarioChange = (newScenario: BoardScenario) => {
     setScenario(newScenario);
-    setBoard(generateStandardBoard(seed, layoutAlgorithm, newScenario).board);
+    setBoard(generateStandardBoard(seed, toEngineLayout(layoutAlgorithm), newScenario).board);
   };
 
   const handleLayoutChange = (newLayout: 'random_balanced' | 'official_beginner' | 'pure_random') => {
     setLayoutAlgorithm(newLayout);
-    setBoard(generateStandardBoard(seed, newLayout, scenario).board);
+    setBoard(generateStandardBoard(seed, toEngineLayout(newLayout), scenario).board);
   };
 
   // Clear all pieces from board
@@ -144,12 +149,6 @@ export const SandboxMode: React.FC<SandboxModeProps> = ({ locale, onExit }) => {
       if (selectedTool === 'robber') {
         for (const [hexId, hex] of Object.entries(board.hexes)) {
           if (hexId !== board.robberHexId && hex.terrain !== 'sea' && hex.terrain !== 'fog') {
-            hSet.add(hexId);
-          }
-        }
-      } else if (selectedTool === 'pirate') {
-        for (const [hexId, hex] of Object.entries(board.hexes)) {
-          if (hexId !== board.pirateHexId && hex.terrain === 'sea') {
             hSet.add(hexId);
           }
         }

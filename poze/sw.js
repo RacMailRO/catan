@@ -1,5 +1,5 @@
 // Catan v2 Service Worker for PWA Offline Shell & Caching
-const CACHE_NAME = 'catan-v2-cache-v3';
+const CACHE_NAME = 'catan-v2-cache-v4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -61,6 +61,22 @@ self.addEventListener('fetch', (event) => {
     url.search.includes('token=') ||
     url.search.includes('v=')
   ) {
+    return;
+  }
+
+  // Navigations / index.html: network-first so a new deploy is never masked by a stale shell.
+  if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html') {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy).catch(() => {}));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request).then((c) => c || caches.match('/index.html')))
+    );
     return;
   }
 

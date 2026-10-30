@@ -1,6 +1,37 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { DevCardType, ResourceType } from '@catan/core';
+import { DevCardType, PlayerColor, ResourceType } from '@catan/core';
 import { DEV_CARD_LABELS, DEV_CARD_SHORT_LABELS, Locale, RESOURCE_LABELS } from '../i18n';
+
+// Readable text color on top of each player's own board color as a filled badge background -
+// 'blue'/'green'/'red'/'brown' are dark enough for white text, 'orange'/'white' need black
+// instead (plain colored text on the app's own dark background was too low contrast to read at
+// a glance - a blue name on navy panels in particular).
+export const PLAYER_BADGE_TEXT_COLOR: Record<PlayerColor, string> = {
+  red: '#ffffff',
+  blue: '#ffffff',
+  green: '#ffffff',
+  brown: '#ffffff',
+  orange: '#1a1206',
+  white: '#1a1206'
+};
+
+// Shared "player name as a filled badge" style - used anywhere a player's name needs to be
+// identifiable by board color at a glance (trade banners/modals, rejection lists, the AI
+// Decision Inspector...) without the low-contrast "colored text on a dark panel" problem plain
+// `color: p.color` text had.
+export function playerBadgeStyle(color?: PlayerColor): React.CSSProperties {
+  return color
+    ? {
+        display: 'inline-block',
+        background: color,
+        color: PLAYER_BADGE_TEXT_COLOR[color],
+        fontWeight: 700,
+        padding: '1px 7px',
+        borderRadius: 999,
+        fontSize: '0.92em'
+      }
+    : { fontWeight: 700 };
+}
 
 /**
  * Exact sprite coordinates in /cards.jpg (1612x2000, 5 columns x 4 rows).
@@ -25,6 +56,50 @@ export const DEV_CARD_SPRITE_POS: Record<DevCardType | 'back', { x: string; y: s
   back: { x: '100%', y: '66.6667%' }
 };
 
+/**
+ * Small picture of a resource (cropped from the same card sprite used for the player's hand)
+ * - used instead of the emoji icons in trades, notifications, bank, etc. so a resource looks
+ * the same everywhere in the game and is easy to recognise at a glance.
+ */
+export const ResourceIcon: React.FC<{ resource: ResourceType; height?: number; locale?: Locale }> = ({
+  resource,
+  height = 20,
+  locale = 'ro'
+}) => {
+  const pos = RESOURCE_CARD_SPRITE_POS[resource];
+  // One sprite cell is 322x500 px (1612x2000 / 5x4 grid).
+  const width = Math.round(height * 0.645);
+  return (
+    <span
+      className="resource-icon"
+      title={RESOURCE_LABELS[locale][resource]}
+      style={{
+        display: 'inline-block',
+        verticalAlign: 'middle',
+        width,
+        height,
+        margin: '0 2px',
+        borderRadius: 3,
+        backgroundImage: 'url("/cards.jpg")',
+        backgroundSize: '500% 400%',
+        backgroundPosition: `${pos.x} ${pos.y}`,
+        boxShadow: '0 0 0 1px rgba(0,0,0,0.55)'
+      }}
+    />
+  );
+};
+
+/**
+ * Turns "{{res:wood}}" tokens inside a plain notification string into ResourceIcon images,
+ * so strings built with template literals can still show pictures instead of emoji.
+ */
+export function renderResourceTokens(text: string): React.ReactNode {
+  const parts = text.split(/\{\{res:(wood|brick|sheep|wheat|ore)\}\}/g);
+  if (parts.length === 1) return text;
+  return parts.map((part, i) =>
+    i % 2 === 1 ? <ResourceIcon key={i} resource={part as ResourceType} /> : <React.Fragment key={i}>{part}</React.Fragment>
+  );
+}
 export interface ResourceCardSpriteProps {
   resource: ResourceType;
   count: number;
@@ -254,6 +329,10 @@ export interface AnimatedDiceWidgetProps {
   canRoll?: boolean;
   onRollClick?: () => void;
   locale: Locale;
+  /** false (replay viewer) shows die1/die2 immediately, as they actually landed, with no spin -
+   * scrubbing to a step should show what was rolled right then, not replay a roll animation
+   * that implies this is happening live. Defaults to true for live gameplay. */
+  animate?: boolean;
 }
 
 export const AnimatedDiceWidget: React.FC<AnimatedDiceWidgetProps> = ({
@@ -264,7 +343,8 @@ export const AnimatedDiceWidget: React.FC<AnimatedDiceWidgetProps> = ({
   rollTriggerKey,
   canRoll = false,
   onRollClick,
-  locale
+  locale,
+  animate = true
 }) => {
   const [isRolling, setIsRolling] = useState(false);
   const [displayDie1, setDisplayDie1] = useState<number>(die1 ?? 3);
@@ -272,6 +352,14 @@ export const AnimatedDiceWidget: React.FC<AnimatedDiceWidgetProps> = ({
 
   useEffect(() => {
     if (die1 === undefined || die2 === undefined) return;
+
+    if (!animate) {
+      setDisplayDie1(die1);
+      setDisplayDie2(die2);
+      setIsRolling(false);
+      return;
+    }
+
     setIsRolling(true);
 
     let tick = 0;
@@ -292,7 +380,7 @@ export const AnimatedDiceWidget: React.FC<AnimatedDiceWidgetProps> = ({
       clearInterval(interval);
       clearTimeout(timeout);
     };
-  }, [rollTriggerKey, die1, die2, turn]);
+  }, [rollTriggerKey, die1, die2, turn, animate]);
 
   const isSeven = total === 7 && !isRolling;
 

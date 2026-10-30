@@ -140,7 +140,10 @@ export const TERRAIN_LABELS: Record<Locale, Record<TerrainType, string>> = {
     pasture: 'Pășune (Lână)',
     fields: 'Câmp (Grâu)',
     mountains: 'Munte (Minereu)',
-    desert: 'Deșert'
+    desert: 'Deșert',
+    gold_field: 'Câmp de Aur (Resursă la alegere)',
+    sea: 'Mare',
+    fog: 'Ceață (Neexplorat)'
   },
   en: {
     forest: 'Forest (Wood)',
@@ -148,7 +151,10 @@ export const TERRAIN_LABELS: Record<Locale, Record<TerrainType, string>> = {
     pasture: 'Pasture (Sheep)',
     fields: 'Fields (Wheat)',
     mountains: 'Mountains (Ore)',
-    desert: 'Desert'
+    desert: 'Desert',
+    gold_field: 'Gold Field (Resource of choice)',
+    sea: 'Sea',
+    fog: 'Fog (Unexplored)'
   }
 };
 
@@ -355,6 +361,7 @@ export const PHASE_LABELS: Record<Locale, Record<TurnPhase, string>> = {
     steal_resource: 'Alege adversarul de la care furi o resursă',
     road_building_card: 'Carte Progres: Plasează drumurile gratuite',
     main_actions: 'Faza Principală: Comerț, Construcții și Cărți de Dezvoltare',
+    special_building: 'Construcție Specială: Poți construi înainte de tura următoare',
     game_over: 'Partidă Încheiată!'
   },
   en: {
@@ -368,6 +375,7 @@ export const PHASE_LABELS: Record<Locale, Record<TurnPhase, string>> = {
     steal_resource: 'Choose an adjacent opponent to steal from',
     road_building_card: 'Road Building: Place free roads',
     main_actions: 'Main Phase: Trade, Build & Play Development Cards',
+    special_building: 'Special Building: You may build before the next turn',
     game_over: 'Game Over!'
   }
 };
@@ -436,6 +444,18 @@ export function formatActionDescription(
       return locale === 'ro'
         ? `Drum inițial pe ${action.edgeId}`
         : `Initial road on ${action.edgeId}`;
+    case 'place_initial_ship':
+      return locale === 'ro'
+        ? `Navă inițială pe ${action.edgeId}`
+        : `Initial ship on ${action.edgeId}`;
+    case 'build_ship':
+      return locale === 'ro' ? `Construiește navă pe ${action.edgeId}` : `Build ship on ${action.edgeId}`;
+    case 'move_ship':
+      return locale === 'ro'
+        ? `Mută nava de pe ${action.fromEdgeId} pe ${action.toEdgeId}`
+        : `Move ship from ${action.fromEdgeId} to ${action.toEdgeId}`;
+    case 'pass_special_building':
+      return locale === 'ro' ? 'Pasează construcția specială' : 'Pass special building';
     case 'roll_dice':
       return locale === 'ro' ? 'Aruncare zaruri' : 'Roll dice';
     case 'discard_cards':

@@ -35,7 +35,8 @@ import {
   PublicPlayerInfo,
   ResourceCount,
   ResourceType,
-  TERRAIN_TO_RESOURCE
+  TERRAIN_TO_RESOURCE,
+  TerrainType
 } from './types';
 
 export interface ParticipantConfig {
@@ -1976,7 +1977,7 @@ export function applyAction(
         edgeId: action.edgeId,
         builtAtTurn: nextState.turn
       };
-      player.remainingPieces.ships -= 1;
+      player.remainingPieces.ships = (player.remainingPieces.ships ?? 0) - 1;
       updateLongestRoadState(nextState);
       exploreFogHexesAroundEdge(nextState, action.edgeId, playerId);
       checkVictory(nextState, nowMs);
@@ -1990,7 +1991,7 @@ export function applyAction(
         edgeId: action.edgeId,
         builtAtTurn: 0
       };
-      player.remainingPieces.ships -= 1;
+      player.remainingPieces.ships = (player.remainingPieces.ships ?? 0) - 1;
       nextState.lastPlacedSettlementVertexId = undefined;
       updateLongestRoadState(nextState);
       exploreFogHexesAroundEdge(nextState, action.edgeId, playerId);

@@ -1,9 +1,14 @@
 {
-  "version": "v1.148",
-  "commitCount": 148,
-  "shortHash": "f51aa31",
-  "buildDate": "2026-10-30T11:15:33.610Z",
+  "version": "v1.149",
+  "commitCount": 149,
+  "shortHash": "119fae5",
+  "buildDate": "2026-10-30T12:23:09.452Z",
   "releaseNotes": [
+    {
+      "hash": "119fae5",
+      "date": "2026-10-30",
+      "message": "Update version stamps v1.148"
+    },
     {
       "hash": "f51aa31",
       "date": "2026-10-30",
@@ -248,11 +253,6 @@
       "hash": "75c0b39",
       "date": "2026-10-27",
       "message": "feat(lobby): enlarge card gallery with rule text, add Longest Road/Largest Army cards and a full rules modal"
-    },
-    {
-      "hash": "cdb749a",
-      "date": "2026-10-27",
-      "message": "fix(start.bat): wait for backend+web readiness instead of a fixed 2s sleep"
     }
   ]
 }

@@ -39,7 +39,7 @@ export const PlayerColorSchema = z.enum(['red', 'blue', 'orange', 'green', 'brow
 export const GameRulesConfigSchema = z
   .object({
     presetId: z.enum(['standard', 'small_group', 'custom']).optional(),
-    victoryPointsToWin: z.union([z.literal(10), z.literal(12), z.literal(14)]).optional(),
+    victoryPointsToWin: z.number().int().min(3).max(30).optional(),
     startingResourcesRule: z.enum(['second_settlement', 'both_settlements']).optional(),
     knightStealRule: z.enum(['single', 'all_adjacent']).optional(),
     robber7StealRule: z.enum(['single', 'all_adjacent']).optional(),

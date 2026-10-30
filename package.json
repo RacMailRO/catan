@@ -13,7 +13,8 @@
     "dev:web": "npm --workspace=@catan/web run dev",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "node scripts/generate-version.mjs && npm --workspace=@catan/web run build && npm --workspace=@catan/server run build && node scripts/generate-version.mjs",
+    "clean": "node scripts/clean-dist.mjs",
+    "build": "node scripts/clean-dist.mjs && node scripts/generate-version.mjs && npm --workspace=@catan/web run build && npm --workspace=@catan/server run build && node scripts/generate-version.mjs",
     "simulate": "npm --workspace=@catan/server run simulate"
   },
   "devDependencies": {

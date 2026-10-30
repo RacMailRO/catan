@@ -159,8 +159,8 @@ describe('Catan Seafarers (Navigatori) & Custom Map Scenarios', () => {
 
     const result = applyAction(game, 'p1', { type: 'build_ship', edgeId: waterEdge! });
     const nextState = result.state;
-    expect(nextState.board.ships[waterEdge!]).toBeDefined();
-    expect(nextState.board.ships[waterEdge!]!.ownerId).toBe('p1');
+    expect(nextState.board.ships![waterEdge!]).toBeDefined();
+    expect(nextState.board.ships![waterEdge!]!.ownerId).toBe('p1');
     const p1Next = nextState.players.find((p) => p.id === 'p1')!;
     expect(p1Next.remainingPieces.ships).toBe(14);
     expect(p1Next.resources.wood).toBe(1);
@@ -189,7 +189,7 @@ describe('Catan Seafarers (Navigatori) & Custom Map Scenarios', () => {
 
     // Place a road on e1 and a ship on e2
     game.board.roads[e1] = { ownerId: 'p1', edgeId: e1 };
-    game.board.ships[e2] = { ownerId: 'p1', edgeId: e2 };
+    game.board.ships![e2] = { ownerId: 'p1', edgeId: e2 };
 
     // With a settlement at coastalV, road and ship connect!
     game.board.buildings[coastalV.id] = { ownerId: 'p1', type: 'settlement', vertexId: coastalV.id };
@@ -227,7 +227,7 @@ describe('Catan Seafarers (Navigatori) & Custom Map Scenarios', () => {
     const seaEdge = Object.values(game.board.edges).find((e) =>
       e.adjacentHexIds.includes(otherSeaHex.id)
     )!;
-    game.board.ships[seaEdge.id] = { ownerId: 'p2', edgeId: seaEdge.id };
+    game.board.ships![seaEdge.id] = { ownerId: 'p2', edgeId: seaEdge.id };
     game.players[1]!.resources.wood = 1;
 
     // Moving to sea hex moves the PIRATE (not the robber!)
@@ -345,7 +345,7 @@ describe('Catan Seafarers (Navigatori) & Custom Map Scenarios', () => {
 
     // Place settlement at v1 and ship at coastalEdge (turn 1)
     game.board.buildings[coastalEdge.v1] = { ownerId: 'p1', type: 'settlement', vertexId: coastalEdge.v1 };
-    game.board.ships[coastalEdge.id] = { ownerId: 'p1', edgeId: coastalEdge.id, builtAtTurn: 1 };
+    game.board.ships![coastalEdge.id] = { ownerId: 'p1', edgeId: coastalEdge.id, builtAtTurn: 1 };
 
     const legalActions = getLegalActions(game, 'p1');
     const moveActions = legalActions.filter((a) => a.type === 'move_ship');
@@ -353,9 +353,9 @@ describe('Catan Seafarers (Navigatori) & Custom Map Scenarios', () => {
 
     const firstMove = moveActions[0] as { type: 'move_ship'; fromEdgeId: string; toEdgeId: string };
     const res = applyAction(game, 'p1', firstMove);
-    expect(res.state.board.ships[firstMove.fromEdgeId]).toBeUndefined();
-    expect(res.state.board.ships[firstMove.toEdgeId]).toBeDefined();
-    expect(res.state.board.ships[firstMove.toEdgeId]!.ownerId).toBe('p1');
+    expect(res.state.board.ships![firstMove.fromEdgeId]).toBeUndefined();
+    expect(res.state.board.ships![firstMove.toEdgeId]).toBeDefined();
+    expect(res.state.board.ships![firstMove.toEdgeId]!.ownerId).toBe('p1');
     expect(res.state.players[0]!.hasMovedShipThisTurn).toBe(true);
 
     // Cannot move a second time in the same turn
@@ -406,7 +406,7 @@ describe('Catan Seafarers (Navigatori) & Custom Map Scenarios', () => {
 
     // Connect a ship to smallVert
     const adjEdge = smallVert.adjacentEdgeIds[0]!;
-    game.board.ships[adjEdge] = { ownerId: 'p1', edgeId: adjEdge, builtAtTurn: 1 };
+    game.board.ships![adjEdge] = { ownerId: 'p1', edgeId: adjEdge, builtAtTurn: 1 };
 
     const res = applyAction(game, 'p1', { type: 'build_settlement', vertexId: smallVert.id });
     // Received +2 Special VP (Catan Chits) for first settlement on foreign island!
