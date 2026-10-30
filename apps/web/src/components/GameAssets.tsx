@@ -79,11 +79,11 @@ export const ResourceIcon: React.FC<{ resource: ResourceType; height?: number; l
         width,
         height,
         margin: '0 2px',
-        borderRadius: 3,
+        borderRadius: height > 30 ? 5 : 3,
         backgroundImage: 'url("/cards.jpg")',
         backgroundSize: '500% 400%',
         backgroundPosition: `${pos.x} ${pos.y}`,
-        boxShadow: '0 0 0 1px rgba(0,0,0,0.55)'
+        boxShadow: height > 30 ? '0 3px 8px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.15)' : '0 0 0 1px rgba(0,0,0,0.55)'
       }}
     />
   );

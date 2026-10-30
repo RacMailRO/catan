@@ -498,6 +498,7 @@ export const App: React.FC = () => {
   interface TradeBannerEntry {
     offer: TradeOffer;
     firstShownAtMs: number;
+    resolvedAtMs?: number;
   }
   const [visibleTradeOffers, setVisibleTradeOffers] = useState<Record<string, TradeBannerEntry>>({});
   const prevTradeStatusRef = useRef<Record<string, TradeOffer['status']>>({});
@@ -2242,8 +2243,14 @@ export const App: React.FC = () => {
       for (const offer of gameState.activeTradeOffers) {
         if (dismissedTradeOfferIds.has(offer.id)) continue;
         const existing = next[offer.id];
+        const isResolved = offer.status !== 'open';
+        const resolvedAt = isResolved ? (existing?.resolvedAtMs ?? now) : undefined;
         if (!existing || existing.offer !== offer) {
-          next[offer.id] = { offer, firstShownAtMs: existing?.firstShownAtMs ?? now };
+          next[offer.id] = {
+            offer,
+            firstShownAtMs: existing?.firstShownAtMs ?? now,
+            resolvedAtMs: resolvedAt
+          };
           changed = true;
         }
       }
@@ -2253,8 +2260,13 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     const timers = Object.entries(visibleTradeOffers).map(([id, entry]) => {
-      if (entry.offer.status === 'open') return null;
-      const remaining = Math.max(0, 5000 - (Date.now() - entry.firstShownAtMs));
+      const now = Date.now();
+      // Auto-dismiss open offers after 7 seconds (within the 5-8s requested by the user).
+      // If resolved (accepted/rejected/cancelled), stay visible for 4.5 seconds after resolution.
+      const remaining = entry.offer.status === 'open'
+        ? Math.max(0, 7000 - (now - entry.firstShownAtMs))
+        : Math.max(0, 4500 - (now - (entry.resolvedAtMs ?? entry.firstShownAtMs)));
+
       return setTimeout(() => {
         // Marking it dismissed (not just dropping it from visibleTradeOffers) is what stops the
         // tracking effect above from reviving it the next time gameState changes.
@@ -5412,12 +5424,22 @@ export const App: React.FC = () => {
               visibleTradeOffers regardless of how fast the offer itself resolves. */}
           {(() => {
             const nameStyle = playerBadgeStyle;
-            const resourceList = (counts: ResourceCount) =>
-              {
-                const items = ALL_RESOURCES.filter((r) => counts[r] > 0)
-                .map((r) => (<span key={r} className="res-count"><ResourceIcon resource={r} />{counts[r]}</span>));
-                return items.length > 0 ? items : '-';
-              };
+            const resourceList = (counts: ResourceCount) => {
+              const items = ALL_RESOURCES.filter((r) => counts[r] > 0);
+              if (items.length === 0) return <span style={{ color: 'var(--text-muted)' }}>—</span>;
+              return (
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', padding: '2px 0' }}>
+                  {items.map((r) => (
+                    <span key={r} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <ResourceIcon resource={r} height={52} />
+                      <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#f8fafc', textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>
+                        {counts[r]}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              );
+            };
 
             const entry = Object.values(visibleTradeOffers)
               .sort((a, b) => b.firstShownAtMs - a.firstShownAtMs)
@@ -5464,7 +5486,7 @@ export const App: React.FC = () => {
                   padding: '0.55rem 0.9rem',
                   boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
                   maxWidth: '94vw',
-                  width: 440,
+                  width: 460,
                   textAlign: 'center'
                 }}
               >
@@ -5475,30 +5497,40 @@ export const App: React.FC = () => {
                     </>
                   )}
                 </div>
-                <div style={{ display: 'flex', gap: 8, margin: '6px 0' }}>
+                <div style={{ display: 'flex', gap: 8, margin: '8px 0' }}>
                   <div
                     style={{
                       flex: 1,
                       background: 'rgba(34, 197, 94, 0.14)',
-                      border: '1px solid rgba(34, 197, 94, 0.4)',
+                      border: '1px solid rgba(34, 197, 94, 0.45)',
                       borderRadius: 8,
-                      padding: '0.4rem 0.3rem'
+                      padding: '0.5rem 0.4rem',
+                      minHeight: 80,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
+                      alignItems: 'center'
                     }}
                   >
-                    <div style={{ fontSize: '0.68rem', color: '#4ade80', fontWeight: 700, textTransform: 'uppercase' }}>oferă</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{resourceList(offer.offering) || '—'}</div>
+                    <div style={{ fontSize: '0.72rem', color: '#4ade80', fontWeight: 800, textTransform: 'uppercase', marginBottom: 2 }}>oferă</div>
+                    <div>{resourceList(offer.offering)}</div>
                   </div>
                   <div
                     style={{
                       flex: 1,
                       background: 'rgba(239, 68, 68, 0.14)',
-                      border: '1px solid rgba(239, 68, 68, 0.4)',
+                      border: '1px solid rgba(239, 68, 68, 0.45)',
                       borderRadius: 8,
-                      padding: '0.4rem 0.3rem'
+                      padding: '0.5rem 0.4rem',
+                      minHeight: 80,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
+                      alignItems: 'center'
                     }}
                   >
-                    <div style={{ fontSize: '0.68rem', color: '#f87171', fontWeight: 700, textTransform: 'uppercase' }}>cere</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{resourceList(offer.requesting) || '—'}</div>
+                    <div style={{ fontSize: '0.72rem', color: '#f87171', fontWeight: 800, textTransform: 'uppercase', marginBottom: 2 }}>cere</div>
+                    <div>{resourceList(offer.requesting)}</div>
                   </div>
                 </div>
                 <div style={{ fontSize: '0.78rem', marginBottom: 2 }}>{statusNode}</div>
