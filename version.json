@@ -1,9 +1,14 @@
 {
-  "version": "v1.149",
-  "commitCount": 149,
-  "shortHash": "119fae5",
-  "buildDate": "2026-10-30T12:23:09.452Z",
+  "version": "v1.150",
+  "commitCount": 150,
+  "shortHash": "09a532a",
+  "buildDate": "2026-10-30T12:47:24.751Z",
   "releaseNotes": [
+    {
+      "hash": "09a532a",
+      "date": "2026-10-30",
+      "message": "feat: centered notifications, resource images for trade and bank, dock card grid fix, clean build, and type fixes"
+    },
     {
       "hash": "119fae5",
       "date": "2026-10-30",
@@ -248,11 +253,6 @@
       "hash": "edab830",
       "date": "2026-10-27",
       "message": "fix(start.bat): launch servers via hidden Start-Process, not broken start/cmd spawn"
-    },
-    {
-      "hash": "75c0b39",
-      "date": "2026-10-27",
-      "message": "feat(lobby): enlarge card gallery with rule text, add Longest Road/Largest Army cards and a full rules modal"
     }
   ]
 }
