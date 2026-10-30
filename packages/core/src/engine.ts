@@ -865,6 +865,21 @@ export function getLegalActions(state: GameState, playerId: string): GameAction[
       if (hasResources(player.resources, offer.requesting)) {
         actions.push({ type: 'respond_trade', offerId: offer.id, response: 'accept' });
       }
+      // Counter with different terms instead of a flat accept/reject of what was asked -
+      // enumerated the same way propose_trade below is (every 1-for-1 swap the player can
+      // actually afford), scoped to this specific offer.
+      for (const give of ALL_RESOURCES) {
+        if (player.resources[give] < 1) continue;
+        for (const receive of ALL_RESOURCES) {
+          if (receive === give) continue;
+          actions.push({
+            type: 'counter_trade',
+            offerId: offer.id,
+            offering: { ...createEmptyResources(), [give]: 1 },
+            requesting: { ...createEmptyResources(), [receive]: 1 }
+          });
+        }
+      }
     }
     return actions;
   }
@@ -960,7 +975,8 @@ export function getLegalActions(state: GameState, playerId: string): GameAction[
       }
 
       if (
-        player.remainingPieces.ships > 0 &&
+        isScenarioWithShips(state.rules.boardScenario) &&
+        (player.remainingPieces.ships ?? 0) > 0 &&
         hasResources(player.resources, BUILDING_COSTS.ship)
       ) {
         for (const eId of Object.keys(state.board.edges)) {
@@ -1021,7 +1037,8 @@ export function getLegalActions(state: GameState, playerId: string): GameAction[
 
       // Build ship
       if (
-        player.remainingPieces.ships > 0 &&
+        isScenarioWithShips(state.rules.boardScenario) &&
+        (player.remainingPieces.ships ?? 0) > 0 &&
         hasResources(player.resources, BUILDING_COSTS.ship)
       ) {
         for (const eId of Object.keys(state.board.edges)) {
@@ -1303,6 +1320,43 @@ export function validateAction(
           reason: 'Nu ai resursele solicitate în ofertă.'
         };
       }
+    }
+    return { valid: true };
+  }
+
+  if (action.type === 'counter_trade') {
+    if (state.phase !== 'main_actions') {
+      return { valid: false, code: 'WRONG_PHASE', reason: 'Comerțul este permis doar în faza principală.' };
+    }
+    const offer = state.activeTradeOffers.find((o) => o.id === action.offerId);
+    if (!offer || offer.status !== 'open') {
+      return { valid: false, code: 'OFFER_NOT_OPEN', reason: 'Oferta de schimb nu mai este activă.' };
+    }
+    if (offer.fromPlayerId === playerId) {
+      return { valid: false, code: 'SELF_TRADE', reason: 'Nu poți contra-oferi propriei oferte.' };
+    }
+    if (offer.toPlayerId && offer.toPlayerId !== playerId) {
+      return { valid: false, code: 'NOT_TARGET_PLAYER', reason: 'Oferta este adresată altui jucător.' };
+    }
+    const offerTotal = totalResourceCount(action.offering);
+    const reqTotal = totalResourceCount(action.requesting);
+    if (offerTotal <= 0 || reqTotal <= 0) {
+      return { valid: false, code: 'EMPTY_TRADE', reason: 'Contra-oferta trebuie să conțină resurse oferite și solicitate.' };
+    }
+    for (const r of ALL_RESOURCES) {
+      if ((action.offering[r] ?? 0) < 0 || (action.requesting[r] ?? 0) < 0) {
+        return { valid: false, code: 'NEGATIVE_AMOUNT', reason: 'Cantitățile nu pot fi negative.' };
+      }
+      if ((action.offering[r] ?? 0) > 0 && (action.requesting[r] ?? 0) > 0) {
+        return {
+          valid: false,
+          code: 'OVERLAPPING_TRADE_RESOURCE',
+          reason: 'Nu poți oferi și cere aceeași resursă în același schimb.'
+        };
+      }
+    }
+    if (!hasResources(player.resources, action.offering)) {
+      return { valid: false, code: 'INSUFFICIENT_RESOURCES', reason: 'Nu deții resursele pe care vrei să le oferi.' };
     }
     return { valid: true };
   }
@@ -2176,6 +2230,7 @@ export function applyAction(
         subtractResourcesInPlace(player.resources, offer.requesting);
         addResourcesInPlace(proposer.resources, offer.requesting);
         offer.status = 'accepted';
+        offer.acceptedByPlayerId = playerId;
         details.acceptedBy = playerId;
       } else {
         if (!offer.rejectedByPlayerIds.includes(playerId)) {
@@ -2196,6 +2251,47 @@ export function applyAction(
         }
         details.rejectedBy = playerId;
       }
+      break;
+    }
+
+    case 'counter_trade': {
+      // Reject the original offer on this player's behalf - identical bookkeeping to a plain
+      // respond_trade reject, since a counter IS a (polite) rejection of those exact terms.
+      const originalOffer = nextState.activeTradeOffers.find((o) => o.id === action.offerId)!;
+      if (!originalOffer.rejectedByPlayerIds.includes(playerId)) {
+        originalOffer.rejectedByPlayerIds.push(playerId);
+      }
+      if (!originalOffer.rejectionReasons) {
+        originalOffer.rejectionReasons = {};
+      }
+      originalOffer.rejectionReasons[playerId] = 'Contra-ofertă';
+      const otherPlayersCount = nextState.players.length - 1;
+      if (
+        (originalOffer.toPlayerId && originalOffer.toPlayerId === playerId) ||
+        originalOffer.rejectedByPlayerIds.length >= otherPlayersCount
+      ) {
+        originalOffer.status = 'rejected';
+      }
+      details.rejectedBy = playerId;
+      details.counteredOfferId = originalOffer.id;
+
+      // ...and immediately put this player's own terms on the table, addressed back to the
+      // original proposer - the new offer this player actually wants, not a mirror of the old one.
+      const counterOfferId = `TR_${nextState.sequence + 1}`;
+      const timeoutMs = (nextState.rules.tradeOfferTimeoutSec || 30) * 1000;
+      const counterOffer = {
+        id: counterOfferId,
+        fromPlayerId: playerId,
+        toPlayerId: originalOffer.fromPlayerId,
+        offering: cloneResources(action.offering),
+        requesting: cloneResources(action.requesting),
+        createdAtMs: nowMs,
+        expiresAtMs: nowMs + timeoutMs,
+        rejectedByPlayerIds: [],
+        status: 'open' as const
+      };
+      nextState.activeTradeOffers.push(counterOffer);
+      details.offer = counterOffer;
       break;
     }
 

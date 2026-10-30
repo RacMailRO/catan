@@ -19,6 +19,7 @@ import {
   ResourceCount,
   ResourceType,
   TERRAIN_TO_RESOURCE,
+  TradeOffer,
   canPlayDevCardType,
   createEmptyResources,
   createRulesConfig,
@@ -29,7 +30,8 @@ import {
   getPlayerView,
   hasResources,
   totalResourceCount,
-  calculateScore
+  calculateScore,
+  isScenarioWithShips
 } from '@catan/core';
 import {
   BenchmarkReport,
@@ -40,12 +42,26 @@ import {
 import { BoardSvg } from './components/BoardSvg';
 import {
   AnimatedDiceWidget,
+  Confetti,
   DevCardSprite,
   ResourceCardSprite
 } from './components/GameAssets';
 import { ReplayAndAnalysisView } from './components/ReplayAndAnalysisView';
+import { HallOfFameView } from './components/HallOfFameView';
 import { SandboxMode } from './components/SandboxMode';
-import { saveReplayToHistory } from './storage';
+import {
+  saveReplayToHistory,
+  loadSavedPlayerName,
+  savePlayerName,
+  loadSavedParticipants,
+  saveLobbyParticipants,
+  loadSavedRules,
+  saveLobbyRules,
+  loadSavedTimerConfig,
+  saveLobbyTimer,
+  loadSavedOnlineSession,
+  saveOnlineSession
+} from './storage';
 import {
   GameSyncPayload,
   LobbyState,
@@ -83,7 +99,37 @@ import {
   SCENARIO_LABELS
 } from './i18n';
 
-type ActiveTab = 'lobby' | 'game' | 'replay' | 'benchmark' | 'spectate' | 'sandbox';
+type ActiveTab = 'lobby' | 'game' | 'replay' | 'benchmark' | 'spectate' | 'sandbox' | 'hall_of_fame';
+
+// Readable text color on top of each player's own board color as a filled badge background -
+// 'blue'/'green'/'red'/'brown' are dark enough for white text, 'orange'/'white' need black
+// instead (plain colored text on the app's own dark background, used before this, was too low
+// contrast to read at a glance - a blue name on navy panels in particular).
+const PLAYER_BADGE_TEXT_COLOR: Record<PlayerColor, string> = {
+  red: '#ffffff',
+  blue: '#ffffff',
+  green: '#ffffff',
+  brown: '#ffffff',
+  orange: '#1a1206',
+  white: '#1a1206'
+};
+
+// Shared "player name as a filled badge" style - used anywhere a player's name needs to be
+// identifiable by board color at a glance (trade banners/modals, rejection lists...) without
+// the low-contrast "colored text on a dark panel" problem plain `color: p.color` text had.
+function playerBadgeStyle(color?: PlayerColor): React.CSSProperties {
+  return color
+    ? {
+        display: 'inline-block',
+        background: color,
+        color: PLAYER_BADGE_TEXT_COLOR[color],
+        fontWeight: 700,
+        padding: '1px 7px',
+        borderRadius: 999,
+        fontSize: '0.92em'
+      }
+    : { fontWeight: 700 };
+}
 
 const NAV_TAB_ICON: Record<ActiveTab, string> = {
   lobby: '⚙️',
@@ -91,7 +137,8 @@ const NAV_TAB_ICON: Record<ActiveTab, string> = {
   replay: '🎬',
   benchmark: '📈',
   spectate: '👁️',
-  sandbox: '🛠️'
+  sandbox: '🛠️',
+  hall_of_fame: '🏆'
 };
 
 const NAV_TAB_LABEL = (t: {
@@ -99,13 +146,15 @@ const NAV_TAB_LABEL = (t: {
   navGame: string;
   navReplay: string;
   navBenchmark: string;
+  navHallOfFame: string;
 }): Record<ActiveTab, string> => ({
   lobby: t.navLobby,
   game: t.navGame,
   replay: t.navReplay,
   benchmark: t.navBenchmark,
   spectate: 'Spectator',
-  sandbox: 'Mediu de Test'
+  sandbox: 'Mediu de Test',
+  hall_of_fame: t.navHallOfFame
 });
 
 export function isLocalEnvironment(): boolean {
@@ -128,31 +177,13 @@ export function isLocalEnvironment(): boolean {
   );
 }
 
-// Remembers the player's own display name per device/browser, so it doesn't need retyping
-// every time — used both for the host's own seat and the "join by code" guest name field.
-const PLAYER_NAME_STORAGE_KEY = 'catan_player_name';
 
-function loadSavedPlayerName(): string | null {
-  try {
-    const saved = localStorage.getItem(PLAYER_NAME_STORAGE_KEY);
-    return saved && saved.trim() ? saved.trim() : null;
-  } catch {
-    return null;
-  }
-}
-
-function savePlayerName(name: string): void {
-  try {
-    if (name.trim()) localStorage.setItem(PLAYER_NAME_STORAGE_KEY, name.trim());
-  } catch {
-    // Private browsing / storage disabled — just skip persisting, nothing else to do.
-  }
-}
 
 type BuildSelectionMode = 'none' | 'road' | 'ship' | 'settlement' | 'city' | 'knight' | 'relocate_ship';
 type GameModalType =
   | 'none'
   | 'trade'
+  | 'counter_trade'
   | 'dev_cards'
   | 'play_monopoly'
   | 'play_year_of_plenty'
@@ -337,41 +368,56 @@ export const App: React.FC = () => {
     setParticipants(next);
   };
 
-  const [participants, setParticipants] = useState<ParticipantConfig[]>([
-    { id: 'p1', name: loadSavedPlayerName() ?? 'Jucător 1 (Om)', type: 'human', color: 'red' },
-    {
-      id: 'p2',
-      name: 'Adversar Tactic',
-      type: 'ai',
-      color: 'blue',
-      aiDifficulty: 'advanced',
-      aiStyle: 'expansion'
-    },
-    {
-      id: 'p3',
-      name: 'Adversar Comercial',
-      type: 'ai',
-      color: 'orange',
-      aiDifficulty: 'medium',
-      aiStyle: 'commercial'
-    },
-    {
-      id: 'p4',
-      name: 'Adversar Adaptiv',
-      type: 'ai',
-      color: 'green',
-      aiDifficulty: 'expert',
-      aiStyle: 'adaptive'
-    }
-  ]);
-
   const [rules, setRules] = useState<GameRulesConfig>(() =>
-    createRulesConfig({
-      startingResourcesRule: 'both_settlements',
-      knightStealRule: 'all_adjacent',
-      devCardsPerTurnRule: 'one_per_type'
-    })
+    loadSavedRules(
+      createRulesConfig({
+        startingResourcesRule: 'both_settlements',
+        knightStealRule: 'all_adjacent',
+        devCardsPerTurnRule: 'one_per_type'
+      })
+    )
   );
+
+  const [participants, setParticipants] = useState<ParticipantConfig[]>(() => {
+    const defaultParticipants: ParticipantConfig[] = [
+      { id: 'p1', name: loadSavedPlayerName() ?? 'Jucător 1 (Om)', type: 'human', color: 'red' },
+      {
+        id: 'p2',
+        name: 'Adversar Tactic',
+        type: 'ai',
+        color: 'blue',
+        aiDifficulty: 'advanced',
+        aiStyle: 'expansion'
+      },
+      {
+        id: 'p3',
+        name: 'Adversar Comercial',
+        type: 'ai',
+        color: 'orange',
+        aiDifficulty: 'medium',
+        aiStyle: 'commercial'
+      },
+      {
+        id: 'p4',
+        name: 'Adversar Adaptiv',
+        type: 'ai',
+        color: 'green',
+        aiDifficulty: 'expert',
+        aiStyle: 'adaptive'
+      }
+    ];
+    const saved = loadSavedParticipants(defaultParticipants);
+    const max = rules.boardScenario === 'expansion' ? 6 : 4;
+    return saved.length > max ? saved.slice(0, max) : saved;
+  });
+
+  useEffect(() => {
+    saveLobbyParticipants(participants);
+  }, [participants]);
+
+  useEffect(() => {
+    saveLobbyRules(rules);
+  }, [rules]);
   const [customSeed, setCustomSeed] = useState<string>('');
   const [serverStatusMsg, setServerStatusMsg] = useState<string | null>(null);
 
@@ -380,7 +426,11 @@ export const App: React.FC = () => {
   // the server (REST actions + WebSocket push), never a local ReplayRecorder — so a game can
   // never start before every intended human has actually joined from their own device.
   const [onlineLobby, setOnlineLobby] = useState<LobbyState | null>(null);
-  const [onlineSession, setOnlineSession] = useState<OnlineSession | null>(null);
+  const [onlineSession, setOnlineSession] = useState<OnlineSession | null>(() => loadSavedOnlineSession());
+
+  useEffect(() => {
+    saveOnlineSession(onlineSession);
+  }, [onlineSession]);
   const [onlinePlayerView, setOnlinePlayerView] = useState<PlayerView | null>(null);
   const [onlineLegalActions, setOnlineLegalActions] = useState<GameAction[]>([]);
   const [onlineError, setOnlineError] = useState<string | null>(null);
@@ -438,20 +488,47 @@ export const App: React.FC = () => {
   const [diceRollAnimKey, setDiceRollAnimKey] = useState<string>('init');
 
   // Per-turn countdown (client-side comfort timer, not a core game rule)
-  const [turnTimerEnabled, setTurnTimerEnabled] = useState<boolean>(false);
-  const [turnTimerSec, setTurnTimerSec] = useState<number>(60);
+  const [turnTimerEnabled, setTurnTimerEnabled] = useState<boolean>(() => loadSavedTimerConfig()?.enabled ?? false);
+  const [turnTimerSec, setTurnTimerSec] = useState<number>(() => loadSavedTimerConfig()?.sec ?? 60);
+
+  useEffect(() => {
+    saveLobbyTimer(turnTimerEnabled, turnTimerSec);
+  }, [turnTimerEnabled, turnTimerSec]);
   const [turnTimeLeft, setTurnTimeLeft] = useState<number | null>(null);
   const lastTimedTurnKeyRef = useRef<string>('');
 
-  // Big, brief banner confirming the action the active player just took
-  const [actionFeedback, setActionFeedback] = useState<{ key: string; text: string } | null>(null);
-  const actionFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Stacked, non-blocking log of recent action notifications (dev cards played, builds,
+  // bank trades, steals...) - a single replaceable banner used to swallow whatever happened
+  // next if two things occurred close together (very common at AI auto-play speed); each
+  // entry now has its own lifetime and they stack instead of clobbering each other.
+  interface ActionFeedbackItem {
+    id: string;
+    content: React.ReactNode;
+    fading?: boolean;
+  }
+  const [actionFeedbackQueue, setActionFeedbackQueue] = useState<ActionFeedbackItem[]>([]);
+
+  // Highest game-event sequence already shown as feedback to this client, whether that came
+  // from our own just-submitted action's REST response or a WS state_sync push - keeps
+  // reportRemoteEventFeedback from re-announcing an event the REST path already handled.
+  const lastSeenEventSeqRef = useRef<number>(0);
 
   // Which resources a player just received, for a brief "+N" flash on their cards
   const [resourceGainFlash, setResourceGainFlash] = useState<
     Record<string, Partial<Record<ResourceType, number>>>
   >({});
   const gainFlashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Trade negotiation banners (see render below): every active/recently-resolved offer, kept
+  // visible for a minimum of 5s from when each was first observed even if the underlying offer
+  // is cleared from state faster than that (e.g. an AI proposer ending its turn right after an
+  // acceptance) - so nobody has to react instantly to see what happened.
+  interface TradeBannerEntry {
+    offer: TradeOffer;
+    firstShownAtMs: number;
+  }
+  const [visibleTradeOffers, setVisibleTradeOffers] = useState<Record<string, TradeBannerEntry>>({});
+  const prevTradeStatusRef = useRef<Record<string, TradeOffer['status']>>({});
 
   // Resource cards animating from the hex that produced them to the player who received them
   interface FlyingResourceCard {
@@ -465,32 +542,33 @@ export const App: React.FC = () => {
   }
   const [flyingCards, setFlyingCards] = useState<FlyingResourceCard[]>([]);
 
-  const launchFlyingCards = (
-    requests: { playerId: string; resource: ResourceType; hexId: string }[]
+  // Generic version: flies a resource icon between any two DOM anchors, found by CSS selector.
+  // Used for dice production (hex -> player), and for trade-acceptance / robber-steal /
+  // discard-to-bank animations (player <-> player, player <-> bank) below.
+  const launchFlyingIcon = (
+    requests: { resource: ResourceType; fromSelector: string; toSelector: string }[]
   ) => {
     const newCards: FlyingResourceCard[] = [];
     for (const req of requests) {
-      const hexEl = document.querySelector(`[data-hex-id="${req.hexId}"]`);
-      const destEl = document.querySelector(
-        `[data-player-id="${req.playerId}"][data-resource="${req.resource}"]`
-      );
-      if (!hexEl || !destEl) continue;
-      const hexRect = hexEl.getBoundingClientRect();
-      const destRect = destEl.getBoundingClientRect();
+      const fromEl = document.querySelector(req.fromSelector);
+      const toEl = document.querySelector(req.toSelector);
+      if (!fromEl || !toEl) continue;
+      const fromRect = fromEl.getBoundingClientRect();
+      const toRect = toEl.getBoundingClientRect();
       newCards.push({
-        key: `fly-${Date.now()}-${Math.random()}-${req.playerId}-${req.resource}`,
+        key: `fly-${Date.now()}-${Math.random()}-${req.fromSelector}-${req.toSelector}-${req.resource}`,
         resource: req.resource,
-        startX: hexRect.left + hexRect.width / 2,
-        startY: hexRect.top + hexRect.height / 2,
-        endX: destRect.left + destRect.width / 2,
-        endY: destRect.top + destRect.height / 2,
+        startX: fromRect.left + fromRect.width / 2,
+        startY: fromRect.top + fromRect.height / 2,
+        endX: toRect.left + toRect.width / 2,
+        endY: toRect.top + toRect.height / 2,
         launched: false
       });
     }
     if (newCards.length === 0) return;
     const keys = new Set(newCards.map((c) => c.key));
     setFlyingCards((prev) => [...prev, ...newCards]);
-    // Start each card at the hex, then flip to its destination on the next frame so the
+    // Start each card at its origin, then flip to its destination on the next frame so the
     // left/top CSS transition actually animates the move instead of snapping there.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -501,6 +579,24 @@ export const App: React.FC = () => {
       setFlyingCards((prev) => prev.filter((c) => !keys.has(c.key)));
     }, 950);
   };
+
+  const launchFlyingCards = (
+    requests: { playerId: string; resource: ResourceType; hexId: string }[]
+  ) => {
+    launchFlyingIcon(
+      requests.map((req) => ({
+        resource: req.resource,
+        fromSelector: `[data-hex-id="${req.hexId}"]`,
+        toSelector: `[data-player-id="${req.playerId}"][data-resource="${req.resource}"]`
+      }))
+    );
+  };
+
+  // player-card anchor: the whole sidebar row for a player (exists for every player, unlike
+  // the per-resource slots above which only render for the viewer's own, visible hand) - used
+  // as the fly-to/fly-from target for trade and robber animations between arbitrary players.
+  const playerCardSelector = (playerId: string) => `[data-player-card-id="${playerId}"]`;
+  const bankAnchorSelector = `[data-bank-anchor="true"]`;
 
   const [createdInviteCode, setCreatedInviteCode] = useState<string | null>(null);
   const [joinCodeInput, setJoinCodeInput] = useState<string>('');
@@ -537,6 +633,49 @@ export const App: React.FC = () => {
     const interval = setInterval(update, 500);
     return () => clearInterval(interval);
   }, [inGameTermination]);
+
+  // Auto-restore online game or lobby on startup / page refresh
+  useEffect(() => {
+    const saved = loadSavedOnlineSession();
+    if (!saved) return;
+    let cancelled = false;
+
+    if (saved.gameId) {
+      fetchGameState(saved.gameId, saved.sessionToken)
+        .then((data) => {
+          if (cancelled) return;
+          setOnlinePlayerView(data.playerView);
+          setOnlineLegalActions(data.legalActions as GameAction[]);
+          setOnlineLobby(null);
+          setActiveTab('game');
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setOnlineSession(null);
+          saveOnlineSession(null);
+        });
+    } else if (saved.lobbyId) {
+      fetchLobby(saved.lobbyId)
+        .then((lobby) => {
+          if (cancelled) return;
+          if (lobby.status === 'in_progress' && lobby.gameId) {
+            enterOnlineGame(lobby.gameId, saved.sessionToken, saved.playerId, lobby.lobbyId);
+          } else {
+            setOnlineLobby(lobby);
+            setActiveTab('lobby');
+          }
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setOnlineSession(null);
+          saveOnlineSession(null);
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Refresh the public lobby list every 5s while it's actually visible (the lobby tab).
   useEffect(() => {
@@ -836,9 +975,14 @@ export const App: React.FC = () => {
     }
     const gameId = onlineSession.gameId;
     const sessionToken = onlineSession.sessionToken;
+    // -1 = "not yet baselined": the first state_sync of a session can carry up to 25 events that
+    // already happened before we connected (or reconnected) - those get silently absorbed into
+    // the baseline instead of narrated, so joining/reloading mid-game doesn't replay old steals.
+    lastSeenEventSeqRef.current = -1;
     let isDisposed = false;
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
     let currentWs: WebSocket | null = null;
+    let failCount = 0;
 
     const connect = () => {
       if (isDisposed) return;
@@ -848,6 +992,7 @@ export const App: React.FC = () => {
         onlineWsRef.current = ws;
 
         ws.onopen = () => {
+          failCount = 0;
           if (isDisposed) {
             ws.close();
             return;
@@ -862,6 +1007,35 @@ export const App: React.FC = () => {
             if (msg.type === 'state_sync') {
               setOnlinePlayerView(msg.playerView);
               setOnlineLegalActions(msg.legalActions);
+
+              const incomingEvents = (msg.recentEvents ?? []) as Array<{ sequence: number; playerId: string; action: GameAction; details: Record<string, unknown> }>;
+              if (lastSeenEventSeqRef.current === -1) {
+                // First sync of this connection: adopt its latest sequence as the baseline
+                // without narrating anything older than "now".
+                lastSeenEventSeqRef.current = incomingEvents.reduce((max, e) => Math.max(max, e.sequence), 0);
+              } else {
+                // Narrate any steal/discard event we haven't already shown feedback for -
+                // covers every OTHER player's move (including bot turns the server stepped
+                // through on its own), which previously updated state here silently with no
+                // banner or animation at all for anyone but the player who acted.
+                const newEvents = incomingEvents
+                  .filter((e) => e.sequence > lastSeenEventSeqRef.current)
+                  .sort((a, b) => a.sequence - b.sequence);
+                if (newEvents.length > 0) {
+                  // The server steps a bot's whole turn before broadcasting once, so several
+                  // events can land in a single state_sync - firing all their banners in the
+                  // same tick would just overwrite each other, showing only the last one.
+                  // Stagger them instead (capped, so a very long bot turn doesn't queue up a
+                  // banner marathon) so each is actually readable.
+                  const players = (msg.playerView?.players ?? []) as { id: string; name: string; color: PlayerColor }[];
+                  const toNarrate = newEvents.slice(-6);
+                  toNarrate.forEach((event, i) => {
+                    setTimeout(() => reportRemoteEventFeedback(event, players), i * 1100);
+                  });
+                  lastSeenEventSeqRef.current = newEvents[newEvents.length - 1]!.sequence;
+                }
+              }
+
               if (msg.pendingTermination) {
                 setInGameTermination(msg.pendingTermination);
               } else {
@@ -884,7 +1058,10 @@ export const App: React.FC = () => {
             onlineWsRef.current = null;
           }
           if (!isDisposed) {
-            reconnectTimeout = setTimeout(connect, 2000);
+            failCount++;
+            // Backoff if reverse proxy does not support WebSocket upgrades
+            const delay = Math.min(30000, 2000 * Math.pow(1.5, Math.min(failCount, 6)));
+            reconnectTimeout = setTimeout(connect, delay);
           }
         };
 
@@ -954,12 +1131,24 @@ export const App: React.FC = () => {
   const [bankGiveRes, setBankGiveRes] = useState<ResourceType>('wood');
   const [bankReceiveRes, setBankReceiveRes] = useState<ResourceType>('ore');
   const [p2pOffer, setP2pOffer] = useState<ResourceCount>(createEmptyResources());
+  // Which incoming offer the counter_trade modal (reuses p2pOffer/p2pRequest below) is
+  // answering - a responder proposing their own terms isn't the active player, so this can't
+  // reuse the main trade modal's "propose_trade as activePlayerObj" flow.
+  const [counterOfferOriginalId, setCounterOfferOriginalId] = useState<string | null>(null);
   const [dismissedTradeOfferIds, setDismissedTradeOfferIds] = useState<Set<string>>(new Set());
-  const [autoRejectCountdown, setAutoRejectCountdown] = useState<{ offerId: string; secondsLeft: number } | null>(null);
-  const [minimizedDiscard, setMinimizedDiscard] = useState<boolean>(false);
 
-  const dismissTradeOffer = (offerId: string, reason = 'Refuzat de utilizator') => {
-    setAutoRejectCountdown(null);
+  const [minimizedDiscard, setMinimizedDiscard] = useState<boolean>(false);
+  const [rejectDropdownOfferId, setRejectDropdownOfferId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!rejectDropdownOfferId) return;
+    const handleClickOutside = () => setRejectDropdownOfferId(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [rejectDropdownOfferId]);
+
+  const dismissTradeOffer = (offerId: string, reason = 'Refuz') => {
+    setRejectDropdownOfferId(null);
     if (dismissedTradeOfferIds.has(offerId)) return;
     setDismissedTradeOfferIds((prev) => new Set(prev).add(offerId));
 
@@ -975,6 +1164,7 @@ export const App: React.FC = () => {
       response: 'reject',
       reason
     });
+    showActionFeedback(locale === 'ro' ? `Refuz trimis: "${reason}"` : `Decline sent: "${reason}"`);
   };
 
   const cancelMyTradeOffer = (offerId: string) => {
@@ -1085,11 +1275,200 @@ export const App: React.FC = () => {
     return getLegalActions(gameState, actorId);
   }, [gameState, gameVersionTick, onlineSession, onlineLegalActions]);
 
-  // Execute a single action (human or AI) and update recorder
-  const showActionFeedback = (text: string) => {
-    if (actionFeedbackTimeoutRef.current) clearTimeout(actionFeedbackTimeoutRef.current);
-    setActionFeedback({ key: `fb-${Date.now()}-${Math.random()}`, text });
-    actionFeedbackTimeoutRef.current = setTimeout(() => setActionFeedback(null), 1600);
+  // Pushes one more notification onto the stack (see actionFeedbackQueue above) instead of
+  // replacing whatever is currently shown - capped so a long burst of bot actions doesn't
+  // pile up indefinitely, and each entry fades itself out independently after its own 3.6s.
+  const showActionFeedback = (content: React.ReactNode) => {
+    const id = `fb-${Date.now()}-${Math.random()}`;
+    setActionFeedbackQueue((prev) => {
+      const next = [...prev, { id, content }];
+      return next.length > 5 ? next.slice(next.length - 5) : next;
+    });
+    setTimeout(() => {
+      setActionFeedbackQueue((prev) => prev.map((f) => (f.id === id ? { ...f, fading: true } : f)));
+    }, 3600);
+    setTimeout(() => {
+      setActionFeedbackQueue((prev) => prev.filter((f) => f.id !== id));
+    }, 3900);
+  };
+
+  // Robber steals and mass discards only ever exist as a momentary event, not persistent state
+  // like a trade offer - so, unlike the trade banner above, telling anyone but the acting player
+  // about one means reading it out of the event log. Called for every event the WS stream hands
+  // us that we haven't already shown feedback for (see lastSeenEventSeqRef below), regardless of
+  // who caused it, so an observer sees "X stole from Y" / "Z discarded N cards" too, not just X.
+  const reportRemoteEventFeedback = (
+    event: { playerId: string; action: GameAction; details: Record<string, unknown> },
+    players: { id: string; name: string; color: PlayerColor }[]
+  ) => {
+    // Colored badge (see playerBadgeStyle) instead of plain text, same treatment as the trade
+    // negotiation banner's player names - plain text on these dark panels was hard to tell
+    // apart at a glance, especially for the darker colors.
+    const nameBadge = (id: string) => {
+      const p = players.find((pp) => pp.id === id);
+      return <span style={playerBadgeStyle(p?.color)}>{p?.name ?? id}</span>;
+    };
+    if (
+      event.action.type === 'steal_from_player' ||
+      event.action.type === 'move_robber' ||
+      event.action.type === 'play_knight'
+    ) {
+      const stolenResource = event.details?.stolenResource as ResourceType | undefined;
+      const stolenFrom = (event.details?.stolenFrom ?? (event.action.type === 'steal_from_player' ? event.action.targetPlayerId : undefined)) as string | undefined;
+      if (!stolenResource || !stolenFrom) return;
+      showActionFeedback(
+        <>
+          🥷 {nameBadge(event.playerId)} {locale === 'ro' ? 'a furat' : 'stole'} 1 {RESOURCE_ICONS[stolenResource]}{' '}
+          {RESOURCE_LABELS[locale][stolenResource]} {locale === 'ro' ? 'de la' : 'from'} {nameBadge(stolenFrom)}!
+        </>
+      );
+      requestAnimationFrame(() =>
+        launchFlyingIcon([
+          { resource: stolenResource, fromSelector: playerCardSelector(stolenFrom), toSelector: playerCardSelector(event.playerId) }
+        ])
+      );
+    } else if (event.action.type === 'discard_cards') {
+      const discarded = (event.details?.discarded ?? {}) as Partial<ResourceCount>;
+      const total = ALL_RESOURCES.reduce((sum, r) => sum + (discarded[r] ?? 0), 0);
+      if (total <= 0) return;
+      showActionFeedback(
+        <>
+          🗑️ {nameBadge(event.playerId)} {locale === 'ro' ? `a aruncat ${total} cărți:` : `discarded ${total} cards:`}{' '}
+          {ALL_RESOURCES.filter((r) => (discarded[r] ?? 0) > 0)
+            .map((r) => `${RESOURCE_ICONS[r]}${discarded[r]}`)
+            .join(' ')}
+        </>
+      );
+      requestAnimationFrame(() =>
+        launchFlyingIcon(
+          ALL_RESOURCES.filter((r) => (discarded[r] ?? 0) > 0).map((r) => ({
+            resource: r,
+            fromSelector: playerCardSelector(event.playerId),
+            toSelector: bankAnchorSelector
+          }))
+        )
+      );
+    } else if (
+      event.action.type === 'build_road' ||
+      event.action.type === 'build_settlement' ||
+      event.action.type === 'build_city' ||
+      event.action.type === 'build_ship'
+    ) {
+      // Building actions had no feedback at all before this - at full AI auto-play speed
+      // (steps every few hundred ms) an opponent's new settlement/city/road was easy to miss
+      // entirely with nothing marking that it just happened.
+      const cost =
+        event.action.type === 'build_road' || event.action.type === 'build_ship'
+          ? BUILDING_COSTS[event.action.type === 'build_ship' ? 'ship' : 'road']
+          : event.action.type === 'build_settlement'
+          ? BUILDING_COSTS.settlement
+          : BUILDING_COSTS.city;
+      const icon = event.action.type === 'build_settlement' ? '🏠' : event.action.type === 'build_city' ? '🏰' : event.action.type === 'build_ship' ? '⛵' : '🛤️';
+      const nameRo =
+        event.action.type === 'build_settlement'
+          ? 'o așezare'
+          : event.action.type === 'build_city'
+          ? 'oraș'
+          : event.action.type === 'build_ship'
+          ? 'o corabie'
+          : 'un drum';
+      const nameEn =
+        event.action.type === 'build_settlement'
+          ? 'a settlement'
+          : event.action.type === 'build_city'
+          ? 'a city'
+          : event.action.type === 'build_ship'
+          ? 'a ship'
+          : 'a road';
+      const costText = ALL_RESOURCES.filter((r) => cost[r] > 0)
+        .map((r) => `${RESOURCE_ICONS[r]}${cost[r]}`)
+        .join(' ');
+      showActionFeedback(
+        <>
+          {icon} {nameBadge(event.playerId)} {locale === 'ro' ? `a construit ${nameRo}` : `built ${nameEn}`} ({costText})
+        </>
+      );
+      requestAnimationFrame(() =>
+        launchFlyingIcon(
+          ALL_RESOURCES.filter((r) => cost[r] > 0).map((r) => ({
+            resource: r,
+            fromSelector: playerCardSelector(event.playerId),
+            toSelector: bankAnchorSelector
+          }))
+        )
+      );
+    } else if (event.action.type === 'roll_dice') {
+      const roll = event.details?.dice as { die1: number; die2: number; total: number } | undefined;
+      if (!roll) return;
+      showActionFeedback(
+        <>
+          🎲 {nameBadge(event.playerId)}: {roll.die1} + {roll.die2} = {roll.total}
+        </>
+      );
+    } else if (event.action.type === 'trade_bank') {
+      // The user explicitly asked to also see bank/port trades, not just player-to-player ones.
+      showActionFeedback(
+        <>
+          ⚓ {nameBadge(event.playerId)}{' '}
+          {locale === 'ro' ? 'a schimbat cu banca' : 'traded with the bank'}: {event.action.giveAmount}
+          {RESOURCE_ICONS[event.action.give]} → 1{RESOURCE_ICONS[event.action.receive]}
+        </>
+      );
+      requestAnimationFrame(() =>
+        launchFlyingIcon([
+          { resource: event.action.type === 'trade_bank' ? event.action.give : 'wood', fromSelector: playerCardSelector(event.playerId), toSelector: bankAnchorSelector },
+          { resource: event.action.type === 'trade_bank' ? event.action.receive : 'wood', fromSelector: bankAnchorSelector, toSelector: playerCardSelector(event.playerId) }
+        ])
+      );
+    } else if (event.action.type === 'respond_trade') {
+      if (event.action.response === 'accept') {
+        showActionFeedback(
+          <>
+            🤝 {nameBadge(event.playerId)} {locale === 'ro' ? 'a acceptat un schimb!' : 'accepted a trade!'}
+          </>
+        );
+      } else {
+        const reasonText = event.action.reason ? `: "${event.action.reason}"` : '';
+        showActionFeedback(
+          <>
+            ❌ {nameBadge(event.playerId)} {locale === 'ro' ? 'a refuzat un schimb' : 'declined a trade'}
+            {reasonText}
+          </>
+        );
+      }
+    } else if (event.action.type === 'buy_dev_card') {
+      // Deliberately doesn't reveal which card type - that stays hidden from everyone but the
+      // buyer until it's played (or it's game over), same as the physical game.
+      showActionFeedback(
+        <>
+          🃏 {nameBadge(event.playerId)} {locale === 'ro' ? 'a cumpărat o carte de dezvoltare' : 'bought a development card'}
+        </>
+      );
+    } else if (event.action.type === 'play_monopoly') {
+      const totalTaken = Number(event.details?.totalTaken ?? 0);
+      showActionFeedback(
+        <>
+          👑 {nameBadge(event.playerId)} {locale === 'ro' ? 'a declarat Monopol pe' : 'declared Monopoly on'}{' '}
+          {RESOURCE_ICONS[event.action.resource]} {RESOURCE_LABELS[locale][event.action.resource]} ({totalTaken}{' '}
+          {locale === 'ro' ? 'cărți confiscate' : 'cards taken'})
+        </>
+      );
+    } else if (event.action.type === 'play_year_of_plenty') {
+      const r1 = event.action.resources[0];
+      const r2 = event.action.resources[1];
+      showActionFeedback(
+        <>
+          🎁 {nameBadge(event.playerId)} {locale === 'ro' ? 'a jucat Anul Abundenței' : 'played Year of Plenty'} (+1{' '}
+          {RESOURCE_ICONS[r1]}, +1 {RESOURCE_ICONS[r2]})
+        </>
+      );
+    } else if (event.action.type === 'play_road_building') {
+      showActionFeedback(
+        <>
+          🛣️ {nameBadge(event.playerId)} {locale === 'ro' ? 'a jucat Progres: 2 Drumuri Gratuite' : 'played Road Building: 2 free roads'}
+        </>
+      );
+    }
   };
 
   // Applies a server sync payload (from either the REST action response or a WebSocket
@@ -1099,7 +1478,11 @@ export const App: React.FC = () => {
   // another player's move updates state silently; we don't know enough about their hand to
   // animate it honestly anyway.
   const applyOnlineSync = (
-    data: { playerView: PlayerView; legalActions: GameAction[]; recentEvents?: { action: GameAction; details: Record<string, unknown> }[] },
+    data: {
+      playerView: PlayerView;
+      legalActions: GameAction[];
+      recentEvents?: { sequence?: number; playerId?: string; action: GameAction; details: Record<string, unknown> }[];
+    },
     action?: GameAction,
     actingPlayerId?: string,
     prevView?: PlayerView | null
@@ -1107,6 +1490,13 @@ export const App: React.FC = () => {
     const newView = data.playerView;
     setOnlinePlayerView(newView);
     setOnlineLegalActions(data.legalActions);
+
+    // Our own action's effects (and anything the server stepped for us, like bot turns) are
+    // about to be narrated below via the action/actingPlayerId branch - mark every event up to
+    // the latest one here as already-seen so the WS push that echoes them back doesn't also
+    // run them through reportRemoteEventFeedback and double up the banner/animation.
+    const latestSeq = data.recentEvents?.reduce((max, e) => Math.max(max, e.sequence ?? 0), 0) ?? 0;
+    if (latestSeq > lastSeenEventSeqRef.current) lastSeenEventSeqRef.current = latestSeq;
 
     const myId = onlineSession?.playerId;
 
@@ -1118,20 +1508,60 @@ export const App: React.FC = () => {
             `🎲 ${newView.lastDiceRoll.die1} + ${newView.lastDiceRoll.die2} = ${newView.lastDiceRoll.total}`
           );
         }
+      } else if (action.type === 'respond_trade') {
+        const actingP = newView.players.find((p) => p.id === actingPlayerId);
+        if (action.response === 'reject') {
+          const reasonText = action.reason ? `: "${action.reason}"` : '';
+          showActionFeedback(
+            locale === 'ro'
+              ? `❌ ${actingP?.name ?? actingPlayerId} a refuzat schimbul${reasonText}`
+              : `❌ ${actingP?.name ?? actingPlayerId} declined trade${reasonText}`
+          );
+        } else {
+          showActionFeedback(
+            locale === 'ro'
+              ? `🤝 ${actingP?.name ?? actingPlayerId} a acceptat schimbul!`
+              : `🤝 ${actingP?.name ?? actingPlayerId} accepted trade!`
+          );
+        }
       } else if (action.type === 'end_turn') {
         showActionFeedback('⏭️ Tură încheiată');
-      } else if (action.type === 'steal_from_player') {
+      } else if (action.type === 'steal_from_player' || action.type === 'move_robber') {
         const lastEvent = data.recentEvents?.[data.recentEvents.length - 1];
         const stolenResource = lastEvent?.details?.stolenResource as ResourceType | undefined;
+        const stolenFrom = (lastEvent?.details?.stolenFrom ?? (action.type === 'steal_from_player' ? action.targetPlayerId : undefined)) as string | undefined;
         const thief = newView.players.find((p) => p.id === actingPlayerId);
-        const victim = newView.players.find((p) => p.id === action.targetPlayerId);
-        if (stolenResource) {
+        const victim = stolenFrom ? newView.players.find((p) => p.id === stolenFrom) : undefined;
+        if (stolenResource && victim) {
           const resText = `${RESOURCE_ICONS[stolenResource]} ${RESOURCE_LABELS[locale][stolenResource]}`;
           if (actingPlayerId === myId) {
-            showActionFeedback(`🥷 Ai furat 1 ${resText} de la ${victim?.name ?? action.targetPlayerId}!`);
-          } else if (action.targetPlayerId === myId) {
-            showActionFeedback(`🥷 ${thief?.name ?? actingPlayerId} ți-a furat 1 ${resText}!`);
+            const isSingleHexTarget = action.type === 'move_robber';
+            showActionFeedback(
+              locale === 'ro'
+                ? (isSingleHexTarget
+                    ? `🥷 Ai furat automat 1 ${resText} de la ${victim.name} (singurul adversar cu resurse de pe hexagon)!`
+                    : `🥷 Ai furat 1 ${resText} de la ${victim.name}!`)
+                : `🥷 You stole 1 ${resText} from ${victim.name}!`
+            );
+          } else if (stolenFrom === myId) {
+            showActionFeedback(
+              locale === 'ro'
+                ? `🥷 ${thief?.name ?? actingPlayerId} ți-a furat 1 ${resText}!`
+                : `🥷 ${thief?.name ?? actingPlayerId} stole 1 ${resText} from you!`
+            );
+          } else {
+            showActionFeedback(
+              locale === 'ro'
+                ? `🥷 ${thief?.name ?? actingPlayerId} a furat 1 ${resText} de la ${victim.name}!`
+                : `🥷 ${thief?.name ?? actingPlayerId} stole 1 ${resText} from ${victim.name}!`
+            );
           }
+        } else if (action.type === 'move_robber' && actingPlayerId === myId) {
+          showActionFeedback(
+            locale === 'ro'
+              ? '🥷 Hoțul a fost mutat. Niciun adversar de pe hexagon nu are resurse de furat.'
+              : '🥷 Robber moved. No adjacent opponents have resource cards.'
+          );
         }
       } else if (action.type === 'play_monopoly') {
         const lastEv = data.recentEvents?.[data.recentEvents.length - 1];
@@ -1297,25 +1727,61 @@ export const App: React.FC = () => {
             `🎲 ${newState.lastDiceRoll.die1} + ${newState.lastDiceRoll.die2} = ${newState.lastDiceRoll.total}`
           );
         }
+      } else if (action.type === 'respond_trade') {
+        const actingP = getPlayerById(newState, playerId);
+        if (action.response === 'reject') {
+          const reasonText = action.reason ? `: "${action.reason}"` : '';
+          showActionFeedback(
+            locale === 'ro'
+              ? `❌ ${actingP?.name ?? playerId} a refuzat schimbul${reasonText}`
+              : `❌ ${actingP?.name ?? playerId} declined trade${reasonText}`
+          );
+        } else {
+          showActionFeedback(
+            locale === 'ro'
+              ? `🤝 ${actingP?.name ?? playerId} a acceptat schimbul!`
+              : `🤝 ${actingP?.name ?? playerId} accepted trade!`
+          );
+        }
       } else if (action.type === 'end_turn') {
         showActionFeedback('⏭️ Tură încheiată');
-      } else if (action.type === 'steal_from_player') {
+      } else if (action.type === 'steal_from_player' || action.type === 'move_robber') {
         const stealEvents = recorder.getEvents();
         const stealEvent = stealEvents[stealEvents.length - 1];
         const stolenResource = stealEvent?.details?.stolenResource as ResourceType | undefined;
+        const stolenFrom = (stealEvent?.details?.stolenFrom ?? (action.type === 'steal_from_player' ? action.targetPlayerId : undefined)) as string | undefined;
         const thief = getPlayerById(newState, playerId);
-        const victim = getPlayerById(newState, action.targetPlayerId);
-        if (stolenResource) {
+        const victim = stolenFrom ? getPlayerById(newState, stolenFrom) : undefined;
+        if (stolenResource && victim) {
           const resText = `${RESOURCE_ICONS[stolenResource]} ${RESOURCE_LABELS[locale][stolenResource]}`;
           if (playerId === viewerId) {
-            showActionFeedback(`🥷 Ai furat 1 ${resText} de la ${victim?.name ?? action.targetPlayerId}!`);
-          } else if (action.targetPlayerId === viewerId) {
-            showActionFeedback(`🥷 ${thief?.name ?? playerId} ți-a furat 1 ${resText}!`);
+            const isSingleHexTarget = action.type === 'move_robber';
+            showActionFeedback(
+              locale === 'ro'
+                ? (isSingleHexTarget
+                    ? `🥷 Ai furat automat 1 ${resText} de la ${victim.name} (singurul adversar cu resurse de pe hexagon)!`
+                    : `🥷 Ai furat 1 ${resText} de la ${victim.name}!`)
+                : `🥷 You stole 1 ${resText} from ${victim.name}!`
+            );
+          } else if (stolenFrom === viewerId) {
+            showActionFeedback(
+              locale === 'ro'
+                ? `🥷 ${thief?.name ?? playerId} ți-a furat 1 ${resText}!`
+                : `🥷 ${thief?.name ?? playerId} stole 1 ${resText} from you!`
+            );
           } else {
-            showActionFeedback(`🥷 ${thief?.name ?? playerId} a furat 1 ${resText} de la ${victim?.name ?? action.targetPlayerId}!`);
+            showActionFeedback(
+              locale === 'ro'
+                ? `🥷 ${thief?.name ?? playerId} a furat 1 ${resText} de la ${victim.name}!`
+                : `🥷 ${thief?.name ?? playerId} stole 1 ${resText} from ${victim.name}!`
+            );
           }
-        } else {
-          showActionFeedback(`🥷 ${victim?.name ?? action.targetPlayerId} nu avea nicio carte de furat.`);
+        } else if (action.type === 'move_robber' && playerId === viewerId) {
+          showActionFeedback(
+            locale === 'ro'
+              ? '🥷 Hoțul a fost mutat. Niciun adversar de pe hexagon nu are resurse de furat.'
+              : '🥷 Robber moved. No adjacent opponents have resource cards.'
+          );
         }
       } else if (action.type === 'play_monopoly') {
         const events = recorder.getEvents();
@@ -1454,7 +1920,22 @@ export const App: React.FC = () => {
               (!openOffer.toPlayerId || openOffer.toPlayerId === p.id) &&
               !openOffer.rejectedByPlayerIds.includes(p.id)
           );
-          if (pendingHuman) return;
+          if (pendingHuman) {
+            // They're never shown the accept/reject modal for an offer they can't afford (see
+            // the incoming-offer modal below), so waiting on them here would stall every other
+            // player's turn forever. Answer on their behalf; a human who CAN afford it still
+            // gets a real say via the modal, so leave those waiting as before.
+            if (!hasResources(pendingHuman.resources, openOffer.requesting)) {
+              recorder.recordAndApply(pendingHuman.id, {
+                type: 'respond_trade',
+                offerId: openOffer.id,
+                response: 'reject',
+                reason: 'Resurse insuficiente'
+              });
+              setGameVersionTick((v) => v + 1);
+            }
+            return;
+          }
         }
       }
     }
@@ -1463,12 +1944,16 @@ export const App: React.FC = () => {
     if (!actor || actor.type === 'human') return;
 
     const decision = chooseAIAction(st, actorId);
-    recorder.recordAndApply(actorId, decision.action, {
+    const { event } = recorder.recordAndApply(actorId, decision.action, {
       aiDecision: decision.decisionRecord
     });
     if (decision.action.type === 'roll_dice') {
       setDiceRollAnimKey(`ai-roll-${Date.now()}-${Math.random()}`);
     }
+    // Local hot-seat/AI games had no feedback at all for bot moves (online play already got it
+    // via applyOnlineSync) - at a few hundred ms between auto-play steps, a bot's steal, build,
+    // or trade response was easy to miss with nothing marking that it happened.
+    reportRemoteEventFeedback({ playerId: actorId, action: decision.action, details: event.details }, st.players);
     setGameVersionTick((v) => v + 1);
   };
 
@@ -1505,7 +1990,9 @@ export const App: React.FC = () => {
               (!openOffer.toPlayerId || openOffer.toPlayerId === p.id) &&
               !openOffer.rejectedByPlayerIds.includes(p.id)
           );
-          needsBotMove = !pendingHuman;
+          // A pendingHuman who can't afford the offer gets auto-rejected inside
+          // executeOneAiStep rather than silently stalling - run that step for them too.
+          needsBotMove = !pendingHuman || !hasResources(pendingHuman.resources, openOffer.requesting);
         }
       } else {
         const active = getPlayerById(st, st.activePlayerId);
@@ -1515,7 +2002,11 @@ export const App: React.FC = () => {
 
     if (!needsBotMove) return;
 
-    const delayMs = st.phase === 'turn_start' ? 520 : 340;
+    // Main-actions steps (build/trade/steal/dev-card) are slower than roll/setup so the
+    // action-feedback banner reportRemoteEventFeedback shows for each one actually has time to
+    // be read before the next step overwrites it - at the old 340ms, several bot actions could
+    // fire before a single banner's 1600ms display window ran out.
+    const delayMs = st.phase === 'turn_start' ? 520 : st.phase === 'main_actions' ? 950 : 340;
     const timer = setTimeout(() => {
       executeOneAiStep();
     }, delayMs);
@@ -1682,7 +2173,7 @@ export const App: React.FC = () => {
   };
 
   const handleRunBenchmark = () => {
-    const rep = runBenchmarkSuite({
+    const { report, replays } = runBenchmarkSuite({
       baseSeed: customSeed || 'bench-2026',
       gamesCount: benchmarkGamesCount,
       participants: [
@@ -1691,9 +2182,17 @@ export const App: React.FC = () => {
         { id: 'p3', name: 'Mediu Expansiune', type: 'ai', aiDifficulty: 'medium', aiStyle: 'expansion' },
         { id: 'p4', name: 'Începător Comercial', type: 'ai', aiDifficulty: 'beginner', aiStyle: 'commercial' }
       ],
-      rules
+      rules,
+      // Run entirely in the browser, so without this every benchmark game's replay (and its
+      // AI decision log) was lost the moment this function returned - only the aggregate
+      // stats below ever existed. Recording + syncing each one makes them reviewable later
+      // in the Replay/Analysis view, same as any other game.
+      recordReplays: true
     });
-    setBenchmarkReport(rep);
+    for (const replay of replays) {
+      saveReplayToHistory(replay, true);
+    }
+    setBenchmarkReport(report);
   };
 
   const maxPlayers = rules.boardScenario === 'expansion' || rules.boardScenario === 'world_map' ? 6 : 4;
@@ -1706,6 +2205,7 @@ export const App: React.FC = () => {
   }
 
   const activePlayerObj = gameState ? getPlayerById(gameState, gameState.activePlayerId) : undefined;
+  const hasShipsInScenario = Boolean(gameState && isScenarioWithShips(gameState.rules?.boardScenario));
   const viewerPlayerObj = gameState ? getPlayerById(gameState, viewerId) : undefined;
   const isAllAiOnlineGame = Boolean(
     onlineSession && gameState?.players && gameState.players.every((p) => p.type !== 'human')
@@ -1750,67 +2250,82 @@ export const App: React.FC = () => {
     return () => clearTimeout(id);
   }, [turnTimeLeft]);
 
-  // Auto-decline incoming trade offers when user lacks requested resources (5s countdown)
+  // Track every active trade offer for the negotiation banner(s) below, keyed by offer id so a
+  // resolved one keeps its last known snapshot (status, who accepted...) after it's cleared from
+  // gameState - the pruning effect right after this one is what actually removes it, once it's
+  // both resolved AND has been visible for the 5s floor.
+  //
+  // A resolved offer stays in gameState.activeTradeOffers (status 'accepted'/'rejected'/...)
+  // until end_turn clears the whole array - it is NOT removed just because it resolved. Once
+  // the pruning effect below drops it from visibleTradeOffers, it's still sitting right there
+  // in activeTradeOffers for the rest of that turn, so without the dismissedTradeOfferIds check
+  // below, the very next unrelated action (e.g. building something) recreates gameState, this
+  // effect sees "an offer not currently tracked" again, and the banner pops back up out of
+  // nowhere. Skipping anything already dismissed - manually or via that same prune - is what
+  // makes a resolved offer actually stay gone for the rest of the turn.
   useEffect(() => {
-    if (!gameState) {
-      if (autoRejectCountdown) setAutoRejectCountdown(null);
-      return;
-    }
-
-    const incomingOffer = gameState.activeTradeOffers?.find(
-      (o) =>
-        o.status === 'open' &&
-        o.fromPlayerId !== viewerId &&
-        (!o.toPlayerId || o.toPlayerId === viewerId) &&
-        !o.rejectedByPlayerIds.includes(viewerId) &&
-        !dismissedTradeOfferIds.has(o.id)
-    );
-
-    if (!incomingOffer) {
-      if (autoRejectCountdown) setAutoRejectCountdown(null);
-      return;
-    }
-
-    const myRes = viewerPlayerObj?.resources ?? createEmptyResources();
-    const canAfford = hasResources(myRes, incomingOffer.requesting);
-
-    // Only auto-reject if the player cannot afford the requested resources!
-    if (canAfford) {
-      if (autoRejectCountdown) setAutoRejectCountdown(null);
-      return;
-    }
-
-    // Initialize countdown for this specific offer if not started yet
-    if (!autoRejectCountdown || autoRejectCountdown.offerId !== incomingOffer.id) {
-      setAutoRejectCountdown({ offerId: incomingOffer.id, secondsLeft: 5 });
-      return;
-    }
-
-    // When timer expires, auto-reject and close modal
-    if (autoRejectCountdown.secondsLeft <= 0) {
-      setAutoRejectCountdown(null);
-      if (!dismissedTradeOfferIds.has(incomingOffer.id)) {
-        dismissTradeOffer(incomingOffer.id, 'Refuzat automat (lipsă resurse)');
+    if (!gameState) return;
+    const now = Date.now();
+    setVisibleTradeOffers((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const offer of gameState.activeTradeOffers) {
+        if (dismissedTradeOfferIds.has(offer.id)) continue;
+        const existing = next[offer.id];
+        if (!existing || existing.offer !== offer) {
+          next[offer.id] = { offer, firstShownAtMs: existing?.firstShownAtMs ?? now };
+          changed = true;
+        }
       }
-      return;
+      return changed ? next : prev;
+    });
+  }, [gameState?.activeTradeOffers, dismissedTradeOfferIds]);
+
+  useEffect(() => {
+    const timers = Object.entries(visibleTradeOffers).map(([id, entry]) => {
+      if (entry.offer.status === 'open') return null;
+      const remaining = Math.max(0, 5000 - (Date.now() - entry.firstShownAtMs));
+      return setTimeout(() => {
+        // Marking it dismissed (not just dropping it from visibleTradeOffers) is what stops the
+        // tracking effect above from reviving it the next time gameState changes.
+        setDismissedTradeOfferIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+        setVisibleTradeOffers((prev) => {
+          if (!(id in prev)) return prev;
+          const { [id]: _drop, ...rest } = prev;
+          return rest;
+        });
+      }, remaining);
+    });
+    return () => {
+      for (const t of timers) if (t) clearTimeout(t);
+    };
+  }, [visibleTradeOffers]);
+
+  // Fly the traded resources between the two players' sidebar cards the moment an offer is
+  // accepted - fires once per offer (tracked via prevTradeStatusRef) and works for every
+  // viewer, including two AI/other-human players trading with each other.
+  useEffect(() => {
+    if (!gameState) return;
+    for (const offer of gameState.activeTradeOffers) {
+      const prevStatus = prevTradeStatusRef.current[offer.id];
+      if (prevStatus !== 'accepted' && offer.status === 'accepted' && offer.acceptedByPlayerId) {
+        const accepterId = offer.acceptedByPlayerId;
+        const reqs: { resource: ResourceType; fromSelector: string; toSelector: string }[] = [];
+        for (const r of ALL_RESOURCES) {
+          if (offer.offering[r] > 0) {
+            reqs.push({ resource: r, fromSelector: playerCardSelector(offer.fromPlayerId), toSelector: playerCardSelector(accepterId) });
+          }
+          if (offer.requesting[r] > 0) {
+            reqs.push({ resource: r, fromSelector: playerCardSelector(accepterId), toSelector: playerCardSelector(offer.fromPlayerId) });
+          }
+        }
+        if (reqs.length > 0) {
+          requestAnimationFrame(() => launchFlyingIcon(reqs));
+        }
+      }
+      prevTradeStatusRef.current[offer.id] = offer.status;
     }
-
-    const timer = setTimeout(() => {
-      setAutoRejectCountdown((prev) =>
-        prev && prev.offerId === incomingOffer.id
-          ? { ...prev, secondsLeft: prev.secondsLeft - 1 }
-          : null
-      );
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [
-    gameState,
-    viewerId,
-    dismissedTradeOfferIds,
-    viewerPlayerObj?.resources,
-    autoRejectCountdown
-  ]);
+  }, [gameState?.activeTradeOffers]);
 
   // Count unplayed development cards by type for the viewer/active player
   const unplayedDevCards = (viewerPlayerObj ?? activePlayerObj)?.devCards.filter((c) => !c.played) ?? [];
@@ -1964,6 +2479,16 @@ export const App: React.FC = () => {
                 >
                   📈 {t.navBenchmark}
                 </button>
+                <button
+                  type="button"
+                  className={`nav-btn ${activeTab === 'hall_of_fame' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('hall_of_fame');
+                    setNavMenuOpen(false);
+                  }}
+                >
+                  🏆 {t.navHallOfFame}
+                </button>
                 {isLocalEnvironment() && (
                   <button
                     type="button"
@@ -2029,6 +2554,57 @@ export const App: React.FC = () => {
         <main className="lobby-container">
           {/* Left Panel: 1-4 Configurable Participants & Join by Code */}
           <section className="panel">
+            {/* Active Online Game Rejoin Banner */}
+            {onlineSession?.gameId && (
+              <div
+                style={{
+                  background: 'rgba(56, 189, 248, 0.14)',
+                  border: '1px solid var(--accent-blue)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '0.65rem 0.9rem',
+                  marginBottom: '0.85rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                  flexWrap: 'wrap'
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 700, color: 'var(--accent-blue)', fontSize: '0.9rem' }}>
+                    🎮 {locale === 'ro' ? 'Ai o partidă online activă în desfășurare!' : 'You have an active online game!'}
+                  </div>
+                  <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                    ID: {onlineSession.gameId} · {locale === 'ro' ? 'Jucător' : 'Player'}: {onlineSession.playerId}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ padding: '0.25rem 0.65rem', fontSize: '0.82rem' }}
+                    onClick={() => {
+                      enterOnlineGame(onlineSession.gameId!, onlineSession.sessionToken, onlineSession.playerId, onlineSession.lobbyId);
+                    }}
+                  >
+                    ▶️ {locale === 'ro' ? 'Reintră în Joc' : 'Rejoin Game'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ padding: '0.25rem 0.55rem', fontSize: '0.82rem' }}
+                    onClick={() => {
+                      setOnlineSession(null);
+                      saveOnlineSession(null);
+                      setOnlinePlayerView(null);
+                    }}
+                  >
+                    ✕ {locale === 'ro' ? 'Părăsește' : 'Leave'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Join by Code / Link Card */}
             <div className="join-game-box">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 6 }}>
@@ -2819,7 +3395,11 @@ export const App: React.FC = () => {
                   const hasLongestRoad = playerView.longestRoadOwnerId === p.id;
                   const hasLargestArmy = playerView.largestArmyOwnerId === p.id;
                   return (
-                    <div key={p.id} className={`player-card ${isCurrent ? 'active-turn' : ''}`}>
+                    <div
+                      key={p.id}
+                      data-player-card-id={p.id}
+                      className={`player-card ${isCurrent ? 'active-turn' : ''}`}
+                    >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.83rem' }}>
                         <span>
                           <span
@@ -2885,14 +3465,16 @@ export const App: React.FC = () => {
                       <div className="player-grid-pieces" style={{ display: 'flex', gap: 4, marginTop: '0.25rem', marginBottom: '0.2rem' }}>
                         {(
                           [
-                            ['settlements', '🏠', locale === 'ro' ? 'Așezări' : 'Settlements'],
-                            ['cities', '🏰', locale === 'ro' ? 'Orașe' : 'Cities'],
-                            ['roads', '🛣️', locale === 'ro' ? 'Drumuri' : 'Roads'],
-                            ['ships', '⛵', locale === 'ro' ? 'Corăbii' : 'Ships']
-                          ] as const
+                            ['settlements', '🏠', locale === 'ro' ? 'Așezări' : 'Settlements'] as const,
+                            ['cities', '🏰', locale === 'ro' ? 'Orașe' : 'Cities'] as const,
+                            ['roads', '🛣️', locale === 'ro' ? 'Drumuri' : 'Roads'] as const,
+                            ...(hasShipsInScenario && p.remainingPieces.ships !== undefined
+                              ? [['ships', '⛵', locale === 'ro' ? 'Corăbii' : 'Ships'] as const]
+                              : [])
+                          ]
                         ).map(([key, icon, label]) => {
                           const total = INITIAL_PLAYER_PIECES[key];
-                          const used = total - p.remainingPieces[key];
+                          const used = total - (p.remainingPieces[key] ?? 0);
                           const exhausted = used >= total;
                           return (
                             <span
@@ -2924,7 +3506,7 @@ export const App: React.FC = () => {
             </div>
 
             {/* Single-Row Bank Stock & Spacious Control Buttons */}
-            <div className="panel" style={{ flexShrink: 0, padding: '0.7rem' }}>
+            <div className="panel" style={{ flexShrink: 0, padding: '0.7rem' }} data-bank-anchor="true">
               <h2 style={{ marginBottom: '0.45rem', fontSize: '0.88rem' }}>
                 🏦 Bancă & Control Partidă
               </h2>
@@ -3033,9 +3615,13 @@ export const App: React.FC = () => {
               </div>
             )}
 
-            {actionFeedback && (
-              <div key={actionFeedback.key} className="action-feedback-banner">
-                {actionFeedback.text}
+            {actionFeedbackQueue.length > 0 && (
+              <div className="action-feedback-stack">
+                {actionFeedbackQueue.map((f) => (
+                  <div key={f.id} className={`action-feedback-item ${f.fading ? 'fading' : ''}`}>
+                    {f.content}
+                  </div>
+                ))}
               </div>
             )}
 
@@ -3058,39 +3644,14 @@ export const App: React.FC = () => {
             <div className="dock-title-bar">
               <div className="dock-player-name" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 <div>
-                  <span>Cărțile lui</span> <strong>{(viewerPlayerObj ?? activePlayerObj)?.name}</strong>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 4 }}>
+                  <span>Cărțile lui</span> <strong>{(viewerPlayerObj ?? activePlayerObj)?.name}</strong>{' '}
+                  {/* Larger + gold so the hand size actually draws the eye, not just a muted
+                      aside next to the name - piece counts moved onto their own build buttons
+                      below instead of living here as a separate row. */}
+                  <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--accent-gold)', marginLeft: 2 }}>
                     ({totalResourceCount((viewerPlayerObj ?? activePlayerObj)?.resources ?? createEmptyResources())} resurse)
                   </span>
                 </div>
-                {(viewerPlayerObj ?? activePlayerObj) && (() => {
-                  const pObj = (viewerPlayerObj ?? activePlayerObj)!;
-                  return (
-                    <div style={{ display: 'flex', gap: 4, marginLeft: 6 }}>
-                      {(
-                        [
-                          ['settlements', '🏠', locale === 'ro' ? 'Așezări' : 'Settlements'],
-                          ['cities', '🏰', locale === 'ro' ? 'Orașe' : 'Cities'],
-                          ['roads', '🛣️', locale === 'ro' ? 'Drumuri' : 'Roads']
-                        ] as const
-                      ).map(([key, icon, label]) => {
-                        const total = INITIAL_PLAYER_PIECES[key];
-                        const used = total - pObj.remainingPieces[key];
-                        const exhausted = used >= total;
-                        return (
-                          <span
-                            key={key}
-                            className={`piece-count-pill ${exhausted ? 'exhausted' : ''}`}
-                            title={`${label}: ${used}/${total} construite`}
-                            style={{ fontSize: '0.7rem', padding: '1px 5px' }}
-                          >
-                            {icon} {used}/{total}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
               </div>
               <button
                 type="button"
@@ -3139,6 +3700,20 @@ export const App: React.FC = () => {
                       size="xs"
                     />
                   </div>
+
+                  {/* Small cost-card thumbnail right next to the resources the player holds -
+                      clicking it opens the same full Cost Table modal as the sidebar button, so
+                      build/dev-card costs are one click away from where the resources are shown. */}
+                  <div
+                    className="cost-card-thumb"
+                    onClick={() => setActiveModal('costs_help')}
+                    title={locale === 'ro' ? 'Vezi Tabelul de Costuri' : 'View the Cost Table'}
+                  >
+                    📋
+                    <span className="sprite-card-label sprite-card-label-xs">
+                      {locale === 'ro' ? 'Costuri' : 'Costs'}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Actions Row: Underneath the cards, ZERO SCROLL */}
@@ -3175,21 +3750,23 @@ export const App: React.FC = () => {
                         }
                         onClick={() => setBuildMode((m) => (m === 'road' ? 'none' : 'road'))}
                       >
-                        🛣️ {t.buildRoad}
+                        🛣️ {t.buildRoad} ({INITIAL_PLAYER_PIECES.roads - activePlayerObj.remainingPieces.roads}/{INITIAL_PLAYER_PIECES.roads})
                       </button>
-                      <button
-                        type="button"
-                        className={`btn ${buildMode === 'ship' ? 'btn-primary' : ''}`}
-                        disabled={
-                          !hasResources(activePlayerObj.resources, BUILDING_COSTS.ship) ||
-                          (activePlayerObj.remainingPieces.ships ?? 15) <= 0
-                        }
-                        onClick={() => setBuildMode((m) => (m === 'ship' ? 'none' : 'ship'))}
-                        title={locale === 'ro' ? 'Construiește Corabie (1 Lemn + 1 Oaie)' : 'Build Ship (1 Wood + 1 Sheep)'}
-                      >
-                        ⛵ {locale === 'ro' ? 'Corabie' : 'Ship'}
-                      </button>
-                      {legalActionsForActive.some((a) => a.type === 'move_ship') && (
+                      {hasShipsInScenario && activePlayerObj.remainingPieces.ships !== undefined && (
+                        <button
+                          type="button"
+                          className={`btn ${buildMode === 'ship' ? 'btn-primary' : ''}`}
+                          disabled={
+                            !hasResources(activePlayerObj.resources, BUILDING_COSTS.ship) ||
+                            (activePlayerObj.remainingPieces.ships ?? 0) <= 0
+                          }
+                          onClick={() => setBuildMode((m) => (m === 'ship' ? 'none' : 'ship'))}
+                          title={locale === 'ro' ? 'Construiește Corabie (1 Lemn + 1 Oaie)' : 'Build Ship (1 Wood + 1 Sheep)'}
+                        >
+                          ⛵ {locale === 'ro' ? 'Corabie' : 'Ship'} ({INITIAL_PLAYER_PIECES.ships - (activePlayerObj.remainingPieces.ships ?? 0)}/{INITIAL_PLAYER_PIECES.ships})
+                        </button>
+                      )}
+                      {hasShipsInScenario && legalActionsForActive.some((a) => a.type === 'move_ship') && (
                         <button
                           type="button"
                           className={`btn ${buildMode === 'relocate_ship' ? 'btn-primary' : ''}`}
@@ -3202,32 +3779,6 @@ export const App: React.FC = () => {
                           🧭 {locale === 'ro' ? (selectedShipEdgeId ? 'Alege Destinație' : 'Mută Corabie') : (selectedShipEdgeId ? 'Choose Dest' : 'Move Ship')}
                         </button>
                       )}
-                      {/* Port Shortcut: if player has wood port and >= 2 wood, show quick conversion button */}
-                      {isHumanTurn && activePlayerObj && activePlayerObj.resources.wood >= 2 && activePlayerObj.resources.brick === 0 && (() => {
-                        const wRatio = getPlayerBankTradeRatio(gameState.board, activePlayerObj.id, 'wood');
-                        if (activePlayerObj.resources.wood >= wRatio && gameState.bank.brick >= 1) {
-                          return (
-                            <button
-                              type="button"
-                              className="btn"
-                              style={{ fontSize: '0.68rem', padding: '0.15rem 0.45rem', borderColor: 'var(--accent-gold)', color: 'var(--accent-gold)' }}
-                              title="Schimbă la port pentru a obține Argilă pentru Drum"
-                              onClick={() => {
-                                executeAction(activePlayerObj.id, {
-                                  type: 'trade_bank',
-                                  give: 'wood',
-                                  giveAmount: wRatio,
-                                  receive: 'brick'
-                                });
-                              }}
-                            >
-                              ⚓ Port ({wRatio}L ➔ 1A)
-                            </button>
-                          );
-                        }
-                        return null;
-                      })()}
-
                       <button
                         type="button"
                         className={`btn ${buildMode === 'settlement' ? 'btn-primary' : ''}`}
@@ -3237,7 +3788,7 @@ export const App: React.FC = () => {
                         }
                         onClick={() => setBuildMode((m) => (m === 'settlement' ? 'none' : 'settlement'))}
                       >
-                        🏠 {t.buildSettlement}
+                        🏠 {t.buildSettlement} ({INITIAL_PLAYER_PIECES.settlements - activePlayerObj.remainingPieces.settlements}/{INITIAL_PLAYER_PIECES.settlements})
                       </button>
 
                       <button
@@ -3249,7 +3800,7 @@ export const App: React.FC = () => {
                         }
                         onClick={() => setBuildMode((m) => (m === 'city' ? 'none' : 'city'))}
                       >
-                        🏰 {t.buildCity}
+                        🏰 {t.buildCity} ({INITIAL_PLAYER_PIECES.cities - activePlayerObj.remainingPieces.cities}/{INITIAL_PLAYER_PIECES.cities})
                       </button>
 
                       <button
@@ -3363,13 +3914,16 @@ export const App: React.FC = () => {
                         <div className="player-grid-pieces">
                           {(
                             [
-                              ['settlements', '🏠', locale === 'ro' ? 'Așezări' : 'Settlements'],
-                              ['cities', '🏰', locale === 'ro' ? 'Orașe' : 'Cities'],
-                              ['roads', '🛣️', locale === 'ro' ? 'Drumuri' : 'Roads']
-                            ] as const
+                              ['settlements', '🏠', locale === 'ro' ? 'Așezări' : 'Settlements'] as const,
+                              ['cities', '🏰', locale === 'ro' ? 'Orașe' : 'Cities'] as const,
+                              ['roads', '🛣️', locale === 'ro' ? 'Drumuri' : 'Roads'] as const,
+                              ...(hasShipsInScenario && p.remainingPieces.ships !== undefined
+                                ? [['ships', '⛵', locale === 'ro' ? 'Corăbii' : 'Ships'] as const]
+                                : [])
+                            ]
                           ).map(([key, icon, title]) => {
                             const total = INITIAL_PLAYER_PIECES[key];
-                            const used = total - p.remainingPieces[key];
+                            const used = total - (p.remainingPieces[key] ?? 0);
                             const exhausted = used >= total;
                             return (
                               <span
@@ -3488,49 +4042,56 @@ export const App: React.FC = () => {
                             .filter((c) => c.type === dt)
                             .every((c) => c.boughtAtTurn === gameState.turn);
                           return (
-                            <DevCardSprite
+                            <div
                               key={dt}
-                              type={dt}
-                              locale={locale}
-                              count={devCardCountsByType[dt]}
-                              isNew={allBoughtThisTurn && dt !== 'victory_point'}
-                              canPlay={canPlayThis}
-                              size="lg"
-                              actionLabel={
-                                dt === 'knight'
-                                  ? '⚔️ Activează Cavaler'
-                                  : dt === 'road_building'
-                                  ? '🛣️ Joacă 2 Drumuri'
-                                  : dt === 'monopoly'
-                                  ? '👑 Joacă Monopol'
-                                  : dt === 'year_of_plenty'
-                                  ? '🎁 Joacă Anul Abundenței'
-                                  : undefined
-                              }
-                              onPlay={
-                                dt === 'knight'
-                                  ? () => {
-                                      setBuildMode('knight');
-                                      setActiveModal('none');
-                                    }
-                                  : dt === 'road_building'
-                                  ? () => {
-                                      executeAction(activePlayerObj.id, {
-                                        type: 'play_road_building'
-                                      });
-                                      setActiveModal('none');
-                                    }
-                                  : dt === 'monopoly'
-                                  ? () => {
-                                      setActiveModal('play_monopoly');
-                                    }
-                                  : dt === 'year_of_plenty'
-                                  ? () => {
-                                      setActiveModal('play_year_of_plenty');
-                                    }
-                                  : undefined
-                              }
-                            />
+                              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, width: 150 }}
+                            >
+                              <DevCardSprite
+                                type={dt}
+                                locale={locale}
+                                count={devCardCountsByType[dt]}
+                                isNew={allBoughtThisTurn && dt !== 'victory_point'}
+                                canPlay={canPlayThis}
+                                size="lg"
+                                actionLabel={
+                                  dt === 'knight'
+                                    ? '⚔️ Activează Cavaler'
+                                    : dt === 'road_building'
+                                    ? '🛣️ Joacă 2 Drumuri'
+                                    : dt === 'monopoly'
+                                    ? '👑 Joacă Monopol'
+                                    : dt === 'year_of_plenty'
+                                    ? '🎁 Joacă Anul Abundenței'
+                                    : undefined
+                                }
+                                onPlay={
+                                  dt === 'knight'
+                                    ? () => {
+                                        setBuildMode('knight');
+                                        setActiveModal('none');
+                                      }
+                                    : dt === 'road_building'
+                                    ? () => {
+                                        executeAction(activePlayerObj.id, {
+                                          type: 'play_road_building'
+                                        });
+                                        setActiveModal('none');
+                                      }
+                                    : dt === 'monopoly'
+                                    ? () => {
+                                        setActiveModal('play_monopoly');
+                                      }
+                                    : dt === 'year_of_plenty'
+                                    ? () => {
+                                        setActiveModal('play_year_of_plenty');
+                                      }
+                                    : undefined
+                                }
+                              />
+                              <p className="card-gallery-rule-text" style={{ textAlign: 'center', margin: 0 }}>
+                                {DEV_CARD_RULE_TEXT[locale][dt]}
+                              </p>
+                            </div>
                           );
                         })}
                     </div>
@@ -4023,6 +4584,163 @@ export const App: React.FC = () => {
             </div>
           )}
 
+          {/* COUNTER-OFFER MODAL: a responder putting their own terms on the table instead of
+              the flat accept/reject the original offer forced on them - keyed off viewerPlayerObj
+              (not activePlayerObj, since the person countering usually isn't the active player,
+              which is exactly why they couldn't just reuse the main trade modal above). */}
+          {activeModal === 'counter_trade' && counterOfferOriginalId && viewerPlayerObj && (() => {
+            const originalOffer = gameState.activeTradeOffers.find((o) => o.id === counterOfferOriginalId);
+            const originalProposer = originalOffer ? getPlayerById(gameState, originalOffer.fromPlayerId) : undefined;
+            const closeCounterModal = () => {
+              setActiveModal('none');
+              setCounterOfferOriginalId(null);
+              setP2pOffer(createEmptyResources());
+              setP2pRequest(createEmptyResources());
+            };
+            if (!originalOffer || originalOffer.status !== 'open') {
+              // The offer resolved/expired while this modal was open (e.g. someone else
+              // accepted it first) - nothing left to counter.
+              return (
+                <div className="modal-backdrop" onClick={closeCounterModal}>
+                  <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+                    <div className="modal-body" style={{ textAlign: 'center', padding: '1.2rem' }}>
+                      <p>
+                        {locale === 'ro'
+                          ? 'Oferta originală nu mai este activă.'
+                          : 'The original offer is no longer active.'}
+                      </p>
+                      <button type="button" className="btn btn-primary" onClick={closeCounterModal}>
+                        {locale === 'ro' ? 'Închide' : 'Close'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div className="modal-backdrop" onClick={closeCounterModal}>
+                <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+                  <div className="modal-header">
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      🔄 {locale === 'ro' ? 'Contra-ofertă către' : 'Counter-offer to'}{' '}
+                      <span style={playerBadgeStyle(originalProposer?.color)}>
+                        {originalProposer?.name ?? originalOffer.fromPlayerId}
+                      </span>
+                    </h3>
+                    <button type="button" className="btn" onClick={closeCounterModal}>
+                      ✕ {locale === 'ro' ? 'Închide' : 'Close'}
+                    </button>
+                  </div>
+                  <div className="modal-body">
+                    <div
+                      style={{
+                        fontSize: '0.78rem',
+                        color: 'var(--text-muted)',
+                        marginBottom: '0.75rem',
+                        textAlign: 'center'
+                      }}
+                    >
+                      {locale === 'ro'
+                        ? 'Oferta lor: oferă'
+                        : 'Their offer: offers'}{' '}
+                      {ALL_RESOURCES.filter((r) => originalOffer.offering[r] > 0)
+                        .map((r) => `${RESOURCE_ICONS[r]}${originalOffer.offering[r]}`)
+                        .join(' ')}{' '}
+                      · {locale === 'ro' ? 'cere' : 'asks'}{' '}
+                      {ALL_RESOURCES.filter((r) => originalOffer.requesting[r] > 0)
+                        .map((r) => `${RESOURCE_ICONS[r]}${originalOffer.requesting[r]}`)
+                        .join(' ')}
+                      {' — '}
+                      {locale === 'ro'
+                        ? 'alege mai jos ce vrei TU să oferi/ceri în loc:'
+                        : 'pick what YOU want to offer/ask instead below:'}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+                      <div>
+                        <strong style={{ fontSize: '0.8rem' }}>
+                          {locale === 'ro' ? 'Oferi din mână:' : 'You offer:'}
+                        </strong>
+                        {ALL_RESOURCES.map((r) => (
+                          <div key={r} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                            <span style={{ fontSize: '0.8rem' }}>
+                              {RESOURCE_ICONS[r]} {RESOURCE_LABELS[locale][r]}: <strong>{p2pOffer[r]}</strong>
+                            </span>
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              <button
+                                type="button"
+                                className="btn"
+                                onClick={() => setP2pOffer({ ...p2pOffer, [r]: Math.max(0, p2pOffer[r] - 1) })}
+                              >
+                                -
+                              </button>
+                              <button
+                                type="button"
+                                className="btn"
+                                onClick={() =>
+                                  setP2pOffer({
+                                    ...p2pOffer,
+                                    [r]: Math.min(viewerPlayerObj.resources[r], p2pOffer[r] + 1)
+                                  })
+                                }
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div>
+                        <strong style={{ fontSize: '0.8rem' }}>
+                          {locale === 'ro' ? 'Ceri la schimb:' : 'You ask for:'}
+                        </strong>
+                        {ALL_RESOURCES.map((r) => (
+                          <div key={r} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                            <span style={{ fontSize: '0.8rem' }}>
+                              {RESOURCE_ICONS[r]} {RESOURCE_LABELS[locale][r]}: <strong>{p2pRequest[r]}</strong>
+                            </span>
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              <button
+                                type="button"
+                                className="btn"
+                                onClick={() => setP2pRequest({ ...p2pRequest, [r]: Math.max(0, p2pRequest[r] - 1) })}
+                              >
+                                -
+                              </button>
+                              <button
+                                type="button"
+                                className="btn"
+                                onClick={() => setP2pRequest({ ...p2pRequest, [r]: p2pRequest[r] + 1 })}
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ marginTop: '0.75rem', width: '100%' }}
+                      disabled={totalResourceCount(p2pOffer) === 0 || totalResourceCount(p2pRequest) === 0}
+                      onClick={() => {
+                        executeAction(viewerId, {
+                          type: 'counter_trade',
+                          offerId: originalOffer.id,
+                          offering: p2pOffer,
+                          requesting: p2pRequest
+                        });
+                        closeCounterModal();
+                      }}
+                    >
+                      {locale === 'ro' ? 'Trimite Contra-oferta' : 'Send Counter-offer'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* MODAL C: EVENT LOG */}
           {activeModal === 'event_log' && recorder && (
             <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
@@ -4051,25 +4769,70 @@ export const App: React.FC = () => {
           )}
 
           {/* MODAL D: BUILDING COSTS REFERENCE (/cost.jpg) */}
-          {activeModal === 'costs_help' && (
-            <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
-              <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-                <div className="modal-header">
-                  <h3>📋 Tabel Costuri Construcții & Puncte de Victorie</h3>
-                  <button type="button" className="btn" onClick={() => setActiveModal('none')}>
-                    ✕ Închide
-                  </button>
-                </div>
-                <div className="modal-body" style={{ textAlign: 'center' }}>
-                  <img
-                    src="/cost.jpg"
-                    alt="Costuri Catan"
-                    style={{ maxWidth: '100%', maxHeight: '65dvh', borderRadius: 8, border: '1px solid var(--border-color)' }}
-                  />
+          {activeModal === 'costs_help' && (() => {
+            // Built from BUILDING_COSTS directly (always matches the real rules, in whatever
+            // language is active) rather than a baked-in reference image - cost.jpg had no
+            // Romanian or English version, only Spanish ("Carretera", "Poblado"...), which a
+            // flat image can't fix per-locale the way every other card in the game already
+            // shows translated text: blank/textless art with the label drawn separately.
+            const rows: { key: string; label: string; cost: ResourceCount; vp: string }[] = [
+              { key: 'road', label: locale === 'ro' ? 'Drum' : 'Road', cost: BUILDING_COSTS.road, vp: '0 VP' },
+              ...(gameState && isScenarioWithShips(gameState.rules.boardScenario)
+                ? [{ key: 'ship', label: locale === 'ro' ? 'Navă' : 'Ship', cost: BUILDING_COSTS.ship, vp: '0 VP' }]
+                : []),
+              { key: 'settlement', label: locale === 'ro' ? 'Așezare' : 'Settlement', cost: BUILDING_COSTS.settlement, vp: '1 VP' },
+              { key: 'city', label: locale === 'ro' ? 'Oraș' : 'City', cost: BUILDING_COSTS.city, vp: '2 VP' },
+              { key: 'dev_card', label: locale === 'ro' ? 'Carte de Dezvoltare' : 'Development Card', cost: BUILDING_COSTS.dev_card, vp: locale === 'ro' ? '? VP (variază)' : '? VP (varies)' }
+            ];
+            return (
+              <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
+                <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+                  <div className="modal-header">
+                    <h3>📋 {locale === 'ro' ? 'Tabel Costuri Construcții & Puncte de Victorie' : 'Building Costs & Victory Point Table'}</h3>
+                    <button type="button" className="btn" onClick={() => setActiveModal('none')}>
+                      ✕ {locale === 'ro' ? 'Închide' : 'Close'}
+                    </button>
+                  </div>
+                  <div className="modal-body">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {rows.map((row) => (
+                        <div
+                          key={row.key}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 10,
+                            background: 'var(--bg-inset)',
+                            border: '1px solid var(--border-color-soft)',
+                            borderRadius: 8,
+                            padding: '0.5rem 0.75rem'
+                          }}
+                        >
+                          <strong style={{ minWidth: 150 }}>{row.label}</strong>
+                          <div style={{ display: 'flex', gap: 10, flex: 1, justifyContent: 'center' }}>
+                            {ALL_RESOURCES.filter((r) => row.cost[r] > 0).map((r) => (
+                              <span key={r} style={{ fontSize: '0.86rem' }}>
+                                {RESOURCE_ICONS[r]} {row.cost[r]}
+                              </span>
+                            ))}
+                          </div>
+                          <span style={{ color: 'var(--accent-gold)', fontWeight: 700, minWidth: 70, textAlign: 'right' }}>
+                            {row.vp}
+                          </span>
+                        </div>
+                      ))}
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: 4 }}>
+                        {locale === 'ro'
+                          ? '🛣️ Drumul cel mai Lung (min. 5 drumuri): +2 VP  ·  ⚔️ Armata cea mai Mare (min. 3 Cavaleri): +2 VP'
+                          : '🛣️ Longest Road (5+ roads): +2 VP  ·  ⚔️ Largest Army (3+ Knights): +2 VP'}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* AUTOMATIC MODAL E: DISCARD CARDS ON 7 ROLL (>7 cards) */}
           {gameState.phase === 'discard_resources' &&
@@ -4194,22 +4957,40 @@ export const App: React.FC = () => {
               );
             })}
 
-          {/* AUTOMATIC MODAL F: STEAL RESOURCE TARGET SELECTION */}
+          {/* AUTOMATIC MODAL F: STEAL RESOURCE TARGET SELECTION - shows each candidate's own
+              card (VP, resource/dev-card counts, pieces...) same as the sidebar, since the
+              board behind this modal is dimmed/blurred and isn't a usable reference while
+              deciding; sourced from playerView (not gameState directly) so an online opponent's
+              hidden resource count shows correctly instead of the local adapter's 0 placeholder. */}
           {gameState.phase === 'steal_resource' && isHumanTurn && (
             <div className="modal-backdrop">
-              <div className="modal-dialog" style={{ maxWidth: 460 }}>
+              <div className="modal-dialog" style={{ maxWidth: 480 }}>
                 <div className="modal-header">
                   <h3>🥷 Alege adversarul de la care furi 1 resursă</h3>
                 </div>
-                <div className="modal-body" style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
                   {(gameState.robberContext?.eligibleTargetIds ?? []).map((tId) => {
-                    const tp = getPlayerById(gameState, tId);
+                    const tp = playerView?.players.find((p) => p.id === tId) ?? getPlayerById(gameState, tId);
+                    if (!tp) return null;
+                    const score = 'publicScore' in tp ? (tp.totalScore ?? tp.publicScore) : calculateScore(gameState, tId).publicScore;
+                    const resCount = 'resourceCount' in tp ? tp.resourceCount : totalResourceCount(tp.resources);
+                    const devCount = 'devCardCount' in tp ? tp.devCardCount : tp.devCards.filter((c) => !c.played).length;
                     return (
                       <button
                         key={tId}
                         type="button"
-                        className="btn btn-primary"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        className="btn"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 10,
+                          width: '100%',
+                          padding: '0.55rem 0.75rem',
+                          background: 'var(--bg-inset)',
+                          border: '1px solid var(--border-color-soft)',
+                          textAlign: 'left'
+                        }}
                         onClick={() =>
                           executeAction(gameState.activePlayerId, {
                             type: 'steal_from_player',
@@ -4217,13 +4998,15 @@ export const App: React.FC = () => {
                           })
                         }
                       >
-                        {tp && (
-                          <span
-                            className="color-dot"
-                            style={{ backgroundColor: tp.color, width: 11, height: 11 }}
-                          />
-                        )}
-                        Fură 1 carte de la {tp?.name ?? tId}
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span className="color-dot" style={{ backgroundColor: tp.color, width: 12, height: 12 }} />
+                          <strong>{tp.name}</strong>
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          <span style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>{score} VP</span>
+                          <span title={locale === 'ro' ? 'Cărți de resurse în mână' : 'Resource cards in hand'}>🎴 {resCount}</span>
+                          <span title={locale === 'ro' ? 'Cărți de dezvoltare nejucate' : 'Unplayed dev cards'}>🃏 {devCount}</span>
+                        </span>
                       </button>
                     );
                   })}
@@ -4243,13 +5026,15 @@ export const App: React.FC = () => {
                 !dismissedTradeOfferIds.has(o.id)
             );
             if (!incomingOffer) return null;
+            // The counter-offer modal (below) is answering this exact offer - don't stack both.
+            if (activeModal === 'counter_trade' && counterOfferOriginalId === incomingOffer.id) return null;
             const proposer = getPlayerById(gameState, incomingOffer.fromPlayerId);
             const myRes = viewerPlayerObj?.resources ?? createEmptyResources();
             const canAfford = hasResources(myRes, incomingOffer.requesting);
-            const autoRejectSeconds =
-              autoRejectCountdown && autoRejectCountdown.offerId === incomingOffer.id
-                ? autoRejectCountdown.secondsLeft
-                : null;
+            // A player who can't afford to accept is never forced into the transaction with a
+            // blocking modal anymore - they see the non-blocking negotiation banner below
+            // instead (which still lets them reject), and are free to keep acting.
+            if (!canAfford) return null;
 
             return (
               <div
@@ -4265,14 +5050,18 @@ export const App: React.FC = () => {
                     className="modal-header"
                     style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                   >
-                    <h3 style={{ margin: 0, fontSize: '1.05rem' }}>
-                      🤝 Ofertă de Schimb de la{' '}
-                      <strong style={{ color: 'var(--accent-gold)' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span
+                        className="color-dot"
+                        style={{ backgroundColor: proposer?.color ?? 'var(--accent-gold)', width: 13, height: 13 }}
+                      />
+                      Ofertă de Schimb de la{' '}
+                      <span style={playerBadgeStyle(proposer?.color)}>
                         {proposer?.name ?? incomingOffer.fromPlayerId}
-                      </strong>
+                      </span>
                     </h3>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {!canAfford && autoRejectSeconds !== null && (
+                      {!canAfford && (
                         <span
                           style={{
                             background: 'rgba(239, 68, 68, 0.2)',
@@ -4284,7 +5073,7 @@ export const App: React.FC = () => {
                             fontWeight: 700
                           }}
                         >
-                          ⏱️ Auto-refuz în {autoRejectSeconds}s
+                          ⚠️ Resurse insuficiente
                         </span>
                       )}
                       <button
@@ -4346,35 +5135,35 @@ export const App: React.FC = () => {
                     {/* Resursele din mână ale jucătorului receptor */}
                     <div
                       style={{
-                        background: "rgba(255, 255, 255, 0.04)",
-                        border: "1px solid rgba(255, 255, 255, 0.12)",
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
                         borderRadius: 8,
-                        padding: "0.6rem 0.65rem",
-                        marginBottom: "0.85rem"
+                        padding: '0.6rem 0.65rem',
+                        marginBottom: '0.85rem'
                       }}
                     >
                       <div
                         style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: "0.45rem"
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: '0.45rem'
                         }}
                       >
-                        <h4 style={{ fontSize: "0.82rem", color: "var(--text-muted)", margin: 0 }}>
-                          {locale === "ro" ? "🎴 Cărțile tale în mână:" : "🎴 Your cards in hand:"}
+                        <h4 style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>
+                          {locale === 'ro' ? '🃏 Cărțile tale în mână:' : '🃏 Your cards in hand:'}
                         </h4>
-                        <span style={{ fontSize: "0.78rem", opacity: 0.75 }}>
-                          {Object.values(myRes).reduce((a, b) => a + b, 0)}{" "}
-                          {locale === "ro" ? "cărți în total" : "cards total"}
+                        <span style={{ fontSize: '0.78rem', opacity: 0.75 }}>
+                          {Object.values(myRes).reduce((a, b) => a + b, 0)}{' '}
+                          {locale === 'ro' ? 'cărți în total' : 'cards total'}
                         </span>
                       </div>
                       <div
                         style={{
-                          display: "flex",
+                          display: 'flex',
                           gap: 6,
-                          justifyContent: "center",
-                          flexWrap: "wrap"
+                          justifyContent: 'center',
+                          flexWrap: 'wrap'
                         }}
                       >
                         {ALL_RESOURCES.map((r) => {
@@ -4389,10 +5178,10 @@ export const App: React.FC = () => {
                             <div
                               key={r}
                               style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                alignItems: "center",
-                                position: "relative"
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                position: 'relative'
                               }}
                             >
                               <ResourceCardSprite
@@ -4405,35 +5194,35 @@ export const App: React.FC = () => {
                               {isRequested && (
                                 <span
                                   style={{
-                                    fontSize: "0.68rem",
+                                    fontSize: '0.68rem',
                                     fontWeight: 700,
                                     marginTop: 3,
-                                    padding: "1px 4px",
+                                    padding: '1px 4px',
                                     borderRadius: 4,
                                     background: hasEnough
-                                      ? "rgba(34, 197, 94, 0.22)"
-                                      : "rgba(239, 68, 68, 0.25)",
-                                    color: hasEnough ? "#4ade80" : "#f87171",
-                                    border: `1px solid ${hasEnough ? "rgba(34, 197, 94, 0.45)" : "rgba(239, 68, 68, 0.5)"}`,
-                                    whiteSpace: "nowrap"
+                                      ? 'rgba(34, 197, 94, 0.22)'
+                                      : 'rgba(239, 68, 68, 0.25)',
+                                    color: hasEnough ? '#4ade80' : '#f87171',
+                                    border: `1px solid ${hasEnough ? 'rgba(34, 197, 94, 0.45)' : 'rgba(239, 68, 68, 0.5)'}`,
+                                    whiteSpace: 'nowrap'
                                   }}
                                   title={hasEnough ? `Deții ${count} din ${req} cerute` : `Îți lipsesc ${req - count} resurse`}
                                 >
-                                  {hasEnough ? (req === 1 ? "cere 1" : `cere ${req}`) : `lipsesc ${req - count}`}
+                                  {hasEnough ? (req === 1 ? 'cere 1' : `cere ${req}`) : `lipsesc ${req - count}`}
                                 </span>
                               )}
                               {isOffered && !isRequested && (
                                 <span
                                   style={{
-                                    fontSize: "0.68rem",
+                                    fontSize: '0.68rem',
                                     fontWeight: 700,
                                     marginTop: 3,
-                                    padding: "1px 4px",
+                                    padding: '1px 4px',
                                     borderRadius: 4,
-                                    background: "rgba(59, 130, 246, 0.2)",
-                                    color: "#60a5fa",
-                                    border: "1px solid rgba(59, 130, 246, 0.4)",
-                                    whiteSpace: "nowrap"
+                                    background: 'rgba(59, 130, 246, 0.2)',
+                                    color: '#60a5fa',
+                                    border: '1px solid rgba(59, 130, 246, 0.4)',
+                                    whiteSpace: 'nowrap'
                                   }}
                                   title={`Vei primi +${off}`}
                                 >
@@ -4467,50 +5256,6 @@ export const App: React.FC = () => {
                         >
                           ⚠️ Nu ai în mână toate resursele cerute pentru a accepta acest schimb.
                         </div>
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 8,
-                            fontSize: '0.82rem',
-                            color: '#fca5a5'
-                          }}
-                        >
-                          <span>⏱️ Oferta se va refuza automat în:</span>
-                          <strong
-                            style={{
-                              background: '#ef4444',
-                              color: '#fff',
-                              padding: '1px 8px',
-                              borderRadius: 12,
-                              fontSize: '0.88rem',
-                              minWidth: 26,
-                              display: 'inline-block'
-                            }}
-                          >
-                            {autoRejectSeconds !== null ? autoRejectSeconds : 5}s
-                          </strong>
-                        </div>
-                        <div
-                          style={{
-                            width: '100%',
-                            height: 4,
-                            background: 'rgba(255, 255, 255, 0.12)',
-                            borderRadius: 2,
-                            marginTop: 6,
-                            overflow: 'hidden'
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: `${Math.max(0, (((autoRejectSeconds !== null ? autoRejectSeconds : 5)) / 5) * 100)}%`,
-                              height: '100%',
-                              background: '#ef4444',
-                              transition: 'width 1s linear'
-                            }}
-                          />
-                        </div>
                       </div>
                     )}
 
@@ -4530,31 +5275,123 @@ export const App: React.FC = () => {
                       >
                         ✅ Acceptă Schimbul
                       </button>
-                      <button
-                        type="button"
-                        className="btn"
-                        style={{
-                          background: 'rgba(239, 68, 68, 0.15)',
-                          borderColor: 'rgba(239, 68, 68, 0.5)',
-                          color: '#fca5a5'
-                        }}
-                        onClick={() => dismissTradeOffer(incomingOffer.id, 'Nu doresc acest schimb')}
-                      >
-                        ❌ Refuză {!canAfford && autoRejectSeconds !== null ? `(${autoRejectSeconds}s)` : ''}
-                      </button>
+                      {/* Split Reject Button with Reason Dropdown */}
+                      <div style={{ position: 'relative', display: 'inline-flex', verticalAlign: 'middle' }}>
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.15)',
+                            borderColor: 'rgba(239, 68, 68, 0.5)',
+                            color: '#fca5a5',
+                            borderTopRightRadius: 0,
+                            borderBottomRightRadius: 0,
+                            borderRight: '1px solid rgba(239, 68, 68, 0.3)'
+                          }}
+                          onClick={() => {
+                            setRejectDropdownOfferId(null);
+                            dismissTradeOffer(incomingOffer.id, 'Refuz');
+                          }}
+                          title={locale === 'ro' ? 'Refuză oferta (rapid)' : 'Reject offer (quick)'}
+                        >
+                          ❌ {locale === 'ro' ? 'Refuză' : 'Reject'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.25)',
+                            borderColor: 'rgba(239, 68, 68, 0.5)',
+                            color: '#fca5a5',
+                            borderTopLeftRadius: 0,
+                            borderBottomLeftRadius: 0,
+                            padding: '0 0.55rem',
+                            fontSize: '0.82rem',
+                            fontWeight: 700
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRejectDropdownOfferId((curr) => (curr === incomingOffer.id ? null : incomingOffer.id));
+                          }}
+                          title={locale === 'ro' ? 'Alege motivul refuzului' : 'Select reason for refusal'}
+                        >
+                          ▾
+                        </button>
+
+                        {rejectDropdownOfferId === incomingOffer.id && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: '115%',
+                              right: 0,
+                              zIndex: 120,
+                              background: '#132337',
+                              border: '1px solid rgba(239, 68, 68, 0.4)',
+                              borderRadius: 8,
+                              padding: '6px',
+                              boxShadow: '0 8px 24px rgba(0,0,0,0.7)',
+                              minWidth: 220,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 4
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', padding: '2px 6px', fontWeight: 600 }}>
+                              {locale === 'ro' ? 'Motivul refuzului:' : 'Reason for decline:'}
+                            </div>
+                            {[
+                              { label: locale === 'ro' ? '🚫 Nu am resursa cerută' : '🚫 Missing requested resource', reason: 'Nu am resursa cerută' },
+                              { label: locale === 'ro' ? '🔒 Nu pot să dau' : '🔒 Cannot give', reason: 'Nu pot să dau' },
+                              { label: locale === 'ro' ? '❌ Refuz' : '❌ Just decline', reason: 'Refuz' },
+                              { label: locale === 'ro' ? '⚖️ Prea scump' : '⚖️ Too expensive', reason: 'Prea scump' }
+                            ].map((item) => (
+                              <button
+                                key={item.reason}
+                                type="button"
+                                className="btn"
+                                style={{
+                                  textAlign: 'left',
+                                  fontSize: '0.78rem',
+                                  padding: '0.35rem 0.6rem',
+                                  background: 'rgba(255, 255, 255, 0.05)',
+                                  borderColor: 'transparent',
+                                  color: '#e2e8f0',
+                                  justifyContent: 'flex-start',
+                                  width: '100%'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                                  e.currentTarget.style.borderColor = 'transparent';
+                                }}
+                                onClick={() => {
+                                  setRejectDropdownOfferId(null);
+                                  dismissTradeOffer(incomingOffer.id, item.reason);
+                                }}
+                              >
+                                {item.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <button
                         type="button"
                         className="btn"
                         style={{ borderColor: 'var(--accent-gold)', color: 'var(--accent-gold)' }}
                         onClick={() => {
-                          dismissTradeOffer(incomingOffer.id, 'Dorește să negocieze altă combinație');
-                          if (viewerId === gameState.activePlayerId) {
-                            setP2pOffer({ ...incomingOffer.requesting });
-                            setP2pRequest({ ...incomingOffer.offering });
-                            setActiveModal('trade');
-                          } else {
-                            showActionFeedback('Ai transmis refuzul cu cerere de renegociere!');
-                          }
+                          // Don't reject yet - only the actual counter_trade submission below
+                          // closes this offer (see counter_trade's engine handling: it rejects
+                          // the original AND opens the new one in one atomic action). Canceling
+                          // out of the counter-offer modal should leave the original untouched.
+                          setP2pOffer(createEmptyResources());
+                          setP2pRequest(createEmptyResources());
+                          setCounterOfferOriginalId(incomingOffer.id);
+                          setActiveModal('counter_trade');
                         }}
                       >
                         🔄 Negociază / Contra-ofertă
@@ -4566,15 +5403,49 @@ export const App: React.FC = () => {
             );
           })()}
 
-          {/* TRADE PROPOSER STATUS BANNER (Real-time Rejections & Negotiation Feedback) */}
+          {/* TRADE NEGOTIATION BANNER - shows every player (proposer, an unaffordable or
+              uninvolved responder, or any onlooker) who's negotiating, what's offered/wanted,
+              and whether it's been accepted or refused yet. Non-blocking (unlike the accept/
+              reject modal above, which only ever shows to a responder who can actually accept),
+              colored by each player's board color, and kept up for a 5s floor by
+              visibleTradeOffers regardless of how fast the offer itself resolves. */}
           {(() => {
-            const myOpenOffer = gameState.activeTradeOffers.find(
-              (o) =>
-                o.fromPlayerId === viewerId &&
-                (o.status === 'open' || o.status === 'rejected') &&
-                !dismissedTradeOfferIds.has(o.id)
-            );
-            if (!myOpenOffer) return null;
+            const nameStyle = playerBadgeStyle;
+            const resourceList = (counts: ResourceCount) =>
+              ALL_RESOURCES.filter((r) => counts[r] > 0)
+                .map((r) => `${RESOURCE_ICONS[r]}${counts[r]}`)
+                .join(' ');
+
+            const entry = Object.values(visibleTradeOffers)
+              .sort((a, b) => b.firstShownAtMs - a.firstShownAtMs)
+              .find(({ offer }) => !dismissedTradeOfferIds.has(offer.id));
+            if (!entry) return null;
+            const { offer } = entry;
+            const proposer = getPlayerById(gameState, offer.fromPlayerId);
+            const target = offer.toPlayerId ? getPlayerById(gameState, offer.toPlayerId) : undefined;
+            const accepter = offer.acceptedByPlayerId ? getPlayerById(gameState, offer.acceptedByPlayerId) : undefined;
+            const isProposer = offer.fromPlayerId === viewerId;
+
+            let statusNode: React.ReactNode;
+            if (offer.status === 'accepted') {
+              statusNode = (
+                <span style={{ color: '#4ade80', fontWeight: 700 }}>
+                  ✅ Acceptat de <span style={nameStyle(accepter?.color)}>{accepter?.name ?? offer.acceptedByPlayerId}</span>!
+                </span>
+              );
+            } else if (offer.status === 'rejected' || (offer.status === 'open' && offer.rejectedByPlayerIds.length > 0 && !target)) {
+              statusNode = (
+                <span style={{ color: offer.status === 'rejected' ? '#f87171' : 'var(--text-muted)' }}>
+                  {offer.status === 'rejected' ? '❌ Refuzată de toți' : `⏳ Se negociază... (${offer.rejectedByPlayerIds.length} refuz${offer.rejectedByPlayerIds.length === 1 ? '' : 'uri'} până acum)`}
+                </span>
+              );
+            } else if (offer.status === 'open') {
+              statusNode = <span style={{ color: 'var(--text-muted)' }}>⏳ Se negociază{target ? <> cu <span style={nameStyle(target.color)}>{target.name}</span></> : ' cu oricine'}...</span>;
+            } else {
+              statusNode = <span style={{ color: 'var(--text-muted)' }}>⌛ {offer.status === 'cancelled' ? 'Retrasă' : 'Expirată'}</span>;
+            }
+
+            const dismiss = () => setDismissedTradeOfferIds((prev) => new Set(prev).add(offer.id));
 
             return (
               <div
@@ -4594,43 +5465,77 @@ export const App: React.FC = () => {
                   textAlign: 'center'
                 }}
               >
-                <div style={{ fontWeight: 700, fontSize: '0.84rem', color: 'var(--accent-gold)', marginBottom: 3 }}>
-                  🤝 Oferta ta de Schimb ({myOpenOffer.status === 'rejected' ? 'Refuzată de toți' : 'Activă'})
+                <div style={{ fontWeight: 700, fontSize: '0.84rem', marginBottom: 3 }}>
+                  🤝 {isProposer ? 'Oferta ta de schimb' : (
+                    <>
+                      <span style={nameStyle(proposer?.color)}>{proposer?.name ?? offer.fromPlayerId}</span> propune un schimb
+                    </>
+                  )}
                 </div>
-                {myOpenOffer.rejectedByPlayerIds.length > 0 && (
-                  <div style={{ fontSize: '0.78rem', color: '#f87171', margin: '4px 0', textAlign: 'left' }}>
-                    {myOpenOffer.rejectedByPlayerIds.map((rId) => {
-                      const rName = getPlayerById(gameState, rId)?.name ?? rId;
-                      const reason = myOpenOffer.rejectionReasons?.[rId];
+                <div style={{ display: 'flex', gap: 8, margin: '6px 0' }}>
+                  <div
+                    style={{
+                      flex: 1,
+                      background: 'rgba(34, 197, 94, 0.14)',
+                      border: '1px solid rgba(34, 197, 94, 0.4)',
+                      borderRadius: 8,
+                      padding: '0.4rem 0.3rem'
+                    }}
+                  >
+                    <div style={{ fontSize: '0.68rem', color: '#4ade80', fontWeight: 700, textTransform: 'uppercase' }}>oferă</div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{resourceList(offer.offering) || '—'}</div>
+                  </div>
+                  <div
+                    style={{
+                      flex: 1,
+                      background: 'rgba(239, 68, 68, 0.14)',
+                      border: '1px solid rgba(239, 68, 68, 0.4)',
+                      borderRadius: 8,
+                      padding: '0.4rem 0.3rem'
+                    }}
+                  >
+                    <div style={{ fontSize: '0.68rem', color: '#f87171', fontWeight: 700, textTransform: 'uppercase' }}>cere</div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{resourceList(offer.requesting) || '—'}</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.78rem', marginBottom: 2 }}>{statusNode}</div>
+                {offer.rejectedByPlayerIds.length > 0 && offer.status !== 'rejected' && (
+                  <div style={{ fontSize: '0.74rem', color: '#fca5a5', margin: '4px 0', textAlign: 'left' }}>
+                    {offer.rejectedByPlayerIds.map((rId) => {
+                      const rp = getPlayerById(gameState, rId);
+                      const reason = offer.rejectionReasons?.[rId];
                       return (
                         <div key={rId} style={{ marginTop: 2 }}>
-                          ❌ <strong>{rName}</strong> a refuzat{reason ? ': "' + reason + '"' : ''}
+                          ❌ <span style={nameStyle(rp?.color)}>{rp?.name ?? rId}</span> a refuzat{reason ? ': "' + reason + '"' : ''}
                         </div>
                       );
                     })}
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 6 }}>
-                  <button
-                    type="button"
-                    className="btn"
-                    style={{ fontSize: '0.76rem', padding: '0.2rem 0.55rem', borderColor: 'var(--accent-gold)', color: 'var(--accent-gold)' }}
-                    onClick={() => {
-                      cancelMyTradeOffer(myOpenOffer.id);
-                      setActiveModal('trade');
-                    }}
-                  >
-                    🔄 Negociază / Schimbă Oferta
-                  </button>
+                  {isProposer && offer.status === 'open' && (
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ fontSize: '0.76rem', padding: '0.2rem 0.55rem', borderColor: 'var(--accent-gold)', color: 'var(--accent-gold)' }}
+                      onClick={() => {
+                        cancelMyTradeOffer(offer.id);
+                        setActiveModal('trade');
+                      }}
+                    >
+                      🔄 Negociază / Schimbă Oferta
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn"
                     style={{ fontSize: '0.76rem', padding: '0.2rem 0.55rem' }}
                     onClick={() => {
-                      cancelMyTradeOffer(myOpenOffer.id);
+                      if (isProposer && offer.status === 'open') cancelMyTradeOffer(offer.id);
+                      dismiss();
                     }}
                   >
-                    ✕ Închide
+                    ✕ Ascunde
                   </button>
                 </div>
               </div>
@@ -4654,6 +5559,7 @@ export const App: React.FC = () => {
 
             return (
               <div className="modal-backdrop">
+                <Confetti />
                 <div className="modal-dialog" style={{ maxWidth: 540, textAlign: 'center' }}>
                   <div className="modal-header">
                     <h3>🎉 Partidă Finalizată & Salvată Automat!</h3>
@@ -4860,13 +5766,16 @@ export const App: React.FC = () => {
                         <div className="player-grid-pieces">
                           {(
                             [
-                              ['settlements', '🏠'],
-                              ['cities', '🏰'],
-                              ['roads', '🛣️']
-                            ] as const
+                              ['settlements', '🏠'] as const,
+                              ['cities', '🏰'] as const,
+                              ['roads', '🛣️'] as const,
+                              ...(p.remainingPieces.ships !== undefined
+                                ? [['ships', '⛵'] as const]
+                                : [])
+                            ]
                           ).map(([key, icon]) => {
                             const total = INITIAL_PLAYER_PIECES[key];
-                            const used = total - p.remainingPieces[key];
+                            const used = total - (p.remainingPieces[key] ?? 0);
                             const exhausted = used >= total;
                             return (
                               <span key={key} className={`piece-count-pill ${exhausted ? 'exhausted' : ''}`}>
@@ -4917,6 +5826,17 @@ export const App: React.FC = () => {
           replay={activeReplay ?? (recorder ? recorder.toReplayFile() : null)}
           onSelectReplay={(rep) => setActiveReplay(rep)}
           locale={locale}
+        />
+      )}
+
+      {/* TAB: HALL OF FAME - per-player win tallies across all finished games */}
+      {activeTab === 'hall_of_fame' && (
+        <HallOfFameView
+          locale={locale}
+          onOpenReplay={(rep) => {
+            setActiveReplay(rep);
+            setActiveTab('replay');
+          }}
         />
       )}
 

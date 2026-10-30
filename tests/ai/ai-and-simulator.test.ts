@@ -154,7 +154,7 @@ describe('Catan AI Opponents, Strategic Analysis, LLM Fallback & Simulator', () 
   });
 
   it('runs a multi-game benchmark suite with confidence intervals and rotating seats', () => {
-    const bench = runBenchmarkSuite({
+    const { report: bench } = runBenchmarkSuite({
       baseSeed: 'bench-suite-1',
       gamesCount: 4,
       // Above the simulator's 150-turn default: AI-vs-AI games occasionally run long

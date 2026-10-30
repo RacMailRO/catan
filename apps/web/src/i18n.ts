@@ -1,4 +1,5 @@
 import {
+  ALL_RESOURCES,
   BoardScenario,
   AIDifficulty,
   AIStrategyStyle,
@@ -19,6 +20,7 @@ export const TRANSLATIONS = {
     navGame: 'Partidă Activă',
     navReplay: 'Replay & Analiză AI',
     navBenchmark: 'Simulator & Reguli',
+    navHallOfFame: 'Hall of Fame',
     langToggle: 'EN',
     startGame: 'Pornește Partida',
     quickAiMatch: 'Simulare Rapidă 4 AI',
@@ -64,6 +66,7 @@ export const TRANSLATIONS = {
     navGame: 'Active Game',
     navReplay: 'Replay & AI Analysis',
     navBenchmark: 'Simulator & Rules',
+    navHallOfFame: 'Hall of Fame',
     langToggle: 'RO',
     startGame: 'Start Game',
     quickAiMatch: 'Quick 4-AI Simulation',
@@ -505,9 +508,18 @@ export function formatActionDescription(
     case 'propose_trade':
       return locale === 'ro' ? 'Propune ofertă de schimb' : 'Propose trade offer';
     case 'respond_trade':
+      if (action.response === 'reject' && action.reason) {
+        return locale === 'ro'
+          ? `Refuză oferta (${action.reason})`
+          : `Decline trade (${action.reason})`;
+      }
       return locale === 'ro'
         ? `Răspuns ofertă (${action.response === 'accept' ? 'Acceptă' : 'Refuză'})`
         : `Trade response (${action.response})`;
+    case 'counter_trade':
+      return locale === 'ro'
+        ? `Contra-ofertă: oferă ${ALL_RESOURCES.filter((r) => (action.offering[r] ?? 0) > 0).map((r) => rLabel[r]).join(', ')}, cere ${ALL_RESOURCES.filter((r) => (action.requesting[r] ?? 0) > 0).map((r) => rLabel[r]).join(', ')}`
+        : `Counter-offer: offers ${ALL_RESOURCES.filter((r) => (action.offering[r] ?? 0) > 0).map((r) => rLabel[r]).join(', ')}, asks ${ALL_RESOURCES.filter((r) => (action.requesting[r] ?? 0) > 0).map((r) => rLabel[r]).join(', ')}`;
     case 'cancel_trade':
       return locale === 'ro' ? 'Anulează oferta de schimb' : 'Cancel trade offer';
     case 'end_turn':

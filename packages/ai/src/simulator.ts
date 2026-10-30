@@ -48,6 +48,13 @@ export interface BenchmarkReport {
   playerStats: Record<string, PlayerBenchmarkStats>;
 }
 
+export interface BenchmarkSuiteResult {
+  report: BenchmarkReport;
+  /** One per game, present only when `recordReplays` was requested - lets the caller persist
+   * each benchmark game individually for later replay/AI-decision analysis. */
+  replays: ReplayFile[];
+}
+
 /**
  * Runs a complete automated AI vs. AI game deterministically.
  */
@@ -180,7 +187,10 @@ export function runBenchmarkSuite(options: {
   participants: ParticipantConfig[];
   rules?: Partial<GameRulesConfig>;
   maxTurns?: number;
-}): BenchmarkReport {
+  /** When true, each game in the suite also records its full replay (events, snapshots, AI
+   * decisions) so the caller can save it for later analysis instead of only aggregate stats. */
+  recordReplays?: boolean;
+}): BenchmarkSuiteResult {
   const winsByPlayer: Record<string, number> = {};
   const totalScoreByPlayer: Record<string, number> = {};
   const namesByPlayer: Record<string, string> = {};
@@ -194,6 +204,7 @@ export function runBenchmarkSuite(options: {
   let completedGames = 0;
   let totalTurns = 0;
   let totalIllegalMoves = 0;
+  const replays: ReplayFile[] = [];
 
   for (let i = 0; i < options.gamesCount; i++) {
     // Rotate starting order on each game to neutralize seat-order advantage
@@ -202,13 +213,17 @@ export function runBenchmarkSuite(options: {
     );
 
     const res = runSimulatedGame({
-      gameId: `bench-${i + 1}`,
+      gameId: `bench-${options.baseSeed}-${i + 1}`,
       seed: `${options.baseSeed}-game-${i + 1}`,
       participants: rotated,
       rules: options.rules,
       maxTurns: options.maxTurns ?? 150,
-      recordReplay: false
+      recordReplay: Boolean(options.recordReplays)
     });
+
+    if (res.replay) {
+      replays.push(res.replay);
+    }
 
     totalTurns += res.turns;
     totalIllegalMoves += res.illegalMovesAttempted;
@@ -243,11 +258,14 @@ export function runBenchmarkSuite(options: {
   }
 
   return {
-    gamesCount: options.gamesCount,
-    completedGames,
-    averageTurns:
-      options.gamesCount > 0 ? Number((totalTurns / options.gamesCount).toFixed(1)) : 0,
-    totalIllegalMoves,
-    playerStats
+    report: {
+      gamesCount: options.gamesCount,
+      completedGames,
+      averageTurns:
+        options.gamesCount > 0 ? Number((totalTurns / options.gamesCount).toFixed(1)) : 0,
+      totalIllegalMoves,
+      playerStats
+    },
+    replays
   };
 }

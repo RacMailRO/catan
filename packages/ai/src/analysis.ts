@@ -185,6 +185,16 @@ export function analyzeDecisionAtSequence(
   const bestAlt = evaluated[0] ?? actualEval;
   const scoreGap = Number(Math.max(0, bestAlt.score - actualEval.score).toFixed(3));
 
+  // A flat "gap <= 0.5" cutoff only makes sense for action types whose scores happen to sit
+  // near that scale (small trade proposals, ~2-10 points) - for a city upgrade (~50 points),
+  // a 1.8-point gap is a ~4% difference between two reasonable choices, not a mistake, but
+  // would still fail an absolute 0.5 cutoff and get mislabeled "suboptimal"/a "hesitation"
+  // (see biggestMistakes below) even though it's well within normal strategic equivalence -
+  // e.g. sequencing which of two similarly-good city upgrades to build first based on your own
+  // longer-term port plans, which this single-step heuristic has no visibility into anyway.
+  // Treat it as optimal if it clears EITHER a small absolute floor or a 5% relative margin.
+  const isOptimal = scoreGap <= 0.5 || (bestAlt.score > 0 && scoreGap / bestAlt.score <= 0.05);
+
   const recordedAIDecision = event.aiDecisionId
     ? replay.aiDecisions.find((d) => d.id === event.aiDecisionId)
     : undefined;
@@ -199,7 +209,7 @@ export function analyzeDecisionAtSequence(
     bestAlternativeAction: bestAlt.action,
     bestAlternativeScore: bestAlt.score,
     scoreGap,
-    isOptimal: scoreGap <= 0.5,
+    isOptimal,
     recordedAIDecision,
     evaluatedAlternatives: evaluated.slice(0, 8)
   };

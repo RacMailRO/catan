@@ -473,32 +473,42 @@ select:focus,
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
 }
 
-/* A big, brief confirmation of the action the active player just took (roll, end turn) */
-.action-feedback-banner {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  z-index: 20;
-  transform: translate(-50%, -50%);
-  background: rgba(8, 16, 24, 0.92);
-  border: 2px solid var(--accent-gold);
-  border-radius: var(--radius-lg);
-  padding: 0.75rem 1.5rem;
-  font-family: var(--font-display);
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--accent-gold-bright);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+/* Stacked log of recent action notifications (dev cards played, builds, bank trades, steals...)
+   - several can be visible at once, each with its own lifetime, instead of one slot that the
+   next action immediately overwrites. Positioned clear of the trade negotiation banner (which
+   sits centered at the same top offset). */
+.action-feedback-stack {
+  position: fixed;
+  top: 60px;
+  right: 10px;
+  z-index: 86;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 320px;
   pointer-events: none;
-  animation: actionFeedbackPop 1.6s ease-out forwards;
 }
 
-@keyframes actionFeedbackPop {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }
-  12% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
-  22% { transform: translate(-50%, -50%) scale(1); }
-  78% { opacity: 1; }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+.action-feedback-item {
+  background: rgba(8, 16, 24, 0.94);
+  border: 1px solid var(--accent-gold);
+  border-radius: var(--radius-md);
+  padding: 0.45rem 0.7rem;
+  font-size: 0.82rem;
+  line-height: 1.3;
+  color: var(--parchment);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+  animation: actionFeedbackSlideIn 0.25s ease-out;
+  transition: opacity 0.3s ease;
+}
+
+.action-feedback-item.fading {
+  opacity: 0;
+}
+
+@keyframes actionFeedbackSlideIn {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 /* "+N" that floats up off a resource card when a player receives it */
@@ -666,6 +676,32 @@ select:focus,
   padding: 1px 1px;
 }
 
+/* Small cost-table shortcut sitting right next to the resource cards in the in-game dock -
+   same footprint as an xs sprite-card so it lines up with the resource row, opens the full
+   Cost Table modal on click. No sprite art exists for it, so it's an icon tile like
+   .special-card-tile rather than a cropped/illegible slice of the reference table image. */
+.cost-card-thumb {
+  position: relative;
+  width: 38px;
+  height: 56px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--parchment);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+  background: linear-gradient(160deg, #3b2f1f, #1f1710);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.cost-card-thumb:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent-gold);
+}
+
 /* Lobby card gallery: enlarged card art paired with a one-line rule explanation, for players
    learning the game. One grid for dev cards, reused for the Longest Road / Largest Army tiles. */
 .card-gallery-grid {
@@ -825,6 +861,37 @@ select:focus,
   align-items: center;
   justify-content: center;
   padding: 0.5rem;
+}
+
+/* Game-over confetti burst - fixed full-viewport overlay, above the modal (z-index 200) so
+   pieces visibly fall in front of it, pointer-events: none throughout so clicks still reach
+   the modal's own buttons underneath. */
+.confetti-overlay {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 500;
+}
+
+.confetti-piece {
+  position: absolute;
+  top: -12px;
+  opacity: 0.95;
+  animation-name: confetti-fall;
+  animation-timing-function: cubic-bezier(0.25, 0.1, 0.4, 1);
+  animation-fill-mode: forwards;
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--confetti-drift), 108vh) rotate(var(--confetti-rotate));
+    opacity: 0.2;
+  }
 }
 
 .modal-dialog {

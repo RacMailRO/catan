@@ -195,6 +195,10 @@ export interface TradeOffer {
   rejectedByPlayerIds: string[];
   rejectionReasons?: Record<string, string>;
   status: 'open' | 'accepted' | 'rejected' | 'cancelled' | 'expired';
+  // Who actually accepted - only meaningful once status is 'accepted'. Needed because an
+  // open-to-all offer (toPlayerId undefined) can be accepted by any eligible player, so
+  // toPlayerId alone can't say who it was.
+  acceptedByPlayerId?: string;
 }
 
 export interface GameState {
@@ -320,6 +324,16 @@ export type GameAction =
       requesting: Partial<ResourceCount>;
     }
   | { type: 'respond_trade'; offerId: string; response: 'accept' | 'reject'; reason?: string }
+  // A responder isn't limited to accepting/rejecting the exact terms proposed - this rejects
+  // `offerId` on their behalf and opens a new offer back to the original proposer with whatever
+  // terms they actually want, in one action (propose_trade itself is only ever legal for the
+  // active player, so a responder has no other way to put their own terms on the table).
+  | {
+      type: 'counter_trade';
+      offerId: string;
+      offering: Partial<ResourceCount>;
+      requesting: Partial<ResourceCount>;
+    }
   | { type: 'cancel_trade'; offerId: string }
   | { type: 'end_turn' };
 

@@ -5,7 +5,7 @@ const seed = process.argv[3] ?? 'cli-bench-2026';
 
 console.log(`Running AI vs. AI Benchmark (${gamesCount} games, seed="${seed}")...`);
 
-const report = runBenchmarkSuite({
+const { report } = runBenchmarkSuite({
   baseSeed: seed,
   gamesCount,
   participants: [

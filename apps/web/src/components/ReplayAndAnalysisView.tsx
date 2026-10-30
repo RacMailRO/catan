@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   ALL_RESOURCES,
+  GameAction,
   PlayerColor,
   ReplayFile,
   calculateScore,
@@ -36,6 +37,69 @@ export interface ReplayAndAnalysisViewProps {
 
 type ReplayModalType = 'none' | 'saved_games' | 'strategic_report' | 'event_log' | 'ai_decision';
 
+// Readable names for the scoring factors evaluator.ts computes per candidate (packages/ai/src/
+// evaluator.ts and bot.ts) - the AI's score is a weighted sum of these, and it's rarely "just
+// points": a settlement candidate's score is mostly `production` (pip count) and `diversity`
+// (resources you don't already have), a robber move is `opponentBlocking` vs `ownPenalty`, etc.
+// Showing the breakdown (not just the final number) is the whole point of this panel.
+const FACTOR_LABELS: Record<string, { ro: string; en: string }> = {
+  victoryPoints: { ro: 'Puncte de Victorie', en: 'Victory points' },
+  production: { ro: 'Producție (pips)', en: 'Production (pips)' },
+  diversity: { ro: 'Diversitate resurse noi', en: 'New resource diversity' },
+  harbor: { ro: 'Acces port', en: 'Harbor access' },
+  blocking: { ro: 'Blocare drum advers', en: 'Blocks opponent road' },
+  opponentBlocking: { ro: 'Blocare producție adversar', en: 'Blocks opponent production' },
+  stealValue: { ro: 'Valoare țintă furt', en: 'Steal target value' },
+  ownPenalty: { ro: 'Risc pentru propriile piese', en: 'Risk to own pieces' },
+  buildBonus: { ro: 'Bonus construcție (+1 PV)', en: 'Build bonus (+1 VP)' },
+  freeRoads: { ro: 'Valoare drumuri gratuite', en: 'Free roads value' },
+  resourceUtility: { ro: 'Utilitate resurse alese', en: 'Chosen resource utility' },
+  monopolyEstimate: { ro: 'Estimare câștig Monopol', en: 'Estimated Monopoly haul' },
+  targetThreat: { ro: 'Amenințare reprezentată de țintă', en: 'Threat posed by target' },
+  keptInventoryUtility: { ro: 'Utilitate resurse păstrate', en: 'Kept resources utility' },
+  cleanup: { ro: 'Curățare ofertă refuzată', en: 'Rejected-offer cleanup' },
+  caution: { ro: 'Prudență', en: 'Caution' },
+  mandatoryTurnFlow: { ro: 'Pas obligatoriu al turei', en: 'Mandatory turn step' },
+  expansion: { ro: 'Expansiune strategică', en: 'Strategic expansion' },
+  passSpecialBuild: { ro: 'Renunțare la construcție specială', en: 'Skipping special build' },
+  turnCompletion: { ro: 'Încheiere tură', en: 'Turn completion' },
+  passive: { ro: 'Bot pasiv/neutru', en: 'Passive/neutral bot' },
+  tacticalLookahead: { ro: 'Anticipare tactică (1 tură)', en: 'Tactical lookahead (1 turn)' },
+  monteCarloRollout: { ro: 'Simulare Monte Carlo', en: 'Monte Carlo rollout' }
+};
+
+function factorLabel(key: string, locale: Locale): string {
+  const known = FACTOR_LABELS[key];
+  if (known) return known[locale];
+  // Fallback for any factor key not in the map above: humanize the camelCase identifier so a
+  // future evaluator.ts factor still shows as something readable instead of disappearing.
+  return key.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
+}
+
+// Where a candidate action would land on the board, for the ghost marker in BoardSvg - not
+// every action targets a board location (e.g. buy_dev_card, end_turn), which is fine: no ids
+// means no marker is drawn.
+function actionBoardTarget(action: GameAction): { vertexId?: string; edgeId?: string; hexId?: string } {
+  switch (action.type) {
+    case 'place_initial_settlement':
+    case 'build_settlement':
+    case 'build_city':
+      return { vertexId: action.vertexId };
+    case 'place_initial_road':
+    case 'build_road':
+    case 'build_ship':
+    case 'place_free_road':
+      return { edgeId: action.edgeId };
+    case 'move_ship':
+      return { edgeId: action.toEdgeId };
+    case 'move_robber':
+    case 'play_knight':
+      return { hexId: action.hexId };
+    default:
+      return {};
+  }
+}
+
 export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
   replay,
   onSelectReplay,
@@ -52,11 +116,19 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
   const [savedReplays, setSavedReplays] = useState<SavedReplaySummary[]>(() =>
     loadSavedReplays()
   );
+  // Which candidate action's board location the user picked to inspect in the Decision
+  // Inspector panel below - drives the ghost marker on the board (see actionBoardTarget).
+  const [ghostCandidateIdx, setGhostCandidateIdx] = useState<number | null>(null);
 
   // Refresh saved games list when replay changes
   useEffect(() => {
     setSavedReplays(loadSavedReplays());
   }, [replay?.gameId]);
+
+  // A newly selected step's candidates are a different list - don't keep last step's ghost up.
+  useEffect(() => {
+    setGhostCandidateIdx(null);
+  }, [currentSeq]);
 
   useEffect(() => {
     if (replay) {
@@ -103,26 +175,33 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
     }
   }, [replay]);
 
-  const handleSelectSavedReplay = async (item: SavedReplaySummary) => {
-    if (item.replay) {
-      onSelectReplay(item.replay);
-      setActiveModal('none');
-      return;
-    }
+  // History entries loaded from localStorage carry metadata only (see storage.ts) - fetch the
+  // full replay from the server (the durable, compressed store) on demand.
+  const resolveFullReplay = async (item: SavedReplaySummary): Promise<ReplayFile | null> => {
+    if (item.replay) return item.replay;
     try {
       const res = await fetch(`/api/games/${item.gameId}/replay`);
       if (res.ok) {
         const data = await res.json();
-        if (data.replay) {
-          saveReplayToHistory(data.replay, false);
-          onSelectReplay(data.replay);
-          setActiveModal('none');
-          return;
-        }
+        if (data.replay) return data.replay as ReplayFile;
       }
     } catch (err) {
       console.error('Eroare la descărcarea replay-ului:', err);
     }
+    return null;
+  };
+
+  const handleSelectSavedReplay = async (item: SavedReplaySummary) => {
+    const full = await resolveFullReplay(item);
+    if (!full) return;
+    saveReplayToHistory(full, false);
+    onSelectReplay(full);
+    setActiveModal('none');
+  };
+
+  const handleExportSaved = async (item: SavedReplaySummary) => {
+    const full = await resolveFullReplay(item);
+    handleExport(full);
   };
 
   const handleGenerateSampleReplay = () => {
@@ -233,7 +312,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                     <button
                       type="button"
                       className="btn"
-                      onClick={() => handleExport(item.replay)}
+                      onClick={() => handleExportSaved(item)}
                     >
                       💾
                     </button>
@@ -386,11 +465,21 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
               locale={locale}
             />
           </div>
-          <BoardSvg
-            board={reconstructedState.board}
-            playerColors={playerColors}
-            locale={locale}
-          />
+          {(() => {
+            const ghostCandidate =
+              ghostCandidateIdx !== null ? stepComparison?.evaluatedAlternatives[ghostCandidateIdx] : undefined;
+            const ghostTarget = ghostCandidate ? actionBoardTarget(ghostCandidate.action) : {};
+            return (
+              <BoardSvg
+                board={reconstructedState.board}
+                playerColors={playerColors}
+                locale={locale}
+                ghostVertexId={ghostTarget.vertexId}
+                ghostEdgeId={ghostTarget.edgeId}
+                ghostHexId={ghostTarget.hexId}
+              />
+            );
+          })()}
         </div>
 
         {/* Compact 4-Player Resource Cards Row at bottom of Replay Board */}
@@ -482,16 +571,43 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
               </div>
 
               <div style={{ fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.35rem' }}>
-                Top Acțiuni Candidate Legale (evaluate pe PlayerView):
+                {locale === 'ro'
+                  ? 'Top Acțiuni Candidate Legale (evaluate pe PlayerView) — click pe o acțiune pentru a o vedea pe hartă:'
+                  : 'Top Legal Candidate Actions (evaluated on PlayerView) — click one to see it on the board:'}
               </div>
               {stepComparison.evaluatedAlternatives.map((cand, idx) => {
                 const isChosen =
                   JSON.stringify(cand.action) === JSON.stringify(stepComparison.actualAction);
+                const isGhosted = ghostCandidateIdx === idx;
+                const hasTarget = Object.keys(actionBoardTarget(cand.action)).length > 0;
+                // Sorted strongest-first so the factor actually driving this score (which is
+                // not always "victoryPoints" - could be production, blocking an opponent,
+                // a resource you're missing...) is the first thing read, not buried in a list.
+                const sortedFactors = Object.entries(cand.factors)
+                  .filter(([, v]) => v !== 0)
+                  .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a));
                 return (
-                  <div key={idx} className={`candidate-row ${isChosen ? 'chosen' : ''}`}>
+                  <div
+                    key={idx}
+                    className={`candidate-row ${isChosen ? 'chosen' : ''}`}
+                    onClick={() => hasTarget && setGhostCandidateIdx(isGhosted ? null : idx)}
+                    style={{
+                      cursor: hasTarget ? 'pointer' : 'default',
+                      outline: isGhosted ? '2px solid #a78bfa' : undefined,
+                      outlineOffset: isGhosted ? -2 : undefined
+                    }}
+                    title={
+                      hasTarget
+                        ? locale === 'ro'
+                          ? 'Click pentru a evidenția această acțiune pe hartă (💡)'
+                          : 'Click to highlight this action on the board (💡)'
+                        : undefined
+                    }
+                  >
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span>
                         <strong>#{idx + 1}</strong> {formatActionDescription(cand.action, locale)}{' '}
+                        {hasTarget && <span title={locale === 'ro' ? 'Poate fi evidențiată pe hartă' : 'Can be highlighted on the board'}>💡</span>}{' '}
                         {isChosen && (
                           <span style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>
                             [ALEASĂ]
@@ -503,6 +619,25 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                     <div style={{ color: 'var(--text-muted)', fontSize: '0.73rem', marginTop: 2 }}>
                       {cand.explanation}
                     </div>
+                    {sortedFactors.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                        {sortedFactors.map(([key, value]) => (
+                          <span
+                            key={key}
+                            style={{
+                              fontSize: '0.68rem',
+                              padding: '1px 6px',
+                              borderRadius: 10,
+                              background: value > 0 ? 'rgba(74, 222, 128, 0.14)' : 'rgba(248, 113, 113, 0.14)',
+                              border: `1px solid ${value > 0 ? 'rgba(74, 222, 128, 0.4)' : 'rgba(248, 113, 113, 0.4)'}`,
+                              color: value > 0 ? '#4ade80' : '#f87171'
+                            }}
+                          >
+                            {factorLabel(key, locale)}: {value > 0 ? '+' : ''}{value}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -602,7 +737,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                       >
                         Încarcă
                       </button>
-                      <button type="button" className="btn" onClick={() => handleExport(item.replay)}>
+                      <button type="button" className="btn" onClick={() => handleExportSaved(item)}>
                         💾
                       </button>
                       <button

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DevCardType, ResourceType } from '@catan/core';
 import { DEV_CARD_LABELS, DEV_CARD_SHORT_LABELS, Locale, RESOURCE_LABELS } from '../i18n';
 
@@ -348,6 +348,60 @@ export const AnimatedDiceWidget: React.FC<AnimatedDiceWidgetProps> = ({
           </button>
         )}
       </div>
+    </div>
+  );
+};
+
+const CONFETTI_COLORS = ['#f59e0b', '#ef4444', '#22c55e', '#3b82f6', '#a855f7', '#facc15', '#ec4899', '#14b8a6'];
+
+export interface ConfettiProps {
+  pieceCount?: number;
+}
+
+/**
+ * One-shot confetti burst for the game-over celebration - pure CSS (no animation library),
+ * pointer-events: none throughout so it never blocks clicking the modal buttons underneath it.
+ * Each piece gets a random column, color, size, fall duration/delay and drift/rotation via CSS
+ * custom properties so the single shared @keyframes in styles.css can animate them all.
+ */
+export const Confetti: React.FC<ConfettiProps> = ({ pieceCount = 90 }) => {
+  const pieces = useMemo(
+    () =>
+      Array.from({ length: pieceCount }, (_, i) => ({
+        id: i,
+        left: Math.random() * 100,
+        color: CONFETTI_COLORS[i % CONFETTI_COLORS.length]!,
+        delay: Math.random() * 1.1,
+        duration: 2.6 + Math.random() * 2,
+        rotation: 180 + Math.random() * 540,
+        drift: (Math.random() - 0.5) * 220,
+        width: 6 + Math.random() * 6,
+        round: Math.random() > 0.5
+      })),
+    [pieceCount]
+  );
+
+  return (
+    <div className="confetti-overlay" aria-hidden="true">
+      {pieces.map((p) => (
+        <span
+          key={p.id}
+          className="confetti-piece"
+          style={
+            {
+              left: `${p.left}%`,
+              width: p.width,
+              height: p.width * 0.42,
+              background: p.color,
+              borderRadius: p.round ? '50%' : '2px',
+              animationDelay: `${p.delay}s`,
+              animationDuration: `${p.duration}s`,
+              '--confetti-rotate': `${p.rotation}deg`,
+              '--confetti-drift': `${p.drift}px`
+            } as React.CSSProperties
+          }
+        />
+      ))}
     </div>
   );
 };

@@ -273,6 +273,30 @@ export interface ReplaySummaryItem {
   players: Array<{ id: string; name: string; type: string; color: string; score: number }>;
 }
 
+export interface HallOfFameWonGame {
+  gameId: string;
+  turns: number;
+  finishedAtMs: number;
+  opponentNames: string[];
+}
+
+export interface HallOfFamePlayerEntry {
+  playerKey: string;
+  displayName: string;
+  gamesPlayed: number;
+  gamesWon: number;
+  winRate: number;
+  updatedAtMs: number;
+  // Most recent wins first, capped server-side - enough to browse without the response growing
+  // unbounded for a very prolific player. Deleting a saved replay never removes an entry here,
+  // so a player's recorded win/game counts never decrease on their own.
+  wonGames: HallOfFameWonGame[];
+}
+
+export interface HallOfFameResponse {
+  players: HallOfFamePlayerEntry[];
+}
+
 export interface FullGameReplayResponse {
   replay: ReplayFile;
 }

@@ -877,6 +877,73 @@ describe('Catan Core Engine & Replay System', () => {
     expect(getPlayerById(state, 'p2')!.resources.wood).toBe(1);
   });
 
+  it('lets a non-active responder counter_trade with their own terms instead of only accept/reject', () => {
+    let state = createGame({
+      gameId: 'counter-trade-test',
+      participants: [
+        { id: 'p1', name: 'P1', type: 'human' },
+        { id: 'p2', name: 'P2', type: 'human' },
+        { id: 'p3', name: 'P3', type: 'human' }
+      ]
+    });
+    state.phase = 'main_actions';
+    state.activePlayerId = 'p1';
+    const p1 = getPlayerById(state, 'p1')!;
+    const p2 = getPlayerById(state, 'p2')!;
+    p1.resources = { wood: 1, brick: 0, sheep: 0, wheat: 0, ore: 3 };
+    p2.resources = { wood: 0, brick: 2, sheep: 0, wheat: 0, ore: 0 };
+
+    // p1 proposes 1 wood for 1 brick; p2 would rather give ore for brick, not wood.
+    state = applyAction(state, 'p1', {
+      type: 'propose_trade',
+      toPlayerId: 'p2',
+      offering: { wood: 1, brick: 0, sheep: 0, wheat: 0, ore: 0 },
+      requesting: { wood: 0, brick: 1, sheep: 0, wheat: 0, ore: 0 }
+    }).state;
+    const originalOfferId = state.activeTradeOffers[0]!.id;
+
+    // A non-active player is never allowed to propose_trade outright - this is exactly the gap
+    // counter_trade exists to close (they can only accept/reject the exact terms otherwise).
+    expect(getLegalActions(state, 'p2').some((a) => a.type === 'propose_trade')).toBe(false);
+    expect(getLegalActions(state, 'p2').some((a) => a.type === 'counter_trade')).toBe(true);
+    expect(
+      validateAction(state, 'p2', {
+        type: 'propose_trade',
+        offering: { brick: 1 },
+        requesting: { wood: 1 }
+      }).valid
+    ).toBe(false);
+
+    state = applyAction(state, 'p2', {
+      type: 'counter_trade',
+      offerId: originalOfferId,
+      offering: { wood: 0, brick: 1, sheep: 0, wheat: 0, ore: 0 },
+      requesting: { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 1 }
+    }).state;
+
+    // The original offer is rejected by the counterer, not silently vanished.
+    const original = state.activeTradeOffers.find((o) => o.id === originalOfferId)!;
+    expect(original.status).toBe('rejected');
+    expect(original.rejectedByPlayerIds).toContain('p2');
+
+    // A brand new offer now exists, from p2 to p1, with p2's own terms (not a mirror of p1's).
+    const counterOffer = state.activeTradeOffers.find((o) => o.id !== originalOfferId)!;
+    expect(counterOffer.status).toBe('open');
+    expect(counterOffer.fromPlayerId).toBe('p2');
+    expect(counterOffer.toPlayerId).toBe('p1');
+    expect(counterOffer.offering).toEqual({ wood: 0, brick: 1, sheep: 0, wheat: 0, ore: 0 });
+    expect(counterOffer.requesting).toEqual({ wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 1 });
+
+    // p1 (now the responder) can accept p2's counter-terms.
+    state = applyAction(state, 'p1', {
+      type: 'respond_trade',
+      offerId: counterOffer.id,
+      response: 'accept'
+    }).state;
+    expect(getPlayerById(state, 'p1')!.resources).toEqual({ wood: 1, brick: 1, sheep: 0, wheat: 0, ore: 2 });
+    expect(getPlayerById(state, 'p2')!.resources).toEqual({ wood: 0, brick: 1, sheep: 0, wheat: 0, ore: 1 });
+  });
+
   it('aligns getPlayerView.players strictly with playerOrder and includes propose_trade actions in getLegalActions', () => {
     const state = createGame({
       gameId: 'order-and-trade-test',

@@ -20,6 +20,12 @@ export interface BoardSvgProps {
   onSelectEdge?: (edgeId: string) => void;
   onSelectHex?: (hexId: string) => void;
   interactiveAll?: boolean;
+  /** Read-only "this is where that alternative action targets" marker for the AI Decision
+   * Inspector - visually distinct (violet, dashed, pulsing, 💡) from the cyan "you can click
+   * here" legal-move highlight above so the two are never confused. Never wired to onSelect*. */
+  ghostVertexId?: string;
+  ghostEdgeId?: string;
+  ghostHexId?: string;
 }
 
 const TERRAIN_FALLBACK_FILL: Record<TerrainType, string> = {
@@ -249,7 +255,10 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
   onSelectVertex,
   onSelectEdge,
   onSelectHex,
-  interactiveAll = false
+  interactiveAll = false,
+  ghostVertexId,
+  ghostEdgeId,
+  ghostHexId
 }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [zoom, setZoom] = useState<number>(1);
@@ -977,6 +986,18 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                     strokeDasharray="6,3"
                   />
                 )}
+
+                {/* AI Decision Inspector: where an alternative robber/knight move would have
+                    targeted - violet/dashed/pulsing so it's never mistaken for the cyan "you
+                    can click here" legal-move ring above. */}
+                {ghostHexId === hex.id && (
+                  <g style={{ pointerEvents: 'none' }}>
+                    <circle cx={hex.x} cy={hex.y + 2} r={44} fill="rgba(167, 139, 250, 0.22)" stroke="#a78bfa" strokeWidth={4} strokeDasharray="4,5">
+                      <animate attributeName="opacity" values="0.5;1;0.5" dur="1.4s" repeatCount="indefinite" />
+                    </circle>
+                    <text x={hex.x} y={hex.y - 34} textAnchor="middle" fontSize="18">💡</text>
+                  </g>
+                )}
               </g>
             );
           })}
@@ -1007,7 +1028,8 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
             const builtRoad = board.roads[edge.id];
             const builtShip = board.ships?.[edge.id];
             const isHighlighted = highlightedEdges?.has(edge.id) ?? false;
-            if (!builtRoad && !builtShip && !isHighlighted && !interactiveAll) return null;
+            const isGhost = ghostEdgeId === edge.id;
+            if (!builtRoad && !builtShip && !isHighlighted && !interactiveAll && !isGhost) return null;
 
             const ownerPColor: PlayerColor = builtRoad
               ? playerColors[builtRoad.ownerId] ?? 'red'
@@ -1156,6 +1178,16 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                     className="sandbox-hit-edge"
                   />
                 ) : null}
+
+                {/* AI Decision Inspector ghost marker (see ghostHexId above) */}
+                {isGhost && (
+                  <g style={{ pointerEvents: 'none' }}>
+                    <line x1={edge.x1} y1={edge.y1} x2={edge.x2} y2={edge.y2} stroke="#a78bfa" strokeWidth={9} strokeOpacity={0.8} strokeLinecap="round" strokeDasharray="3,5">
+                      <animate attributeName="stroke-opacity" values="0.4;0.95;0.4" dur="1.4s" repeatCount="indefinite" />
+                    </line>
+                    <text x={(edge.x1 + edge.x2) / 2} y={(edge.y1 + edge.y2) / 2 - 14} textAnchor="middle" fontSize="16">💡</text>
+                  </g>
+                )}
               </g>
             );
           })}
@@ -1164,7 +1196,8 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
           {Object.values(board.vertices).map((vertex) => {
             const building = board.buildings[vertex.id];
             const isHighlighted = highlightedVertices?.has(vertex.id) ?? false;
-            if (!building && !isHighlighted && !interactiveAll) return null;
+            const isGhost = ghostVertexId === vertex.id;
+            if (!building && !isHighlighted && !interactiveAll && !isGhost) return null;
 
             const pColor: PlayerColor = building
               ? playerColors[building.ownerId] ?? 'red'
@@ -1240,6 +1273,16 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
                     className="sandbox-hit-vertex"
                   />
                 ) : null}
+
+                {/* AI Decision Inspector ghost marker (see ghostHexId above) */}
+                {isGhost && (
+                  <g style={{ pointerEvents: 'none' }}>
+                    <circle cx={0} cy={0} r={building ? 32 : 20} fill="rgba(167, 139, 250, 0.28)" stroke="#a78bfa" strokeWidth={3.5} strokeDasharray="4,4">
+                      <animate attributeName="opacity" values="0.5;1;0.5" dur="1.4s" repeatCount="indefinite" />
+                    </circle>
+                    <text x={0} y={building ? -40 : -28} textAnchor="middle" fontSize="16">💡</text>
+                  </g>
+                )}
               </g>
             );
           })}

@@ -22,6 +22,7 @@ import {
   getLegalActions,
   getPlayerById,
   getPlayerView,
+  hasResources,
   importReplayJson,
   validateAction
 } from '@catan/core';
@@ -333,6 +334,7 @@ export function createCatanServer(options?: {
         storage.markLobbyFinished(runtime.lobbyId);
       }
       storage.markLobbyFinished(runtime.gameId);
+      storage.recordHallOfFameResultIfNew(runtime.state);
     }
   }
 
@@ -383,6 +385,23 @@ export function createCatanServer(options?: {
                   !openOffer.rejectedByPlayerIds.includes(p.id)
               );
               if (pendingHuman) {
+                // A human who can't even afford what's being asked is never shown the accept/
+                // reject modal client-side (see App.tsx) - waiting on them to act would stall
+                // every other player's turn forever, since nothing else ever nudges this loop
+                // again. Answer on their behalf instead of blocking; a human who CAN afford it
+                // still gets a real say below.
+                if (!hasResources(pendingHuman.resources, openOffer.requesting)) {
+                  const { state: nextState, event } = applyAction(
+                    runtime.state,
+                    pendingHuman.id,
+                    { type: 'respond_trade', offerId: openOffer.id, response: 'reject', reason: 'Resurse insuficiente' },
+                    { nowMs: Date.now() }
+                  );
+                  runtime.state = nextState;
+                  runtime.events.push(event);
+                  steps++;
+                  continue;
+                }
                 break;
               }
             }
@@ -441,7 +460,10 @@ export function createCatanServer(options?: {
     }
   }
 
-  const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024; // 2MB: generous for lobby/action/replay payloads, small enough to bound memory use
+  // 24MB: lobby/action payloads are tiny, but a full replay import (initial state + every
+  // event/snapshot/AI-decision for a long game) has been observed up to ~8MB raw JSON before
+  // gzip compression at rest - keep real headroom above that instead of silently dropping imports.
+  const MAX_REQUEST_BODY_BYTES = 24 * 1024 * 1024;
 
   async function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
     return new Promise((resolve, reject) => {
@@ -566,10 +588,20 @@ export function createCatanServer(options?: {
           return;
         }
 
-        // Find next open or unclaimed human seat
-        const targetSeat = lobby.seats.find(
-          (s) => s.type === 'open' || (s.type === 'human' && !s.claimedByPlayerName)
-        ) ?? lobby.seats.find((s) => s.type === 'human' && s.playerId !== lobby.hostPlayerId);
+        const cleanName = playerName.trim();
+        // 1. Check if this player is reconnecting to their existing seat in this lobby
+        let targetSeat = lobby.seats.find(
+          (s) =>
+            (s.claimedByPlayerName && s.claimedByPlayerName.trim().toLowerCase() === cleanName.toLowerCase()) ||
+            (s.name && s.name.trim().toLowerCase() === cleanName.toLowerCase())
+        );
+
+        // 2. Otherwise find an open or unclaimed seat
+        if (!targetSeat) {
+          targetSeat = lobby.seats.find(
+            (s) => s.type === 'open' || (s.type === 'human' && !s.claimedByPlayerName)
+          ) ?? (lobby.status === 'waiting' ? lobby.seats.find((s) => s.type === 'human' && s.playerId !== lobby.hostPlayerId) : undefined);
+        }
 
         if (!targetSeat) {
           sendJson(res, 400, { error: 'Nu mai sunt locuri libere în această partidă.' });
@@ -1132,14 +1164,19 @@ export function createCatanServer(options?: {
           expectedSequence !== undefined &&
           expectedSequence !== runtime.state.sequence
         ) {
-          sendJson(res, 409, {
-            error: 'Secvență desincronizată (acțiune duplicată sau întârziată)',
-            code: 'SEQUENCE_MISMATCH',
-            currentSequence: runtime.state.sequence,
-            playerView: getPlayerView(runtime.state, playerId),
-            legalActions: getLegalActions(runtime.state, playerId)
-          });
-          return;
+          expireStaleTradesInPlace(runtime.state);
+          const isTradeResponse = action.type === 'respond_trade' || action.type === 'cancel_trade';
+          if (!isTradeResponse || !validateAction(runtime.state, playerId, action).valid) {
+            sendJson(res, 409, {
+              error: 'Secvență desincronizată (acțiune duplicată sau întârziată)',
+              code: 'SEQUENCE_MISMATCH',
+              currentSequence: runtime.state.sequence,
+              playerView: getPlayerView(runtime.state, playerId),
+              legalActions: getLegalActions(runtime.state, playerId)
+            });
+            return;
+          }
+          // If action is still completely valid despite sequence drift (e.g. trade response or background events), allow execution!
         }
 
         expireStaleTradesInPlace(runtime.state);
@@ -1367,6 +1404,12 @@ export function createCatanServer(options?: {
         return;
       }
 
+      // Hall of Fame: per-player win/game tallies across all finished games
+      if (req.method === 'GET' && pathname === '/api/hall-of-fame') {
+        sendJson(res, 200, { players: storage.listHallOfFame() });
+        return;
+      }
+
       // Get full replay for a game
       const replayMatch = pathname.match(/^\/api\/games\/([^/]+)\/replay$/);
       if (req.method === 'GET' && replayMatch) {
@@ -1424,6 +1467,7 @@ export function createCatanServer(options?: {
         const finalState =
           imported.snapshots[imported.snapshots.length - 1]?.state ?? imported.initialState;
         storage.saveGameAndReplay(finalState, imported);
+        storage.recordHallOfFameResultIfNew(finalState);
         activeGames.set(imported.gameId, {
           gameId: imported.gameId,
           state: finalState,
@@ -1462,6 +1506,7 @@ export function createCatanServer(options?: {
               sim.replay.snapshots[sim.replay.snapshots.length - 1]?.state ??
               sim.replay.initialState;
             storage.saveGameAndReplay(finalState, sim.replay);
+            storage.recordHallOfFameResultIfNew(finalState);
             activeGames.set(sim.gameId, {
               gameId: sim.gameId,
               state: finalState,
@@ -1474,11 +1519,21 @@ export function createCatanServer(options?: {
           return;
         }
 
-        const benchmark = runBenchmarkSuite({
+        const { report: benchmark, replays } = runBenchmarkSuite({
           baseSeed: seed,
           gamesCount,
-          participants
+          participants,
+          recordReplays: true
         });
+        // Previously only the aggregate benchmark stats were kept - each individual game's
+        // replay (and its AI decision log) was discarded, so a benchmark run could never be
+        // revisited in the Replay/Analysis view. Persist every game now that it's available.
+        for (const replay of replays) {
+          const finalState =
+            replay.snapshots[replay.snapshots.length - 1]?.state ?? replay.initialState;
+          storage.saveGameAndReplay(finalState, replay);
+          storage.recordHallOfFameResultIfNew(finalState);
+        }
         sendJson(res, 200, { mode: 'benchmark', benchmark });
         return;
       }
