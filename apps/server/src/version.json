@@ -1,9 +1,19 @@
 {
-  "version": "v1.146",
-  "commitCount": 146,
-  "shortHash": "2b5054a",
-  "buildDate": "2026-10-27T22:21:42.381Z",
+  "version": "v1.148",
+  "commitCount": 148,
+  "shortHash": "f51aa31",
+  "buildDate": "2026-10-30T11:15:33.610Z",
   "releaseNotes": [
+    {
+      "hash": "f51aa31",
+      "date": "2026-10-30",
+      "message": "feat: Hall of Fame, trade negotiation overhaul, counter-offers, AI action visibility, decision inspector fixes"
+    },
+    {
+      "hash": "93d0218",
+      "date": "2026-10-28",
+      "message": "Update version stamps v1.146"
+    },
     {
       "hash": "2b5054a",
       "date": "2026-10-28",
@@ -243,16 +253,6 @@
       "hash": "cdb749a",
       "date": "2026-10-27",
       "message": "fix(start.bat): wait for backend+web readiness instead of a fixed 2s sleep"
-    },
-    {
-      "hash": "17d9c1b",
-      "date": "2026-10-26",
-      "message": "feat: show pieces used/total on each leaderboard card"
-    },
-    {
-      "hash": "f82d5ff",
-      "date": "2026-10-26",
-      "message": "redesign: leaderboard player cards — spacing, same-row VP, top-pinned turn badge"
     }
   ]
 }
