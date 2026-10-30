@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   ALL_RESOURCES,
   AIDifficulty,
@@ -469,16 +469,24 @@ export const App: React.FC = () => {
   const [turnTimeLeft, setTurnTimeLeft] = useState<number | null>(null);
   const lastTimedTurnKeyRef = useRef<string>('');
 
-  // Stacked, non-blocking log of recent action notifications (dev cards played, builds,
-  // bank trades, steals...) - a single replaceable banner used to swallow whatever happened
-  // next if two things occurred close together (very common at AI auto-play speed); each
-  // entry now has its own lifetime and they stack instead of clobbering each other.
+  // Cumulated, non-blocking notification card of recent actions (dev cards played, builds,
+  // bank trades, steals...) - groups recent events into a single centered notification card with
+  // an auto-dismiss timer (resets on each event) and a manual close button.
   interface ActionFeedbackItem {
     id: string;
     content: React.ReactNode;
-    fading?: boolean;
   }
   const [actionFeedbackQueue, setActionFeedbackQueue] = useState<ActionFeedbackItem[]>([]);
+  const [isFeedbackFading, setIsFeedbackFading] = useState<boolean>(false);
+  const feedbackFadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const feedbackClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const dismissFeedbackQueue = useCallback(() => {
+    if (feedbackFadeTimerRef.current) clearTimeout(feedbackFadeTimerRef.current);
+    if (feedbackClearTimerRef.current) clearTimeout(feedbackClearTimerRef.current);
+    setIsFeedbackFading(false);
+    setActionFeedbackQueue([]);
+  }, []);
 
   // Highest game-event sequence already shown as feedback to this client, whether that came
   // from our own just-submitted action's REST response or a WS state_sync push - keeps
@@ -1248,22 +1256,27 @@ export const App: React.FC = () => {
     return getLegalActions(gameState, actorId);
   }, [gameState, gameVersionTick, onlineSession, onlineLegalActions]);
 
-  // Pushes one more notification onto the stack (see actionFeedbackQueue above) instead of
-  // replacing whatever is currently shown - capped so a long burst of bot actions doesn't
-  // pile up indefinitely, and each entry fades itself out independently after its own 6.5s.
-  const showActionFeedback = (content: React.ReactNode) => {
+  // Cumulates notifications into a single unified card (see actionFeedbackQueue above)
+  // instead of multiple detached toasts. Refreshes the auto-dismissal countdown timer (7s) on every event.
+  const showActionFeedback = useCallback((content: React.ReactNode) => {
+    if (feedbackFadeTimerRef.current) clearTimeout(feedbackFadeTimerRef.current);
+    if (feedbackClearTimerRef.current) clearTimeout(feedbackClearTimerRef.current);
+    setIsFeedbackFading(false);
+
     const id = `fb-${Date.now()}-${Math.random()}`;
     setActionFeedbackQueue((prev) => {
       const next = [...prev, { id, content: typeof content === 'string' ? renderResourceTokens(content) : content }];
       return next.length > 5 ? next.slice(next.length - 5) : next;
     });
-    setTimeout(() => {
-      setActionFeedbackQueue((prev) => prev.map((f) => (f.id === id ? { ...f, fading: true } : f)));
-    }, 8000);
-    setTimeout(() => {
-      setActionFeedbackQueue((prev) => prev.filter((f) => f.id !== id));
-    }, 8400);
-  };
+
+    feedbackFadeTimerRef.current = setTimeout(() => {
+      setIsFeedbackFading(true);
+    }, 6800);
+    feedbackClearTimerRef.current = setTimeout(() => {
+      setActionFeedbackQueue([]);
+      setIsFeedbackFading(false);
+    }, 7200);
+  }, []);
 
   // Robber steals and mass discards only ever exist as a momentary event, not persistent state
   // like a trade offer - so, unlike the trade banner above, telling anyone but the acting player
@@ -3561,6 +3574,15 @@ export const App: React.FC = () => {
                 👥 {locale === 'ro' ? 'Scor & Bancă' : 'Scores & Bank'}
               </button>
 
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setActiveModal('event_log')}
+                style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                📜 {locale === 'ro' ? 'Jurnal' : 'Log'} ({recorder?.getEvents().length ?? 0})
+              </button>
+
               {turnTimeLeft !== null && (
                 <div
                   className="turn-timer-badge"
@@ -3610,12 +3632,49 @@ export const App: React.FC = () => {
             )}
 
             {actionFeedbackQueue.length > 0 && (
-              <div className="action-feedback-stack">
-                {actionFeedbackQueue.map((f) => (
-                  <div key={f.id} className={`action-feedback-item ${f.fading ? 'fading' : ''}`}>
-                    {f.content}
+              <div className={`action-feedback-card-container ${isFeedbackFading ? 'fading' : ''}`}>
+                <div className="action-feedback-card">
+                  <div className="action-feedback-card-header">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: '1.05rem' }}>📢</span>
+                      <strong style={{ fontSize: '0.88rem', color: 'var(--accent-gold)' }}>
+                        {locale === 'ro' ? 'Evenimente Recente' : 'Recent Events'}
+                      </strong>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <button
+                        type="button"
+                        className="action-feedback-journal-btn"
+                        title={locale === 'ro' ? 'Deschide Jurnalul Complet' : 'Open Full Event Log'}
+                        onClick={() => setActiveModal('event_log')}
+                      >
+                        📜 {locale === 'ro' ? 'Jurnal' : 'Log'} ({recorder?.getEvents().length ?? 0})
+                      </button>
+                      <button
+                        type="button"
+                        className="action-feedback-close-btn"
+                        title={locale === 'ro' ? 'Închide notificarea' : 'Dismiss notification'}
+                        onClick={dismissFeedbackQueue}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
-                ))}
+                  <div className="action-feedback-card-body">
+                    {actionFeedbackQueue.map((item) => (
+                      <div key={item.id} className="action-feedback-row">
+                        <span className="action-feedback-dot">•</span>
+                        <div className="action-feedback-row-content">{item.content}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="action-feedback-progress-bar">
+                    <div
+                      key={`fill-${actionFeedbackQueue.length}-${actionFeedbackQueue[actionFeedbackQueue.length - 1]?.id}`}
+                      className="action-feedback-progress-fill"
+                    />
+                  </div>
+                </div>
               </div>
             )}
 
@@ -4338,7 +4397,7 @@ export const App: React.FC = () => {
           {/* MODAL B: MARITIME / BANK TRADE & PLAYER-TO-PLAYER TRADE */}
           {activeModal === 'trade' && activePlayerObj && (
             <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
-              <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-dialog" style={{ maxWidth: 760, width: '95%' }} onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
                   <h3>⚓ Comerț Maritim (Bancă / Porturi) & Schimb între Jucători</h3>
                   <button type="button" className="btn" onClick={() => setActiveModal('none')}>
@@ -4346,9 +4405,9 @@ export const App: React.FC = () => {
                   </button>
                 </div>
                 <div className="modal-body">
-                  <div className="candidate-row" style={{ marginBottom: '0.9rem', padding: '0.75rem' }}>
-                    <h4 style={{ color: 'var(--accent-gold)', marginBottom: '0.5rem' }}>
-                      1. {t.tradeBankTitle}
+                  <div className="candidate-row" style={{ marginBottom: '0.9rem', padding: '0.85rem' }}>
+                    <h4 style={{ color: 'var(--accent-gold)', marginBottom: '0.6rem' }}>
+                      1. 🏦 {t.tradeBankTitle}
                     </h4>
                     {(() => {
                       const ratio = getPlayerBankTradeRatio(
@@ -4362,13 +4421,13 @@ export const App: React.FC = () => {
                         gameState.bank[bankReceiveRes] >= 1;
 
                       return (
-                        <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.25)', padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)' }}>
-                            <ResourceIcon resource={bankGiveRes} height={26} />
+                        <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: 'rgba(0,0,0,0.3)', padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)' }}>
+                            <ResourceIcon resource={bankGiveRes} height={48} />
                             <select
                               value={bankGiveRes}
                               onChange={(e) => setBankGiveRes(e.target.value as ResourceType)}
-                              style={{ margin: 0 }}
+                              style={{ margin: 0, fontWeight: 600 }}
                             >
                               {ALL_RESOURCES.map((r) => {
                                 const rRatio = getPlayerBankTradeRatio(
@@ -4384,13 +4443,13 @@ export const App: React.FC = () => {
                               })}
                             </select>
                           </div>
-                          <span style={{ fontSize: '1.25rem', color: 'var(--accent-gold)' }}>➔</span>
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.25)', padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)' }}>
-                            <ResourceIcon resource={bankReceiveRes} height={26} />
+                          <span style={{ fontSize: '1.4rem', color: 'var(--accent-gold)' }}>➔</span>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: 'rgba(0,0,0,0.3)', padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)' }}>
+                            <ResourceIcon resource={bankReceiveRes} height={48} />
                             <select
                               value={bankReceiveRes}
                               onChange={(e) => setBankReceiveRes(e.target.value as ResourceType)}
-                              style={{ margin: 0 }}
+                              style={{ margin: 0, fontWeight: 600 }}
                             >
                               {ALL_RESOURCES.map((r) => (
                                 <option key={r} value={r}>
@@ -4462,15 +4521,15 @@ export const App: React.FC = () => {
                             ⚓ Sugestii Rapide de Schimb la Porturi:
                           </div>
                           {suggestions.map((sug, idx) => (
-                            <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-  <ResourceIcon resource={sug.give} height={20} />
-  <strong>{sug.giveAmount}x</strong>
-  <span>➔</span>
-  <ResourceIcon resource={sug.receive} height={20} />
-  <strong>1x</strong>
-  <span style={{ color: 'var(--text-muted)', fontSize: '0.76rem' }}>({sug.label})</span>
-</span>
+                            <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                                <ResourceIcon resource={sug.give} height={36} />
+                                <strong>{sug.giveAmount}x</strong>
+                                <span>➔</span>
+                                <ResourceIcon resource={sug.receive} height={36} />
+                                <strong>1x</strong>
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>({sug.label})</span>
+                              </span>
                               <button
                                 type="button"
                                 className="btn btn-primary"
@@ -4493,14 +4552,14 @@ export const App: React.FC = () => {
                     })()}
                   </div>
 
-                  <div className="candidate-row" style={{ padding: '0.75rem' }}>
-                    <h4 style={{ color: 'var(--accent-gold)', marginBottom: '0.4rem' }}>
+                  <div className="candidate-row" style={{ padding: '0.85rem' }}>
+                    <h4 style={{ color: 'var(--accent-gold)', marginBottom: '0.5rem' }}>
                       2. 🤝 {t.tradeP2PTitle} (Expirare ofertă: {gameState.rules.tradeOfferTimeoutSec}s)
                     </h4>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                       <div>
-                        <strong style={{ fontSize: '0.8rem' }}>Oferi din mână:</strong>
-                        <div style={{ display: 'flex', gap: 4, marginTop: 6, marginBottom: 2 }}>
+                        <strong style={{ fontSize: '0.85rem' }}>Oferi din mână:</strong>
+                        <div style={{ display: 'flex', gap: 6, marginTop: 6, marginBottom: 4 }}>
                           {ALL_RESOURCES.map((r) => (
                             <ResourceCardSprite
                               key={r}
@@ -4512,23 +4571,46 @@ export const App: React.FC = () => {
                           ))}
                         </div>
                         {ALL_RESOURCES.map((r) => (
-                          <div key={r} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                            <span style={{ fontSize: '0.8rem' }}>
-                              <ResourceIcon resource={r} /> {RESOURCE_LABELS[locale][r]}: <strong>{p2pOffer[r]}</strong>
+                          <div
+                            key={r}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginTop: 6,
+                              padding: '4px 8px',
+                              background: 'rgba(0,0,0,0.22)',
+                              border: '1px solid rgba(255,255,255,0.08)',
+                              borderRadius: 8
+                            }}
+                          >
+                            <span style={{ fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                              <ResourceIcon resource={r} height={42} />
+                              <span>
+                                <strong>{RESOURCE_LABELS[locale][r]}</strong>
+                                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 4 }}>
+                                  (ai {activePlayerObj.resources[r]})
+                                </span>
+                              </span>
                             </span>
-                            <div style={{ display: 'flex', gap: 4 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               <button
                                 type="button"
                                 className="btn"
+                                style={{ padding: '0.2rem 0.55rem', fontWeight: 800 }}
                                 onClick={() =>
                                   setP2pOffer({ ...p2pOffer, [r]: Math.max(0, p2pOffer[r] - 1) })
                                 }
                               >
                                 -
                               </button>
+                              <span style={{ minWidth: 24, textAlign: 'center', fontWeight: 900, fontSize: '1.1rem', color: p2pOffer[r] > 0 ? 'var(--accent-gold)' : 'inherit' }}>
+                                {p2pOffer[r]}
+                              </span>
                               <button
                                 type="button"
                                 className="btn"
+                                style={{ padding: '0.2rem 0.55rem', fontWeight: 800 }}
                                 onClick={() =>
                                   setP2pOffer({
                                     ...p2pOffer,
@@ -4543,25 +4625,44 @@ export const App: React.FC = () => {
                         ))}
                       </div>
                       <div>
-                        <strong style={{ fontSize: '0.8rem' }}>Ceri la schimb:</strong>
+                        <strong style={{ fontSize: '0.85rem' }}>Ceri la schimb:</strong>
+                        <div style={{ height: 26 }} />
                         {ALL_RESOURCES.map((r) => (
-                          <div key={r} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                            <span style={{ fontSize: '0.8rem' }}>
-                              <ResourceIcon resource={r} /> {RESOURCE_LABELS[locale][r]}: <strong>{p2pRequest[r]}</strong>
+                          <div
+                            key={r}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginTop: 6,
+                              padding: '4px 8px',
+                              background: 'rgba(0,0,0,0.22)',
+                              border: '1px solid rgba(255,255,255,0.08)',
+                              borderRadius: 8
+                            }}
+                          >
+                            <span style={{ fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                              <ResourceIcon resource={r} height={42} />
+                              <strong>{RESOURCE_LABELS[locale][r]}</strong>
                             </span>
-                            <div style={{ display: 'flex', gap: 4 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               <button
                                 type="button"
                                 className="btn"
+                                style={{ padding: '0.2rem 0.55rem', fontWeight: 800 }}
                                 onClick={() =>
                                   setP2pRequest({ ...p2pRequest, [r]: Math.max(0, p2pRequest[r] - 1) })
                                 }
                               >
                                 -
                               </button>
+                              <span style={{ minWidth: 24, textAlign: 'center', fontWeight: 900, fontSize: '1.1rem', color: p2pRequest[r] > 0 ? 'var(--accent-gold)' : 'inherit' }}>
+                                {p2pRequest[r]}
+                              </span>
                               <button
                                 type="button"
                                 className="btn"
+                                style={{ padding: '0.2rem 0.55rem', fontWeight: 800 }}
                                 onClick={() =>
                                   setP2pRequest({ ...p2pRequest, [r]: p2pRequest[r] + 1 })
                                 }
@@ -4634,7 +4735,7 @@ export const App: React.FC = () => {
             }
             return (
               <div className="modal-backdrop" onClick={closeCounterModal}>
-                <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-dialog" style={{ maxWidth: 760, width: '95%' }} onClick={(e) => e.stopPropagation()}>
                   <div className="modal-header">
                     <h3 style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       🔄 {locale === 'ro' ? 'Contra-ofertă către' : 'Counter-offer to'}{' '}
@@ -4649,46 +4750,82 @@ export const App: React.FC = () => {
                   <div className="modal-body">
                     <div
                       style={{
-                        fontSize: '0.78rem',
+                        fontSize: '0.85rem',
                         color: 'var(--text-muted)',
-                        marginBottom: '0.75rem',
-                        textAlign: 'center'
+                        marginBottom: '0.85rem',
+                        textAlign: 'center',
+                        background: 'rgba(0,0,0,0.25)',
+                        padding: '8px 12px',
+                        borderRadius: 8
                       }}
                     >
                       {locale === 'ro'
                         ? 'Oferta lor: oferă'
                         : 'Their offer: offers'}{' '}
                       {ALL_RESOURCES.filter((r) => originalOffer.offering[r] > 0)
-                        .map((r) => (<span key={r} className="res-count"><ResourceIcon resource={r} />{originalOffer.offering[r]}</span>))}{' '}
+                        .map((r) => (
+                          <span key={r} className="res-count" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, margin: '0 4px' }}>
+                            <ResourceIcon resource={r} height={34} />
+                            <strong style={{ fontSize: '1.1rem' }}>{originalOffer.offering[r]}</strong>
+                          </span>
+                        ))}{' '}
                       · {locale === 'ro' ? 'cere' : 'asks'}{' '}
                       {ALL_RESOURCES.filter((r) => originalOffer.requesting[r] > 0)
-                        .map((r) => (<span key={r} className="res-count"><ResourceIcon resource={r} />{originalOffer.requesting[r]}</span>))}
+                        .map((r) => (
+                          <span key={r} className="res-count" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, margin: '0 4px' }}>
+                            <ResourceIcon resource={r} height={34} />
+                            <strong style={{ fontSize: '1.1rem' }}>{originalOffer.requesting[r]}</strong>
+                          </span>
+                        ))}
                       {' — '}
                       {locale === 'ro'
                         ? 'alege mai jos ce vrei TU să oferi/ceri în loc:'
                         : 'pick what YOU want to offer/ask instead below:'}
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                       <div>
-                        <strong style={{ fontSize: '0.8rem' }}>
+                        <strong style={{ fontSize: '0.85rem' }}>
                           {locale === 'ro' ? 'Oferi din mână:' : 'You offer:'}
                         </strong>
                         {ALL_RESOURCES.map((r) => (
-                          <div key={r} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                            <span style={{ fontSize: '0.8rem' }}>
-                              <ResourceIcon resource={r} /> {RESOURCE_LABELS[locale][r]}: <strong>{p2pOffer[r]}</strong>
+                          <div
+                            key={r}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginTop: 6,
+                              padding: '4px 8px',
+                              background: 'rgba(0,0,0,0.22)',
+                              border: '1px solid rgba(255,255,255,0.08)',
+                              borderRadius: 8
+                            }}
+                          >
+                            <span style={{ fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                              <ResourceIcon resource={r} height={42} />
+                              <span>
+                                <strong>{RESOURCE_LABELS[locale][r]}</strong>
+                                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 4 }}>
+                                  (ai {viewerPlayerObj.resources[r]})
+                                </span>
+                              </span>
                             </span>
-                            <div style={{ display: 'flex', gap: 4 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               <button
                                 type="button"
                                 className="btn"
+                                style={{ padding: '0.2rem 0.55rem', fontWeight: 800 }}
                                 onClick={() => setP2pOffer({ ...p2pOffer, [r]: Math.max(0, p2pOffer[r] - 1) })}
                               >
                                 -
                               </button>
+                              <span style={{ minWidth: 24, textAlign: 'center', fontWeight: 900, fontSize: '1.1rem', color: p2pOffer[r] > 0 ? 'var(--accent-gold)' : 'inherit' }}>
+                                {p2pOffer[r]}
+                              </span>
                               <button
                                 type="button"
                                 className="btn"
+                                style={{ padding: '0.2rem 0.55rem', fontWeight: 800 }}
                                 onClick={() =>
                                   setP2pOffer({
                                     ...p2pOffer,
@@ -4703,25 +4840,43 @@ export const App: React.FC = () => {
                         ))}
                       </div>
                       <div>
-                        <strong style={{ fontSize: '0.8rem' }}>
+                        <strong style={{ fontSize: '0.85rem' }}>
                           {locale === 'ro' ? 'Ceri la schimb:' : 'You ask for:'}
                         </strong>
                         {ALL_RESOURCES.map((r) => (
-                          <div key={r} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                            <span style={{ fontSize: '0.8rem' }}>
-                              <ResourceIcon resource={r} /> {RESOURCE_LABELS[locale][r]}: <strong>{p2pRequest[r]}</strong>
+                          <div
+                            key={r}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginTop: 6,
+                              padding: '4px 8px',
+                              background: 'rgba(0,0,0,0.22)',
+                              border: '1px solid rgba(255,255,255,0.08)',
+                              borderRadius: 8
+                            }}
+                          >
+                            <span style={{ fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                              <ResourceIcon resource={r} height={42} />
+                              <strong>{RESOURCE_LABELS[locale][r]}</strong>
                             </span>
-                            <div style={{ display: 'flex', gap: 4 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               <button
                                 type="button"
                                 className="btn"
+                                style={{ padding: '0.2rem 0.55rem', fontWeight: 800 }}
                                 onClick={() => setP2pRequest({ ...p2pRequest, [r]: Math.max(0, p2pRequest[r] - 1) })}
                               >
                                 -
                               </button>
+                              <span style={{ minWidth: 24, textAlign: 'center', fontWeight: 900, fontSize: '1.1rem', color: p2pRequest[r] > 0 ? 'var(--accent-gold)' : 'inherit' }}>
+                                {p2pRequest[r]}
+                              </span>
                               <button
                                 type="button"
                                 className="btn"
+                                style={{ padding: '0.2rem 0.55rem', fontWeight: 800 }}
                                 onClick={() => setP2pRequest({ ...p2pRequest, [r]: p2pRequest[r] + 1 })}
                               >
                                 +
@@ -4757,21 +4912,27 @@ export const App: React.FC = () => {
           {/* MODAL C: EVENT LOG */}
           {activeModal === 'event_log' && recorder && (
             <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
-              <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-dialog" style={{ maxWidth: 760, width: '95%', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
                   <h3>📜 {t.eventLogTitle} ({recorder.getEvents().length} acțiuni)</h3>
                   <button type="button" className="btn" onClick={() => setActiveModal('none')}>
                     ✕ Închide
                   </button>
                 </div>
-                <div className="modal-body">
+                <div className="modal-body" style={{ overflowY: 'auto', flex: 1 }}>
                   <div className="event-list">
                     {[...recorder.getEvents()].reverse().map((ev) => {
                       const p = getPlayerById(gameState, ev.playerId);
                       return (
-                        <div key={ev.sequence} className="event-item">
-                          <strong>#{ev.sequence}</strong> [T{ev.turn}] <strong>{p?.name ?? ev.playerId}</strong>:{' '}
-                          {formatActionDescription(ev.action, locale, ev.details)}
+                        <div key={ev.sequence} className="event-item" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderBottom: '1px solid var(--border-color-soft)' }}>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', minWidth: 42 }}>#{ev.sequence}</span>
+                          <span style={{ color: 'var(--accent-gold)', fontSize: '0.78rem', minWidth: 32 }}>T{ev.turn}</span>
+                          <span style={playerBadgeStyle(p?.color)}>
+                            {p?.name ?? ev.playerId}
+                          </span>
+                          <span style={{ flex: 1, fontSize: '0.86rem' }}>
+                            {renderResourceTokens(formatActionDescription(ev.action, locale, ev.details))}
+                          </span>
                         </div>
                       );
                     })}
@@ -4799,7 +4960,7 @@ export const App: React.FC = () => {
             ];
             return (
               <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
-                <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-dialog" style={{ maxWidth: 680, width: '95%' }} onClick={(e) => e.stopPropagation()}>
                   <div className="modal-header">
                     <h3>📋 {locale === 'ro' ? 'Tabel Costuri Construcții & Puncte de Victorie' : 'Building Costs & Victory Point Table'}</h3>
                     <button type="button" className="btn" onClick={() => setActiveModal('none')}>
@@ -4807,7 +4968,7 @@ export const App: React.FC = () => {
                     </button>
                   </div>
                   <div className="modal-body">
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {rows.map((row) => (
                         <div
                           key={row.key}
@@ -4815,27 +4976,44 @@ export const App: React.FC = () => {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            gap: 10,
+                            gap: 12,
                             background: 'var(--bg-inset)',
                             border: '1px solid var(--border-color-soft)',
-                            borderRadius: 8,
-                            padding: '0.5rem 0.75rem'
+                            borderRadius: 10,
+                            padding: '0.65rem 1rem'
                           }}
                         >
-                          <strong style={{ minWidth: 150 }}>{row.label}</strong>
-                          <div style={{ display: 'flex', gap: 10, flex: 1, justifyContent: 'center' }}>
+                          <strong style={{ minWidth: 150, fontSize: '1.05rem', color: 'var(--parchment)' }}>
+                            {row.label}
+                          </strong>
+                          <div style={{ display: 'flex', gap: 12, flex: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
                             {ALL_RESOURCES.filter((r) => row.cost[r] > 0).map((r) => (
-                              <span key={r} style={{ fontSize: '0.86rem' }}>
-                                <ResourceIcon resource={r} /> {row.cost[r]}
-                              </span>
+                              <div
+                                key={r}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  background: 'rgba(0, 0, 0, 0.35)',
+                                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                                  borderRadius: 8,
+                                  padding: '4px 10px',
+                                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.3)'
+                                }}
+                              >
+                                <ResourceIcon resource={r} height={52} />
+                                <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#fff' }}>
+                                  {row.cost[r]}
+                                </span>
+                              </div>
                             ))}
                           </div>
-                          <span style={{ color: 'var(--accent-gold)', fontWeight: 700, minWidth: 70, textAlign: 'right' }}>
+                          <span style={{ color: 'var(--accent-gold)', fontWeight: 800, fontSize: '1.05rem', minWidth: 80, textAlign: 'right' }}>
                             {row.vp}
                           </span>
                         </div>
                       ))}
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: 4 }}>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: 6, padding: '0.45rem', background: 'rgba(0, 0, 0, 0.2)', borderRadius: 6 }}>
                         {locale === 'ro'
                           ? '🛣️ Drumul cel mai Lung (min. 5 drumuri): +2 VP  ·  ⚔️ Armata cea mai Mare (min. 3 Cavaleri): +2 VP'
                           : '🛣️ Longest Road (5+ roads): +2 VP  ·  ⚔️ Largest Army (3+ Knights): +2 VP'}

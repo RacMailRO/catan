@@ -477,56 +477,138 @@ select:focus,
    - several can be visible at once, each with its own lifetime, instead of one slot that the
    next action immediately overwrites. Positioned clear of the trade negotiation banner (which
    sits centered at the same top offset). */
-.action-feedback-stack {
+/* Stacked/grouped notification card centered on the screen */
+.action-feedback-card-container {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 86;
+  max-width: min(540px, 94vw);
+  width: 100%;
+  pointer-events: none;
+  animation: actionFeedbackCardIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.38s ease, transform 0.38s ease;
+}
+
+.action-feedback-card-container.fading {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.92);
+}
+
+.action-feedback-card {
+  pointer-events: auto;
+  background: rgba(10, 18, 28, 0.96);
+  border: 1.5px solid var(--accent-gold);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.75), 0 0 24px rgba(245, 158, 11, 0.15);
+  backdrop-filter: blur(8px);
+  overflow: hidden;
+  color: var(--parchment);
+}
+
+.action-feedback-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.85rem;
+  background: rgba(245, 158, 11, 0.08);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.action-feedback-journal-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--parchment);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.action-feedback-journal-btn:hover {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: var(--accent-gold);
+  color: #fff;
+}
+
+.action-feedback-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.action-feedback-close-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.action-feedback-card-body {
+  padding: 0.65rem 0.9rem;
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 8px;
-  max-width: min(520px, 92vw);
-  width: max-content;
-  pointer-events: none;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.action-feedback-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  color: var(--parchment);
+}
+
+.action-feedback-dot {
+  color: var(--accent-gold);
+  font-weight: bold;
+}
+
+.action-feedback-progress-bar {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  width: 100%;
+}
+
+.action-feedback-progress-fill {
+  height: 100%;
+  background: var(--accent-gold);
+  animation: actionFeedbackTimerProgress 7s linear forwards;
+}
+
+@keyframes actionFeedbackTimerProgress {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+@keyframes actionFeedbackCardIn {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.88);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
 }
 
 .res-count {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   margin-right: 6px;
   white-space: nowrap;
-}
-
-.action-feedback-item {
-  background: rgba(8, 16, 24, 0.95);
-  border: 1.5px solid var(--accent-gold);
-  border-radius: var(--radius-md);
-  padding: 0.55rem 1.1rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  line-height: 1.35;
-  color: var(--parchment);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
-  animation: actionFeedbackCenterIn 0.22s ease-out;
-  transition: opacity 0.35s ease, transform 0.35s ease;
-  text-align: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  backdrop-filter: blur(4px);
-}
-
-.action-feedback-item.fading {
-  opacity: 0;
-  transform: scale(0.92);
-}
-
-@keyframes actionFeedbackCenterIn {
-  0% { opacity: 0; transform: scale(0.85); }
-  100% { opacity: 1; transform: scale(1); }
+  font-weight: 700;
 }
 
 
