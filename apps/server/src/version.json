@@ -1,9 +1,14 @@
 {
-  "version": "v1.161",
-  "commitCount": 161,
-  "shortHash": "df3af0b",
-  "buildDate": "2026-10-30T13:44:33.682Z",
+  "version": "v1.162",
+  "commitCount": 162,
+  "shortHash": "e8a5985",
+  "buildDate": "2026-10-30T13:44:43.453Z",
   "releaseNotes": [
+    {
+      "hash": "e8a5985",
+      "date": "2026-10-30",
+      "message": "chore: bump version to v1.161"
+    },
     {
       "hash": "df3af0b",
       "date": "2026-10-30",
@@ -248,11 +253,6 @@
       "hash": "b102ad3",
       "date": "2026-10-27",
       "message": "feat(board): add the 5-6 Player Expansion board scenario"
-    },
-    {
-      "hash": "c3b77b1",
-      "date": "2026-10-27",
-      "message": "feat(board): wire up a real second map-generation scenario (Aleatoriu Pur)"
     }
   ]
 }
