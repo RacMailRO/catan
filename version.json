@@ -1,9 +1,19 @@
 {
-  "version": "v1.159",
-  "commitCount": 159,
-  "shortHash": "443d2ca",
-  "buildDate": "2026-10-30T13:42:59.741Z",
+  "version": "v1.161",
+  "commitCount": 161,
+  "shortHash": "df3af0b",
+  "buildDate": "2026-10-30T13:44:33.682Z",
   "releaseNotes": [
+    {
+      "hash": "df3af0b",
+      "date": "2026-10-30",
+      "message": "feat: increase city piece dimensions to 75x75 on the board"
+    },
+    {
+      "hash": "cdeba82",
+      "date": "2026-10-30",
+      "message": "chore: bump to v1.159"
+    },
     {
       "hash": "443d2ca",
       "date": "2026-10-30",
@@ -243,16 +253,6 @@
       "hash": "c3b77b1",
       "date": "2026-10-27",
       "message": "feat(board): wire up a real second map-generation scenario (Aleatoriu Pur)"
-    },
-    {
-      "hash": "bf68c4e",
-      "date": "2026-10-27",
-      "message": "chore: bump version to v1.110"
-    },
-    {
-      "hash": "b516c2b",
-      "date": "2026-10-27",
-      "message": "feat: spectator 4-AI autonomous play, replay starts at seq 0, and rich visual dynamic strategic report"
     }
   ]
 }
