@@ -1,9 +1,14 @@
 {
-  "version": "v1.157",
-  "commitCount": 157,
-  "shortHash": "08f6b8d",
-  "buildDate": "2026-10-30T13:42:37.709Z",
+  "version": "v1.158",
+  "commitCount": 158,
+  "shortHash": "da4482b",
+  "buildDate": "2026-10-30T13:42:48.701Z",
   "releaseNotes": [
+    {
+      "hash": "da4482b",
+      "date": "2026-10-30",
+      "message": "chore: bump version to v1.157"
+    },
     {
       "hash": "08f6b8d",
       "date": "2026-10-30",
@@ -248,11 +253,6 @@
       "hash": "08c5709",
       "date": "2026-10-27",
       "message": "chore: bump build version to v1.108"
-    },
-    {
-      "hash": "0424d27",
-      "date": "2026-10-27",
-      "message": "fix(online): silent state recovery on trade 400 when offer already closed"
     }
   ]
 }
