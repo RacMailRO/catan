@@ -1,9 +1,14 @@
 {
-  "version": "v1.154",
-  "commitCount": 154,
-  "shortHash": "00987e6",
-  "buildDate": "2026-10-30T12:48:44.593Z",
+  "version": "v1.155",
+  "commitCount": 155,
+  "shortHash": "a154044",
+  "buildDate": "2026-10-30T13:17:18.232Z",
   "releaseNotes": [
+    {
+      "hash": "a154044",
+      "date": "2026-10-30",
+      "message": "feat: enlarge trade banner cards and add 7s auto-dismiss timeout"
+    },
     {
       "hash": "00987e6",
       "date": "2026-10-30",
@@ -248,11 +253,6 @@
       "hash": "943204f",
       "date": "2026-10-27",
       "message": "fix(trade): prevent double reject dispatch and AI deadlock when awaiting human response"
-    },
-    {
-      "hash": "77c648e",
-      "date": "2026-10-27",
-      "message": "chore: bump build version to v1.104"
     }
   ]
 }
