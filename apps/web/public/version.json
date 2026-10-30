@@ -1,9 +1,14 @@
 {
-  "version": "v1.151",
-  "commitCount": 151,
-  "shortHash": "691746c",
-  "buildDate": "2026-10-30T12:47:44.400Z",
+  "version": "v1.152",
+  "commitCount": 152,
+  "shortHash": "29ff9b9",
+  "buildDate": "2026-10-30T12:47:53.990Z",
   "releaseNotes": [
+    {
+      "hash": "29ff9b9",
+      "date": "2026-10-30",
+      "message": "chore: bump version stamps v1.151"
+    },
     {
       "hash": "691746c",
       "date": "2026-10-30",
@@ -248,11 +253,6 @@
       "hash": "430ebae",
       "date": "2026-10-27",
       "message": "chore: bump build version to v1.102"
-    },
-    {
-      "hash": "3563ee6",
-      "date": "2026-10-27",
-      "message": "feat(lobby): add public lobbies list, spectate mode, and finished status sync"
     }
   ]
 }
