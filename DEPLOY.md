@@ -37,7 +37,8 @@ npm run build
 
 Acest pas (vezi `package.json` → `build`):
 1. Generează `version.json` (versiune + changelog, citite din `git log` local).
-2. Compilează frontend-ul React cu Vite → `apps/web/dist`.
+2. Compilează frontend-ul React cu Vite → `apps/web/dist` (include și compilarea Tailwind
+   CSS, automat, ca parte a acestui pas — nu există o comandă separată de rulat pentru CSS).
 3. Compilează backend-ul într-un **singur fișier standalone**, cu esbuild →
    `apps/server/dist/server.mjs`. Acest bundle conține deja tot codul (inclusiv
    `packages/core`, `packages/ai`, `packages/protocol` și dependințele `ws`/`zod`) —
