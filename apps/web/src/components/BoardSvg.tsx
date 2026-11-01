@@ -246,7 +246,7 @@ function seaTileRotationDeg(q: number, r: number): number {
   return SEA_TILE_ROTATIONS[hash % SEA_TILE_ROTATIONS.length]!;
 }
 
-export const BoardSvg: React.FC<BoardSvgProps> = ({
+const BoardSvgComponent: React.FC<BoardSvgProps> = ({
   board,
   playerColors,
   highlightedVertices,
@@ -1292,3 +1292,12 @@ export const BoardSvg: React.FC<BoardSvgProps> = ({
     </div>
   );
 };
+
+// This is the single most expensive component in the app (a full interactive SVG board with
+// terrain art, pieces, harbors and overlays) and was previously unmemoized, so it re-rendered
+// on every App.tsx state change anywhere - a tooltip hover, a timer tick, anything - not just
+// changes relevant to the board itself. Wrapped in React.memo (default shallow prop comparison
+// is sufficient here as long as callers pass stable references for non-primitive props, e.g.
+// via useMemo/useCallback) so it only re-renders when its own props actually change.
+export const BoardSvg = React.memo(BoardSvgComponent);
+BoardSvg.displayName = 'BoardSvg';

@@ -255,6 +255,37 @@ function getExplicitTurnStatusDescription(
   }
 }
 
+// Module-level style constants for the game tab's hot render path (the player-list and
+// bottom-dock card rows are each re-created per player/resource on every render while a game
+// is in progress). Hoisting the genuinely static ones here avoids reallocating an identical
+// object N times per render for no reason - these never change at runtime, so a stable shared
+// reference is strictly better than a fresh literal every time. Styles that depend on loop
+// data (e.g. a player's color) stay inline since there's nothing stable to hoist them to.
+const STYLE_PLAYER_ROW_HEADER: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.83rem' };
+const STYLE_PLAYER_RENAME_BTN: React.CSSProperties = { padding: '0 4px', fontSize: '0.68rem', marginLeft: 4, height: 18, lineHeight: '16px' };
+const STYLE_PLAYER_TYPE_TAG: React.CSSProperties = { fontSize: '0.68rem', color: 'var(--text-muted)', marginLeft: 4 };
+const STYLE_GOLD_BOLD: React.CSSProperties = { color: 'var(--accent-gold)', fontWeight: 700 };
+const STYLE_SPECIAL_VP_BADGE: React.CSSProperties = {
+  marginLeft: 4,
+  fontSize: '0.68rem',
+  background: 'rgba(234, 179, 8, 0.2)',
+  color: '#eab308',
+  padding: '1px 5px',
+  borderRadius: 4,
+  border: '1px solid rgba(234, 179, 8, 0.4)'
+};
+const STYLE_RESOURCE_ROW: React.CSSProperties = { display: 'flex', gap: 4, marginTop: 4 };
+const STYLE_RESOURCE_SLOT: React.CSSProperties = { position: 'relative' };
+const STYLE_MUTED_SMALL_TEXT: React.CSSProperties = { fontSize: '0.76rem', marginTop: 3, color: 'var(--text-muted)' };
+const STYLE_PIECES_ROW: React.CSSProperties = { display: 'flex', gap: 4, marginTop: '0.25rem', marginBottom: '0.2rem' };
+const STYLE_PIECE_PILL: React.CSSProperties = { fontSize: '0.72rem', padding: '1px 6px' };
+const STYLE_PLAYER_STATS_ROW: React.CSSProperties = { display: 'flex', gap: '0.45rem', flexWrap: 'wrap', fontSize: '0.73rem', color: 'var(--text-muted)' };
+// Bottom dock (hand) hot path.
+const STYLE_DOCK_PLAYER_NAME: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' };
+const STYLE_DOCK_RESOURCE_COUNT: React.CSSProperties = { fontSize: '1.05rem', fontWeight: 800, color: 'var(--accent-gold)', marginLeft: 2 };
+const STYLE_DOCK_DEV_CARD_CLICKABLE: React.CSSProperties = { cursor: 'pointer' };
+const STYLE_FONT_WEIGHT_BOLD: React.CSSProperties = { fontWeight: 700 };
+
 export const App: React.FC = () => {
   const [locale, setLocale] = useState<Locale>('ro');
   const [activeTab, setActiveTab] = useState<ActiveTab>('lobby');
@@ -536,52 +567,54 @@ export const App: React.FC = () => {
   // Generic version: flies a resource icon between any two DOM anchors, found by CSS selector.
   // Used for dice production (hex -> player), and for trade-acceptance / robber-steal /
   // discard-to-bank animations (player <-> player, player <-> bank) below.
-  const launchFlyingIcon = (
-    requests: { resource: ResourceType; fromSelector: string; toSelector: string }[]
-  ) => {
-    const newCards: FlyingResourceCard[] = [];
-    for (const req of requests) {
-      const fromEl = document.querySelector(req.fromSelector);
-      const toEl = document.querySelector(req.toSelector);
-      if (!fromEl || !toEl) continue;
-      const fromRect = fromEl.getBoundingClientRect();
-      const toRect = toEl.getBoundingClientRect();
-      newCards.push({
-        key: `fly-${Date.now()}-${Math.random()}-${req.fromSelector}-${req.toSelector}-${req.resource}`,
-        resource: req.resource,
-        startX: fromRect.left + fromRect.width / 2,
-        startY: fromRect.top + fromRect.height / 2,
-        endX: toRect.left + toRect.width / 2,
-        endY: toRect.top + toRect.height / 2,
-        launched: false
-      });
-    }
-    if (newCards.length === 0) return;
-    const keys = new Set(newCards.map((c) => c.key));
-    setFlyingCards((prev) => [...prev, ...newCards]);
-    // Start each card at its origin, then flip to its destination on the next frame so the
-    // left/top CSS transition actually animates the move instead of snapping there.
-    requestAnimationFrame(() => {
+  const launchFlyingIcon = useCallback(
+    (requests: { resource: ResourceType; fromSelector: string; toSelector: string }[]) => {
+      const newCards: FlyingResourceCard[] = [];
+      for (const req of requests) {
+        const fromEl = document.querySelector(req.fromSelector);
+        const toEl = document.querySelector(req.toSelector);
+        if (!fromEl || !toEl) continue;
+        const fromRect = fromEl.getBoundingClientRect();
+        const toRect = toEl.getBoundingClientRect();
+        newCards.push({
+          key: `fly-${Date.now()}-${Math.random()}-${req.fromSelector}-${req.toSelector}-${req.resource}`,
+          resource: req.resource,
+          startX: fromRect.left + fromRect.width / 2,
+          startY: fromRect.top + fromRect.height / 2,
+          endX: toRect.left + toRect.width / 2,
+          endY: toRect.top + toRect.height / 2,
+          launched: false
+        });
+      }
+      if (newCards.length === 0) return;
+      const keys = new Set(newCards.map((c) => c.key));
+      setFlyingCards((prev) => [...prev, ...newCards]);
+      // Start each card at its origin, then flip to its destination on the next frame so the
+      // left/top CSS transition actually animates the move instead of snapping there.
       requestAnimationFrame(() => {
-        setFlyingCards((prev) => prev.map((c) => (keys.has(c.key) ? { ...c, launched: true } : c)));
+        requestAnimationFrame(() => {
+          setFlyingCards((prev) => prev.map((c) => (keys.has(c.key) ? { ...c, launched: true } : c)));
+        });
       });
-    });
-    setTimeout(() => {
-      setFlyingCards((prev) => prev.filter((c) => !keys.has(c.key)));
-    }, 950);
-  };
+      setTimeout(() => {
+        setFlyingCards((prev) => prev.filter((c) => !keys.has(c.key)));
+      }, 950);
+    },
+    []
+  );
 
-  const launchFlyingCards = (
-    requests: { playerId: string; resource: ResourceType; hexId: string }[]
-  ) => {
-    launchFlyingIcon(
-      requests.map((req) => ({
-        resource: req.resource,
-        fromSelector: `[data-hex-id="${req.hexId}"]`,
-        toSelector: `[data-player-id="${req.playerId}"][data-resource="${req.resource}"]`
-      }))
-    );
-  };
+  const launchFlyingCards = useCallback(
+    (requests: { playerId: string; resource: ResourceType; hexId: string }[]) => {
+      launchFlyingIcon(
+        requests.map((req) => ({
+          resource: req.resource,
+          fromSelector: `[data-hex-id="${req.hexId}"]`,
+          toSelector: `[data-player-id="${req.playerId}"][data-resource="${req.resource}"]`
+        }))
+      );
+    },
+    [launchFlyingIcon]
+  );
 
   // player-card anchor: the whole sidebar row for a player (exists for every player, unlike
   // the per-resource slots above which only render for the viewer's own, visible hand) - used
@@ -602,6 +635,12 @@ export const App: React.FC = () => {
   const [publicLobbies, setPublicLobbies] = useState<LobbyState[]>([]);
   const [spectateGameId, setSpectateGameId] = useState<string | null>(null);
   const [spectateView, setSpectateView] = useState<PlayerView | null>(null);
+  // Stable reference for the spectator BoardSvg's playerColors prop - without this it was
+  // rebuilt with Object.fromEntries on every render, defeating BoardSvg's React.memo.
+  const spectatePlayerColors = useMemo(() => {
+    if (!spectateView) return {};
+    return Object.fromEntries(spectateView.players.map((p) => [p.id, p.color]));
+  }, [spectateView]);
   const [spectateError, setSpectateError] = useState<string | null>(null);
   const [spectateTerminationDismissed, setSpectateTerminationDismissed] = useState<boolean>(false);
   const [inGameTermination, setInGameTermination] = useState<{
@@ -1443,7 +1482,7 @@ export const App: React.FC = () => {
   // resource-gain flash and flying-card animation the local hot-seat path has. A push caused by
   // another player's move updates state silently; we don't know enough about their hand to
   // animate it honestly anyway.
-  const applyOnlineSync = (
+  const applyOnlineSync = useCallback((
     data: {
       playerView: PlayerView;
       legalActions: GameAction[];
@@ -1619,9 +1658,9 @@ export const App: React.FC = () => {
 
     setBuildMode('none');
     setDiscardSelection(createEmptyResources());
-  };
+  }, [onlineSession, locale, showActionFeedback, launchFlyingCards]);
 
-  const executeOnlineAction = async (playerId: string, action: GameAction) => {
+  const executeOnlineAction = useCallback(async (playerId: string, action: GameAction) => {
     if (!onlineSession?.gameId) return;
     setActionError(null);
     const prevView = onlinePlayerView;
@@ -1670,9 +1709,9 @@ export const App: React.FC = () => {
         setActionError(err instanceof Error ? err.message : 'Mutare invalidă.');
       }
     }
-  };
+  }, [onlineSession, onlinePlayerView, applyOnlineSync]);
 
-  const executeAction = (playerId: string, action: GameAction) => {
+  const executeAction = useCallback((playerId: string, action: GameAction) => {
     if (onlineSession) {
       void executeOnlineAction(playerId, action);
       return;
@@ -1839,7 +1878,7 @@ export const App: React.FC = () => {
       setActionError(err instanceof Error ? err.message : 'Mutare invalidă.');
       setGameVersionTick((v) => v + 1);
     }
-  };
+  }, [onlineSession, executeOnlineAction, recorder, locale, viewerId, showActionFeedback, launchFlyingCards]);
 
   // Trade/bank/discard negotiation state cluster (dev-card sub-modals, bank & p2p trade
   // builder staging, discard selection, incoming-offer reject dropdown, and the negotiation
@@ -2088,8 +2127,60 @@ export const App: React.FC = () => {
     return { highlightedVertices: vSet, highlightedEdges: eSet, highlightedHexes: hSet };
   }, [gameState, legalActionsForActive, buildMode, gameVersionTick]);
 
-  // Handlers for clicking on the interactive board
-  const handleSelectVertex = (vertexId: string) => {
+  const handleRunBenchmark = () => {
+    const { report, replays } = runBenchmarkSuite({
+      baseSeed: customSeed || 'bench-2026',
+      gamesCount: benchmarkGamesCount,
+      participants: [
+        { id: 'p1', name: 'Expert Adaptiv', type: 'ai', aiDifficulty: 'expert', aiStyle: 'adaptive' },
+        { id: 'p2', name: 'Avansat Dezvoltare', type: 'ai', aiDifficulty: 'advanced', aiStyle: 'development' },
+        { id: 'p3', name: 'Mediu Expansiune', type: 'ai', aiDifficulty: 'medium', aiStyle: 'expansion' },
+        { id: 'p4', name: 'Începător Comercial', type: 'ai', aiDifficulty: 'beginner', aiStyle: 'commercial' }
+      ],
+      rules,
+      // Run entirely in the browser, so without this every benchmark game's replay (and its
+      // AI decision log) was lost the moment this function returned - only the aggregate
+      // stats below ever existed. Recording + syncing each one makes them reviewable later
+      // in the Replay/Analysis view, same as any other game.
+      recordReplays: true
+    });
+    for (const replay of replays) {
+      saveReplayToHistory(replay, true);
+    }
+    setBenchmarkReport(report);
+  };
+
+  const maxPlayers = rules.boardScenario === 'expansion' || rules.boardScenario === 'world_map' ? 6 : 4;
+
+  // Stable reference (recomputed only when gameState itself changes) so it doesn't defeat
+  // BoardSvg's React.memo by handing it a fresh object identity on every unrelated render.
+  const playerColorsMap: Record<string, PlayerColor> = useMemo(() => {
+    const map: Record<string, PlayerColor> = {};
+    if (gameState) {
+      for (const p of gameState.players) {
+        map[p.id] = p.color;
+      }
+    }
+    return map;
+  }, [gameState]);
+
+  const activePlayerObj = gameState ? getPlayerById(gameState, gameState.activePlayerId) : undefined;
+  const hasShipsInScenario = Boolean(gameState && isScenarioWithShips(gameState.rules?.boardScenario));
+  const viewerPlayerObj = gameState ? getPlayerById(gameState, viewerId) : undefined;
+  const isAllAiOnlineGame = Boolean(
+    onlineSession && gameState?.players && gameState.players.every((p) => p.type !== 'human')
+  );
+  // Online: "my turn" means literally mine — other human seats are on other devices, so seeing
+  // that *a* human is active (the local hot-seat definition) isn't enough to let me act.
+  // In a 4-AI online match, the user is strictly a spectator and should never be prompted to act.
+  const isHumanTurn = onlineSession
+    ? (!isAllAiOnlineGame && gameState?.activePlayerId === viewerId && activePlayerObj?.type === 'human')
+    : activePlayerObj?.type === 'human';
+
+  // Handlers for clicking on the interactive board - useCallback'd (with executeAction itself
+  // now stabilized above) so BoardSvg's onSelect* props stay referentially stable across
+  // renders that don't actually change board-relevant state, letting its React.memo do its job.
+  const handleSelectVertex = useCallback((vertexId: string) => {
     if (!gameState || !isHumanTurn) return;
     const pId = gameState.activePlayerId;
     if (gameState.phase === 'setup_settlement_1' || gameState.phase === 'setup_settlement_2') {
@@ -2099,9 +2190,9 @@ export const App: React.FC = () => {
     } else if (buildMode === 'city') {
       executeAction(pId, { type: 'build_city', vertexId });
     }
-  };
+  }, [gameState, isHumanTurn, buildMode, executeAction]);
 
-  const handleSelectEdge = (edgeId: string) => {
+  const handleSelectEdge = useCallback((edgeId: string) => {
     if (!gameState || !isHumanTurn) return;
     const pId = gameState.activePlayerId;
     if (gameState.phase === 'setup_road_1' || gameState.phase === 'setup_road_2') {
@@ -2155,9 +2246,9 @@ export const App: React.FC = () => {
         setSelectedShipEdgeId(edgeId);
       }
     }
-  };
+  }, [gameState, isHumanTurn, legalActionsForActive, buildMode, selectedShipEdgeId, executeAction]);
 
-  const handleSelectHex = (hexId: string) => {
+  const handleSelectHex = useCallback((hexId: string) => {
     if (!gameState) return;
     const pId = gameState.activePlayerId;
     const targets = getEligibleRobberTargetsOnHex(gameState, hexId, pId);
@@ -2168,52 +2259,7 @@ export const App: React.FC = () => {
     } else if (buildMode === 'knight') {
       executeAction(pId, { type: 'play_knight', hexId, targetPlayerId: firstTarget });
     }
-  };
-
-  const handleRunBenchmark = () => {
-    const { report, replays } = runBenchmarkSuite({
-      baseSeed: customSeed || 'bench-2026',
-      gamesCount: benchmarkGamesCount,
-      participants: [
-        { id: 'p1', name: 'Expert Adaptiv', type: 'ai', aiDifficulty: 'expert', aiStyle: 'adaptive' },
-        { id: 'p2', name: 'Avansat Dezvoltare', type: 'ai', aiDifficulty: 'advanced', aiStyle: 'development' },
-        { id: 'p3', name: 'Mediu Expansiune', type: 'ai', aiDifficulty: 'medium', aiStyle: 'expansion' },
-        { id: 'p4', name: 'Începător Comercial', type: 'ai', aiDifficulty: 'beginner', aiStyle: 'commercial' }
-      ],
-      rules,
-      // Run entirely in the browser, so without this every benchmark game's replay (and its
-      // AI decision log) was lost the moment this function returned - only the aggregate
-      // stats below ever existed. Recording + syncing each one makes them reviewable later
-      // in the Replay/Analysis view, same as any other game.
-      recordReplays: true
-    });
-    for (const replay of replays) {
-      saveReplayToHistory(replay, true);
-    }
-    setBenchmarkReport(report);
-  };
-
-  const maxPlayers = rules.boardScenario === 'expansion' || rules.boardScenario === 'world_map' ? 6 : 4;
-
-  const playerColorsMap: Record<string, PlayerColor> = {};
-  if (gameState) {
-    for (const p of gameState.players) {
-      playerColorsMap[p.id] = p.color;
-    }
-  }
-
-  const activePlayerObj = gameState ? getPlayerById(gameState, gameState.activePlayerId) : undefined;
-  const hasShipsInScenario = Boolean(gameState && isScenarioWithShips(gameState.rules?.boardScenario));
-  const viewerPlayerObj = gameState ? getPlayerById(gameState, viewerId) : undefined;
-  const isAllAiOnlineGame = Boolean(
-    onlineSession && gameState?.players && gameState.players.every((p) => p.type !== 'human')
-  );
-  // Online: "my turn" means literally mine — other human seats are on other devices, so seeing
-  // that *a* human is active (the local hot-seat definition) isn't enough to let me act.
-  // In a 4-AI online match, the user is strictly a spectator and should never be prompted to act.
-  const isHumanTurn = onlineSession
-    ? (!isAllAiOnlineGame && gameState?.activePlayerId === viewerId && activePlayerObj?.type === 'human')
-    : activePlayerObj?.type === 'human';
+  }, [gameState, buildMode, executeAction]);
 
   // Reset the countdown only when a genuinely new turn starts for a human player (not on every
   // phase change within the same turn — rolling the dice shouldn't hand them another full minute).
@@ -2606,7 +2652,7 @@ export const App: React.FC = () => {
                       data-player-card-id={p.id}
                       className={`player-card ${isCurrent ? 'active-turn' : ''}`}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.83rem' }}>
+                      <div style={STYLE_PLAYER_ROW_HEADER}>
                         <span>
                           <span
                             className="color-dot"
@@ -2617,30 +2663,22 @@ export const App: React.FC = () => {
                             <button
                               type="button"
                               className="btn"
-                              style={{ padding: '0 4px', fontSize: '0.68rem', marginLeft: 4, height: 18, lineHeight: '16px' }}
+                              style={STYLE_PLAYER_RENAME_BTN}
                               title={locale === 'ro' ? 'Schimbă numele tău' : 'Change your name'}
                               onClick={() => handlePromptRenameInGame(p.name)}
                             >
                               ✏️
                             </button>
                           )}
-                          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginLeft: 4 }}>
+                          <span style={STYLE_PLAYER_TYPE_TAG}>
                             [{p.type.toUpperCase()}]
                           </span>
                         </span>
-                        <span style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>
+                        <span style={STYLE_GOLD_BOLD}>
                           {p.totalScore !== undefined ? `${p.totalScore} VP` : `${p.publicScore} VP`}
                           {!!p.specialVictoryPoints && p.specialVictoryPoints > 0 && (
                             <span
-                              style={{
-                                marginLeft: 4,
-                                fontSize: '0.68rem',
-                                background: 'rgba(234, 179, 8, 0.2)',
-                                color: '#eab308',
-                                padding: '1px 5px',
-                                borderRadius: 4,
-                                border: '1px solid rgba(234, 179, 8, 0.4)'
-                              }}
+                              style={STYLE_SPECIAL_VP_BADGE}
                               title={locale === 'ro' ? `+${p.specialVictoryPoints} Puncte Speciale de Victorie (Catan Chits / Insule)` : `+${p.specialVictoryPoints} Special VP (Catan Chits)`}
                             >
                               +{p.specialVictoryPoints}🪙
@@ -2650,11 +2688,11 @@ export const App: React.FC = () => {
                       </div>
 
                       {p.resources ? (
-                        <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                        <div style={STYLE_RESOURCE_ROW}>
                           {ALL_RESOURCES.map((r) => {
                             const gain = resourceGainFlash[p.id]?.[r];
                             return (
-                              <div key={r} data-player-id={p.id} data-resource={r} style={{ position: 'relative' }}>
+                              <div key={r} data-player-id={p.id} data-resource={r} style={STYLE_RESOURCE_SLOT}>
                                 <ResourceCardSprite resource={r} count={p.resources![r]} locale={locale} size="xs" />
                                 {gain ? <span className="resource-gain-flash">+{gain}</span> : null}
                               </div>
@@ -2662,13 +2700,13 @@ export const App: React.FC = () => {
                           })}
                         </div>
                       ) : (
-                        <div style={{ fontSize: '0.76rem', marginTop: 3, color: 'var(--text-muted)' }}>
+                        <div style={STYLE_MUTED_SMALL_TEXT}>
                           🎴 {p.resourceCount} resurse · 🃏 {p.devCardCount} dezvoltare
                         </div>
                       )}
 
                       {/* Piece Counts: Settlements, Cities, Roads */}
-                      <div className="player-grid-pieces" style={{ display: 'flex', gap: 4, marginTop: '0.25rem', marginBottom: '0.2rem' }}>
+                      <div className="player-grid-pieces" style={STYLE_PIECES_ROW}>
                         {(
                           [
                             ['settlements', '🏠', locale === 'ro' ? 'Așezări' : 'Settlements'] as const,
@@ -2687,7 +2725,7 @@ export const App: React.FC = () => {
                               key={key}
                               className={`piece-count-pill ${exhausted ? 'exhausted' : ''}`}
                               title={`${label}: ${used}/${total} construite`}
-                              style={{ fontSize: '0.72rem', padding: '1px 6px' }}
+                              style={STYLE_PIECE_PILL}
                             >
                               {icon} {used}/{total}
                             </span>
@@ -2695,14 +2733,14 @@ export const App: React.FC = () => {
                         })}
                       </div>
 
-                      <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', fontSize: '0.73rem', color: 'var(--text-muted)' }}>
+                      <div style={STYLE_PLAYER_STATS_ROW}>
                         <span>🛣️ Drum: {p.longestRoadLength}</span>
                         <span>⚔️ Cavaleri: {p.knightsPlayed}</span>
                         {hasLongestRoad && (
-                          <span style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>🏅 +2 Drum</span>
+                          <span style={STYLE_GOLD_BOLD}>🏅 +2 Drum</span>
                         )}
                         {hasLargestArmy && (
-                          <span style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>🛡️ +2 Armată</span>
+                          <span style={STYLE_GOLD_BOLD}>🛡️ +2 Armată</span>
                         )}
                       </div>
                     </div>
@@ -2894,13 +2932,13 @@ export const App: React.FC = () => {
           <footer className="game-bottom-dock">
             {/* Header row: player name, card count, and mobile collapse toggle */}
             <div className="dock-title-bar">
-              <div className="dock-player-name" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <div className="dock-player-name" style={STYLE_DOCK_PLAYER_NAME}>
                 <div>
                   <span>Cărțile lui</span> <strong>{(viewerPlayerObj ?? activePlayerObj)?.name}</strong>{' '}
                   {/* Larger + gold so the hand size actually draws the eye, not just a muted
                       aside next to the name - piece counts moved onto their own build buttons
                       below instead of living here as a separate row. */}
-                  <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--accent-gold)', marginLeft: 2 }}>
+                  <span style={STYLE_DOCK_RESOURCE_COUNT}>
                     ({totalResourceCount((viewerPlayerObj ?? activePlayerObj)?.resources ?? createEmptyResources())} resurse)
                   </span>
                 </div>
@@ -2926,7 +2964,7 @@ export const App: React.FC = () => {
                         key={r}
                         data-player-id={(viewerPlayerObj ?? activePlayerObj)?.id}
                         data-resource={r}
-                        style={{ position: 'relative' }}
+                        style={STYLE_RESOURCE_SLOT}
                       >
                         <ResourceCardSprite
                           resource={r}
@@ -2941,7 +2979,7 @@ export const App: React.FC = () => {
 
                   <div
                     onClick={() => setActiveModal('dev_cards')}
-                    style={{ cursor: 'pointer' }}
+                    style={STYLE_DOCK_DEV_CARD_CLICKABLE}
                     title={locale === 'ro' ? 'Deschide Cărțile de Dezvoltare' : 'Open Development Cards'}
                   >
                     <DevCardSprite
@@ -2986,7 +3024,7 @@ export const App: React.FC = () => {
                         <button
                           type="button"
                           className="btn btn-warning"
-                          style={{ fontWeight: 700 }}
+                          style={STYLE_FONT_WEIGHT_BOLD}
                           onClick={() => executeAction(activePlayerObj.id, { type: 'pass_special_building' })}
                           title={locale === 'ro' ? 'Încheie rândul de construcție specială' : 'Finish special building turn'}
                         >
@@ -3928,7 +3966,7 @@ export const App: React.FC = () => {
                 <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', position: 'relative' }}>
                   <BoardSvg
                     board={spectateView.board}
-                    playerColors={Object.fromEntries(spectateView.players.map((p) => [p.id, p.color]))}
+                    playerColors={spectatePlayerColors}
                     locale={locale}
                   />
                 </div>
