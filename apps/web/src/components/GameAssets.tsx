@@ -155,6 +155,10 @@ export const ResourceCardSprite: React.FC<ResourceCardSpriteProps> = ({
       style={{
         width: dimensions.width,
         height: dimensions.height,
+        // Reserves room for the count badge below the card (see .sprite-card-count), as part
+        // of the card's own box so normal document flow pushes whatever comes after it down -
+        // a caller that forgets this can no longer let the badge get obscured by content below.
+        marginBottom: 22,
         backgroundImage: 'url("/cards.jpg")',
         backgroundSize: '500% 400%',
         backgroundPosition: `${pos.x} ${pos.y}`,

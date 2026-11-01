@@ -674,8 +674,11 @@ select:focus,
 
 .sprite-card-count {
   position: absolute;
-  top: -8px;
-  right: -8px;
+  top: auto;
+  bottom: -18px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
   background: rgba(8, 16, 24, 0.92);
   color: var(--text-muted);
   border: 1px solid var(--border-color-soft);
@@ -1417,7 +1420,10 @@ select:focus,
   margin: 0 auto;
   align-items: center;
   justify-items: center;
-  overflow: hidden;
+  /* Horizontal only - vertical clipping here was cutting off the count badge that now
+     renders below each card (see .sprite-card-count) instead of overlapping its corner. */
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
 .dock-actions-row {
@@ -1527,17 +1533,6 @@ select:focus,
     white-space: normal;
     font-size: 0.74rem;
     padding: 0.3rem 0.5rem;
-  }
-
-  /* Small resource cards (player-hand strips, ScoreBank's per-player row) overlap the count
-     badge on the card's corner at full size — on a phone that reads as cramped/unclear, so move
-     it below the card instead. overflow:visible on .sprite-card (unchanged) keeps it unclipped. */
-  .sprite-card-xs .sprite-card-count {
-    top: auto;
-    bottom: -16px;
-    right: auto;
-    left: 50%;
-    transform: translateX(-50%);
   }
 
   .brand-title {
