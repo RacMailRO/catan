@@ -77,7 +77,7 @@ export const ScoreBank: React.FC<ScoreBankProps> = ({
               </div>
 
               {p.resources ? (
-                <div style={{ display: 'flex', gap: 3, justifyContent: 'center', marginTop: 2 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'center', marginTop: 2 }}>
                   {ALL_RESOURCES.map((r) => {
                     const gain = resourceGainFlash[p.id]?.[r];
                     return (
@@ -156,8 +156,9 @@ export const ScoreBank: React.FC<ScoreBankProps> = ({
         </div>
       </div>
 
-      {/* Match Controls */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem' }}>
+      {/* Match Controls — stacks to 1 column on narrow phones (room for full button labels
+          instead of clipping the 4th button), 2 on a bit more width, 4 from tablet up. */}
+      <div className="grid grid-cols-1 min-[360px]:grid-cols-2 sm:grid-cols-4 gap-2">
         <button
           type="button"
           className="btn"

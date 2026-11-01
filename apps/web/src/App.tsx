@@ -45,6 +45,7 @@ import { AdaptiveSurface } from './components/ui/AdaptiveSurface';
 import { AppNav } from './components/ui/AppNav';
 import { ThemeToggle } from './components/ui/ThemeToggle';
 import { useTheme } from './hooks/useTheme';
+import { AiThinkingIndicator } from './components/game/AiThinkingIndicator';
 import {
   AnimatedDiceWidget,
   ResourceIcon,
@@ -279,6 +280,10 @@ export const App: React.FC = () => {
   // Called here (always-mounted) rather than inside ThemeToggle itself, so the theme applies
   // to the whole app from first paint — ThemeToggle only mounts once the nav drawer is opened.
   const { theme, setTheme } = useTheme();
+  // Timestamp a server request started that may process several AI turns in one batch (apps/
+  // server can take up to ~a minute for a multi-bot trade negotiation) — null while idle. Drives
+  // AiThinkingIndicator so that wait never looks like the game is stuck.
+  const [pendingActionSince, setPendingActionSince] = useState<number | null>(null);
 
   // App version badge + release notes — read live from the server's /api/version endpoint
   // (derived from git commit count/log), so it reflects whatever is currently checked out
@@ -973,6 +978,9 @@ export const App: React.FC = () => {
     if (!onlineSession) return;
     setOnlineBusy(true);
     setOnlineError(null);
+    // The server advances AI turns (uncapped batch) until a human is needed before this
+    // responds, so with AI opponents this can take a while — same indicator as mid-game waits.
+    setPendingActionSince(Date.now());
     try {
       const data = await startOnlineLobby(onlineSession.lobbyId);
       await enterOnlineGame(data.gameId, onlineSession.sessionToken, onlineSession.playerId, onlineSession.lobbyId);
@@ -980,6 +988,7 @@ export const App: React.FC = () => {
       setOnlineError(err instanceof Error ? err.message : 'Nu s-a putut porni partida.');
     } finally {
       setOnlineBusy(false);
+      setPendingActionSince(null);
     }
   };
 
@@ -1653,6 +1662,7 @@ export const App: React.FC = () => {
     if (!onlineSession?.gameId) return;
     setActionError(null);
     const prevView = onlinePlayerView;
+    setPendingActionSince(Date.now());
     try {
       const data = await submitOnlineAction({
         gameId: onlineSession.gameId,
@@ -1697,6 +1707,8 @@ export const App: React.FC = () => {
         }
         setActionError(err instanceof Error ? err.message : 'Mutare invalidă.');
       }
+    } finally {
+      setPendingActionSince(null);
     }
   }, [onlineSession, onlinePlayerView, applyOnlineSync]);
 
@@ -1904,12 +1916,15 @@ export const App: React.FC = () => {
   // Step one AI move
   const executeOneAiStep = async () => {
     if (onlineSession?.gameId) {
+      setPendingActionSince(Date.now());
       try {
         const data = await stepOnlineAi(onlineSession.gameId, 1, onlineSession.playerId);
         setOnlinePlayerView(data.playerView);
         setOnlineLegalActions(data.legalActions as GameAction[]);
       } catch (err) {
         console.error('Failed to step AI online:', err);
+      } finally {
+        setPendingActionSince(null);
       }
       return;
     }
@@ -2326,6 +2341,10 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-shell">
+      {/* Fixed-position overlay, shown regardless of active tab — covers both the "Start Game"
+          wait (still on the waiting-room screen) and mid-game AI negotiation waits. */}
+      <AiThinkingIndicator since={pendingActionSince} locale={locale} />
+
       {/* Resource cards animating from the producing hex to the receiving player — fixed
           positioning so it escapes the board/sidebar's own overflow clipping. */}
       {flyingCards.map((c) => (
@@ -2363,49 +2382,6 @@ export const App: React.FC = () => {
             </button>
           )}
         </div>
-
-        {/* Live Turn & Phase Status placed neatly in the top header */}
-        {activeTab === 'game' && gameState && (
-          <div className="header-turn-status">
-            <span
-              className="color-dot"
-              style={{ backgroundColor: activePlayerObj?.color, width: 10, height: 10, flexShrink: 0 }}
-            />
-            <span className="turn-label">
-              T{gameState.turn} — La rând: <strong>{activePlayerObj?.name}</strong>:
-            </span>
-            <span className="phase-label" style={{ fontWeight: 500 }}>
-              {getExplicitTurnStatusDescription(
-                gameState.phase,
-                activePlayerObj?.name ?? '',
-                gameState.activeTradeOffers?.find((o) => o.status === 'open'),
-                locale
-              )}
-            </span>
-            {Boolean(onlineSession?.gameId) && (
-              <span
-                style={{
-                  fontSize: '0.68rem',
-                  padding: '1px 5px',
-                  borderRadius: 4,
-                  fontWeight: 600,
-                  marginLeft: 4,
-                  background: wsConnected ? 'rgba(34, 197, 94, 0.18)' : 'rgba(234, 179, 8, 0.18)',
-                  color: wsConnected ? '#4ade80' : '#fde047',
-                  border: `1px solid ${wsConnected ? '#22c55e' : '#eab308'}`
-                }}
-                title={wsConnected ? 'Conectat în timp real prin WebSocket' : 'Sincronizare de rezervă prin REST Polling'}
-              >
-                {wsConnected ? '● Live' : '○ Polling'}
-              </span>
-            )}
-            {buildMode !== 'none' && (
-              <span className="build-indicator">
-                👉 {buildMode.toUpperCase()}
-              </span>
-            )}
-          </div>
-        )}
 
         {/* Section nav collapses into a hamburger dropdown — four always-visible tab buttons
             didn't belong inline in a 52px header, and crowded it on every screen size. Rendered
@@ -2750,6 +2726,49 @@ export const App: React.FC = () => {
           {/* Center Interactive Map Stage */}
           <section className="board-stage">
             <div className="board-top-banner">
+              {/* Moved here from the header bar — the header has no room to show this without
+                  truncating it unreadably, especially on mobile; the board overlay does. */}
+              {activeTab === 'game' && gameState && (
+                <div className="header-turn-status">
+                  <span
+                    className="color-dot"
+                    style={{ backgroundColor: activePlayerObj?.color, width: 10, height: 10, flexShrink: 0 }}
+                  />
+                  <span className="turn-label">
+                    T{gameState.turn} — La rând: <strong>{activePlayerObj?.name}</strong>:
+                  </span>
+                  <span className="phase-label" style={{ fontWeight: 500 }}>
+                    {getExplicitTurnStatusDescription(
+                      gameState.phase,
+                      activePlayerObj?.name ?? '',
+                      gameState.activeTradeOffers?.find((o) => o.status === 'open'),
+                      locale
+                    )}
+                  </span>
+                  {Boolean(onlineSession?.gameId) && (
+                    <span
+                      style={{
+                        fontSize: '0.68rem',
+                        padding: '1px 5px',
+                        borderRadius: 4,
+                        fontWeight: 600,
+                        marginLeft: 4,
+                        background: wsConnected ? 'rgba(34, 197, 94, 0.18)' : 'rgba(234, 179, 8, 0.18)',
+                        color: wsConnected ? '#4ade80' : '#fde047',
+                        border: `1px solid ${wsConnected ? '#22c55e' : '#eab308'}`
+                      }}
+                      title={wsConnected ? 'Conectat în timp real prin WebSocket' : 'Sincronizare de rezervă prin REST Polling'}
+                    >
+                      {wsConnected ? '● Live' : '○ Polling'}
+                    </span>
+                  )}
+                  {buildMode !== 'none' && (
+                    <span className="build-indicator">
+                      👉 {buildMode.toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              )}
               <button
                 type="button"
                 className="btn btn-primary"

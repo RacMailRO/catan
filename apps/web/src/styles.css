@@ -1274,6 +1274,7 @@ select:focus,
     left: 6px;
     right: 6px;
     gap: 0.35rem;
+    flex-wrap: wrap;
   }
 
   .phase-pill {
@@ -1517,9 +1518,26 @@ select:focus,
   }
 
   .header-turn-status {
-    max-width: 130px;
-    font-size: 0.68rem;
-    padding: 0.15rem 0.35rem;
+    /* Now rendered inside .board-top-banner (an overlay on the board), not the 44px header bar
+       — it has room to take its own full-width row instead of being truncated unreadably. */
+    flex-basis: 100%;
+    max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+    white-space: normal;
+    font-size: 0.74rem;
+    padding: 0.3rem 0.5rem;
+  }
+
+  /* Small resource cards (player-hand strips, ScoreBank's per-player row) overlap the count
+     badge on the card's corner at full size — on a phone that reads as cramped/unclear, so move
+     it below the card instead. overflow:visible on .sprite-card (unchanged) keeps it unclipped. */
+  .sprite-card-xs .sprite-card-count {
+    top: auto;
+    bottom: -16px;
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
   }
 
   .brand-title {

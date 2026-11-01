@@ -127,7 +127,7 @@ export const ResourceCardSprite: React.FC<ResourceCardSpriteProps> = ({
 
   return (
     <div
-      className={`sprite-card ${selected ? 'selected' : ''} ${count === 0 ? 'empty-card' : ''}`}
+      className={`sprite-card sprite-card-${size} ${selected ? 'selected' : ''} ${count === 0 ? 'empty-card' : ''}`}
       onClick={onClick}
       title={`${RESOURCE_LABELS[locale][resource]}: ${count}`}
       style={{
