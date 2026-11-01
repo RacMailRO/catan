@@ -72,6 +72,7 @@ import { ReplayAndAnalysisView } from './components/ReplayAndAnalysisView';
 import { HallOfFameView } from './components/HallOfFameView';
 import { SandboxMode } from './components/SandboxMode';
 import { LobbyView } from './components/LobbyView';
+import { useTradeState } from './hooks/useTradeState';
 import {
   saveReplayToHistory,
   loadSavedPlayerName,
@@ -516,16 +517,8 @@ export const App: React.FC = () => {
   >({});
   const gainFlashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Trade negotiation banners (see render below): every active/recently-resolved offer, kept
-  // visible for a minimum of 5s from when each was first observed even if the underlying offer
-  // is cleared from state faster than that (e.g. an AI proposer ending its turn right after an
-  // acceptance) - so nobody has to react instantly to see what happened.
-  interface TradeBannerEntry {
-    offer: TradeOffer;
-    firstShownAtMs: number;
-    resolvedAtMs?: number;
-  }
-  const [visibleTradeOffers, setVisibleTradeOffers] = useState<Record<string, TradeBannerEntry>>({});
+  // Trade negotiation banner visibility tracking lives in useTradeState (see `trade` below) -
+  // it's entangled with dismissedTradeOfferIds, which is also owned by that hook.
   const prevTradeStatusRef = useRef<Record<string, TradeOffer['status']>>({});
 
   // Resource cards animating from the hex that produced them to the player who received them
@@ -1146,58 +1139,6 @@ export const App: React.FC = () => {
   }, [onlineSession?.gameId, onlineSession?.sessionToken]);
 
   const lastSavedGameIdRef = useRef<string | null>(null);
-
-  // Dev card & trade sub-modals state
-  const [yopResources, setYopResources] = useState<[ResourceType, ResourceType]>(['wheat', 'ore']);
-  const [monopolyResource, setMonopolyResource] = useState<ResourceType>('wheat');
-  const [bankGiveRes, setBankGiveRes] = useState<ResourceType>('wood');
-  const [bankReceiveRes, setBankReceiveRes] = useState<ResourceType>('ore');
-  const [p2pOffer, setP2pOffer] = useState<ResourceCount>(createEmptyResources());
-  // Which incoming offer the counter_trade modal (reuses p2pOffer/p2pRequest below) is
-  // answering - a responder proposing their own terms isn't the active player, so this can't
-  // reuse the main trade modal's "propose_trade as activePlayerObj" flow.
-  const [counterOfferOriginalId, setCounterOfferOriginalId] = useState<string | null>(null);
-  const [dismissedTradeOfferIds, setDismissedTradeOfferIds] = useState<Set<string>>(new Set());
-
-  const [minimizedDiscard, setMinimizedDiscard] = useState<boolean>(false);
-  const [rejectDropdownOfferId, setRejectDropdownOfferId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!rejectDropdownOfferId) return;
-    const handleClickOutside = () => setRejectDropdownOfferId(null);
-    window.addEventListener('click', handleClickOutside);
-    return () => window.removeEventListener('click', handleClickOutside);
-  }, [rejectDropdownOfferId]);
-
-  const dismissTradeOffer = (offerId: string, reason = 'Refuz') => {
-    setRejectDropdownOfferId(null);
-    if (dismissedTradeOfferIds.has(offerId)) return;
-    setDismissedTradeOfferIds((prev) => new Set(prev).add(offerId));
-
-    // Guard: only execute respond_trade if the offer actually exists and is still open!
-    const curOffer = gameState?.activeTradeOffers?.find((o) => o.id === offerId);
-    if (!curOffer || curOffer.status !== 'open') {
-      return;
-    }
-
-    executeAction(viewerId, {
-      type: 'respond_trade',
-      offerId,
-      response: 'reject',
-      reason
-    });
-    showActionFeedback(locale === 'ro' ? `Refuz trimis: "${reason}"` : `Decline sent: "${reason}"`);
-  };
-
-  const cancelMyTradeOffer = (offerId: string) => {
-    setDismissedTradeOfferIds((prev) => new Set(prev).add(offerId));
-    executeAction(viewerId, {
-      type: 'cancel_trade',
-      offerId
-    });
-  };
-  const [p2pRequest, setP2pRequest] = useState<ResourceCount>(createEmptyResources());
-  const [discardSelection, setDiscardSelection] = useState<ResourceCount>(createEmptyResources());
 
   // Replay Viewer State
   const [activeReplay, setActiveReplay] = useState<ReplayFile | null>(null);
@@ -1900,6 +1841,38 @@ export const App: React.FC = () => {
     }
   };
 
+  // Trade/bank/discard negotiation state cluster (dev-card sub-modals, bank & p2p trade
+  // builder staging, discard selection, incoming-offer reject dropdown, and the negotiation
+  // banner's visibility tracking) - see hooks/useTradeState.ts.
+  const trade = useTradeState({ gameState, executeAction, viewerId, showActionFeedback, locale });
+  const {
+    yopResources,
+    setYopResources,
+    monopolyResource,
+    setMonopolyResource,
+    bankGiveRes,
+    setBankGiveRes,
+    bankReceiveRes,
+    setBankReceiveRes,
+    p2pOffer,
+    setP2pOffer,
+    p2pRequest,
+    setP2pRequest,
+    counterOfferOriginalId,
+    setCounterOfferOriginalId,
+    dismissedTradeOfferIds,
+    setDismissedTradeOfferIds,
+    minimizedDiscard,
+    setMinimizedDiscard,
+    rejectDropdownOfferId,
+    setRejectDropdownOfferId,
+    discardSelection,
+    setDiscardSelection,
+    visibleTradeOffers,
+    dismissTradeOffer,
+    cancelMyTradeOffer
+  } = trade;
+
   // Step one AI move
   const executeOneAiStep = async () => {
     if (onlineSession?.gameId) {
@@ -2275,67 +2248,7 @@ export const App: React.FC = () => {
     return () => clearTimeout(id);
   }, [turnTimeLeft]);
 
-  // Track every active trade offer for the negotiation banner(s) below, keyed by offer id so a
-  // resolved one keeps its last known snapshot (status, who accepted...) after it's cleared from
-  // gameState - the pruning effect right after this one is what actually removes it, once it's
-  // both resolved AND has been visible for the 5s floor.
-  //
-  // A resolved offer stays in gameState.activeTradeOffers (status 'accepted'/'rejected'/...)
-  // until end_turn clears the whole array - it is NOT removed just because it resolved. Once
-  // the pruning effect below drops it from visibleTradeOffers, it's still sitting right there
-  // in activeTradeOffers for the rest of that turn, so without the dismissedTradeOfferIds check
-  // below, the very next unrelated action (e.g. building something) recreates gameState, this
-  // effect sees "an offer not currently tracked" again, and the banner pops back up out of
-  // nowhere. Skipping anything already dismissed - manually or via that same prune - is what
-  // makes a resolved offer actually stay gone for the rest of the turn.
-  useEffect(() => {
-    if (!gameState) return;
-    const now = Date.now();
-    setVisibleTradeOffers((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      for (const offer of gameState.activeTradeOffers) {
-        if (dismissedTradeOfferIds.has(offer.id)) continue;
-        const existing = next[offer.id];
-        const isResolved = offer.status !== 'open';
-        const resolvedAt = isResolved ? (existing?.resolvedAtMs ?? now) : undefined;
-        if (!existing || existing.offer !== offer) {
-          next[offer.id] = {
-            offer,
-            firstShownAtMs: existing?.firstShownAtMs ?? now,
-            resolvedAtMs: resolvedAt
-          };
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [gameState?.activeTradeOffers, dismissedTradeOfferIds]);
-
-  useEffect(() => {
-    const timers = Object.entries(visibleTradeOffers).map(([id, entry]) => {
-      const now = Date.now();
-      // Auto-dismiss open offers after 7 seconds (within the 5-8s requested by the user).
-      // If resolved (accepted/rejected/cancelled), stay visible for 4.5 seconds after resolution.
-      const remaining = entry.offer.status === 'open'
-        ? Math.max(0, 7000 - (now - entry.firstShownAtMs))
-        : Math.max(0, 4500 - (now - (entry.resolvedAtMs ?? entry.firstShownAtMs)));
-
-      return setTimeout(() => {
-        // Marking it dismissed (not just dropping it from visibleTradeOffers) is what stops the
-        // tracking effect above from reviving it the next time gameState changes.
-        setDismissedTradeOfferIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
-        setVisibleTradeOffers((prev) => {
-          if (!(id in prev)) return prev;
-          const { [id]: _drop, ...rest } = prev;
-          return rest;
-        });
-      }, remaining);
-    });
-    return () => {
-      for (const t of timers) if (t) clearTimeout(t);
-    };
-  }, [visibleTradeOffers]);
+  // Trade-offer banner tracking/pruning effects now live in useTradeState (see `trade` above).
 
   // Fly the traded resources between the two players' sidebar cards the moment an offer is
   // accepted - fires once per offer (tracked via prevTradeStatusRef) and works for every
