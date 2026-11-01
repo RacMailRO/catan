@@ -18,7 +18,11 @@
     "simulate": "npm --workspace=@catan/server run simulate"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@types/node": "^22.10.0",
+    "jsdom": "^25.0.1",
     "tsx": "^4.23.15",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
