@@ -74,7 +74,7 @@ jobs:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: ./
+          server-dir: /
           local-dir: ./.deploy/
           log-level: verbose
           security: loose
