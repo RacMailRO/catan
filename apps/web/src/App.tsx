@@ -65,6 +65,9 @@ import { PlayYearOfPlentyDialog } from './components/game/PlayYearOfPlentyDialog
 import { DiscardDialog } from './components/game/DiscardDialog';
 import { StealResourceDialog } from './components/game/StealResourceDialog';
 import { IncomingTradeOfferDialog } from './components/game/IncomingTradeOfferDialog';
+import { WaitingRoomPanel } from './components/game/WaitingRoomPanel';
+import { GameOverDialog } from './components/game/GameOverDialog';
+import { InGameTerminationDialog } from './components/game/InGameTerminationDialog';
 import { ReplayAndAnalysisView } from './components/ReplayAndAnalysisView';
 import { HallOfFameView } from './components/HallOfFameView';
 import { SandboxMode } from './components/SandboxMode';
@@ -4611,90 +4614,33 @@ export const App: React.FC = () => {
           })()}
 
           {/* AUTOMATIC MODAL G: GAME OVER & SAVED FOR LATER ANALYSIS */}
-          {gameState.winnerId && (() => {
-            const winner = getPlayerById(gameState, gameState.winnerId);
-            const scoreInfo = calculateScore(gameState, gameState.winnerId);
-            let settlementCount = 0;
-            let cityCount = 0;
-            for (const b of Object.values(gameState.board.buildings)) {
-              if (b.ownerId === gameState.winnerId) {
-                if (b.type === 'city') cityCount++;
-                else settlementCount++;
-              }
-            }
-            const hasLongestRoad = gameState.longestRoadOwnerId === gameState.winnerId;
-            const hasLargestArmy = gameState.largestArmyOwnerId === gameState.winnerId;
-
-            return (
-              <Dialog
-                open
-                onClose={() => {}}
-                title="🎉 Partidă Finalizată & Salvată Automat!"
-                footer={
-                    <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center' }}>
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        onClick={() => openGameReplay(gameState.gameId)}
-                      >
-                        🎬 Deschide în Replay & Analiză
-                      </button>
-                      <button
-                        type="button"
-                        className="btn"
-                        onClick={() => setActiveTab('lobby')}
-                      >
-                        ⚙️ Partidă Nouă
-                      </button>
-                    </div>
-                }
-              >
-                <Confetti />
-                <div style={{ textAlign: 'center' }}>
-                    <h2 style={{ color: 'var(--accent-gold)', marginBottom: '0.4rem' }}>
-                      🏆 {winner?.name}{' '}
-                      {locale === 'ro' ? 'a câștigat partida!' : 'won the game!'}
-                    </h2>
-
-                    {/* Winner Points Breakdown */}
-                    <div
-                      style={{
-                        background: 'rgba(245, 158, 11, 0.1)',
-                        border: '1px solid var(--accent-gold)',
-                        borderRadius: 8,
-                        padding: '0.75rem',
-                        margin: '0.75rem 0',
-                        textAlign: 'left'
-                      }}
+          {gameState.winnerId && (
+            <Dialog
+              open
+              onClose={() => {}}
+              title="🎉 Partidă Finalizată & Salvată Automat!"
+              footer={
+                  <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center' }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => openGameReplay(gameState.gameId)}
                     >
-                      <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: 6, textAlign: 'center', fontSize: '0.95rem' }}>
-                        📊 Detaliu Puncte de Victorie (Total: {scoreInfo.totalScore} / {gameState.rules.victoryPointsToWin} VP)
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', fontSize: '0.84rem' }}>
-                        <div>🏠 {settlementCount}x Așezări: <strong>+{settlementCount} VP</strong></div>
-                        <div>🏰 {cityCount}x Orașe: <strong>+{cityCount * 2} VP</strong></div>
-                        {hasLongestRoad && <div>🛣️ Drumul cel mai lung: <strong>+2 VP</strong></div>}
-                        {hasLargestArmy && <div>⚔️ Armata cea mai mare: <strong>+2 VP</strong></div>}
-                        {scoreInfo.hiddenVictoryPoints > 0 && (
-                          <div style={{ color: '#4ade80', fontWeight: 600 }}>
-                            🏆 {scoreInfo.hiddenVictoryPoints}x Punct de Victorie: <strong>+{scoreInfo.hiddenVictoryPoints} VP</strong>
-                          </div>
-                        )}
-                      </div>
-                      {scoreInfo.hiddenVictoryPoints > 0 && (
-                        <div style={{ marginTop: 8, fontSize: '0.82rem', color: '#4ade80', background: 'rgba(34, 197, 94, 0.15)', padding: '0.4rem 0.6rem', borderRadius: 4, textAlign: 'center', fontWeight: 600 }}>
-                          ✨ Victoria a fost decisă prin tragerea cărții de dezvoltare: 🏆 Punct de Victorie!
-                        </div>
-                      )}
-                    </div>
-
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.84rem', marginBottom: '1rem' }}>
-                      Partida ({gameState.gameId}) a fost salvată automat în Istoricul Partidelor pentru analiză pas-cu-pas, evaluarea deciziilor și statistici.
-                    </p>
-                </div>
-              </Dialog>
-            );
-          })()}
+                      🎬 Deschide în Replay & Analiză
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => setActiveTab('lobby')}
+                    >
+                      ⚙️ Partidă Nouă
+                    </button>
+                  </div>
+              }
+            >
+              <GameOverDialog locale={locale} gameState={gameState} />
+            </Dialog>
+          )}
         </main>
       )}
 
@@ -5041,18 +4987,7 @@ export const App: React.FC = () => {
               </>
             }
           >
-              <p style={{ margin: 0, fontSize: '0.93rem', lineHeight: 1.5 }}>
-                Cineva (un spectator sau un utilizator din lobby) a solicitat oprirea acestei partide. Ești de acord să fie închisă definitiv?
-              </p>
-              <div style={{ background: 'var(--bg-inset)', padding: '0.65rem 0.9rem', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0.9rem 0' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Timp rămas pentru răspuns:</span>
-                <span style={{ fontWeight: 700, fontSize: '1.15rem', color: inGameTerminationCountdown <= 10 ? '#ef4444' : 'var(--accent-gold)' }}>
-                  ⏱️ {inGameTerminationCountdown}s
-                </span>
-              </div>
-              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                * Dacă nimeni nu răspunde până la expirarea celor 30 de secunde, partida se va închide automat. Dacă alegi <strong>„Nu, continuă partida”</strong>, cererea este respinsă definitiv, iar butonul de oprire dispare pentru toată lumea.
-              </p>
+              <InGameTerminationDialog countdown={inGameTerminationCountdown} />
           </Dialog>
       )}
 
@@ -5070,134 +5005,19 @@ export const App: React.FC = () => {
           }}
           title="🌐 Sală de Așteptare"
         >
-              {onlineLobby.inviteCode && (
-                <div className="invite-banner" style={{ marginBottom: '0.75rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
-                    <span>
-                      Cod Partidă:{' '}
-                      <strong style={{ color: 'var(--accent-gold)', fontSize: '0.95rem' }}>
-                        {onlineLobby.inviteCode}
-                      </strong>
-                    </span>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      style={{ padding: '0.3rem 0.6rem', fontSize: '0.78rem' }}
-                      onClick={() => handleShareInvite(onlineLobby.inviteCode!)}
-                    >
-                      📲 Trimite Link / Invită Prieteni
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.85rem' }}>
-                {onlineLobby.seats.map((seat) => (
-                  <div
-                    key={seat.seatIndex}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: '0.4rem 0.6rem',
-                      borderRadius: 6,
-                      border: '1px solid var(--border-color)',
-                      background: seat.type === 'open' ? 'rgba(248, 113, 113, 0.08)' : 'transparent'
-                    }}
-                  >
-                    <span className="color-dot" style={{ backgroundColor: seat.color, width: 11, height: 11 }} />
-                    {onlineSession && seat.playerId === onlineSession.playerId ? (
-                      isRenamingInWaitingRoom ? (
-                        <div style={{ display: 'flex', gap: 6, flex: 1, alignItems: 'center' }}>
-                          <input
-                            type="text"
-                            value={waitingRoomNewName}
-                            onChange={(e) => setWaitingRoomNewName(e.target.value)}
-                            placeholder="Numele tău"
-                            style={{ padding: '0.2rem 0.45rem', fontSize: '0.82rem', flex: 1 }}
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleRenameWaitingRoomSeat(seat.seatIndex, waitingRoomNewName);
-                              else if (e.key === 'Escape') setIsRenamingInWaitingRoom(false);
-                            }}
-                          />
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
-                            onClick={() => handleRenameWaitingRoomSeat(seat.seatIndex, waitingRoomNewName)}
-                          >
-                            💾 Salvează
-                          </button>
-                          <button
-                            type="button"
-                            className="btn"
-                            style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem' }}
-                            onClick={() => setIsRenamingInWaitingRoom(false)}
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
-                          <strong style={{ color: 'var(--accent-gold)' }}>{seat.name} (Tu)</strong>
-                          <button
-                            type="button"
-                            className="btn"
-                            style={{ padding: '0.15rem 0.4rem', fontSize: '0.72rem' }}
-                            title="Schimbă numele tău"
-                            onClick={() => {
-                              setWaitingRoomNewName(seat.name);
-                              setIsRenamingInWaitingRoom(true);
-                            }}
-                          >
-                            ✏️ Schimbă Nume
-                          </button>
-                        </div>
-                      )
-                    ) : (
-                      <strong style={{ flex: 1 }}>{seat.name}</strong>
-                    )}
-                    {seat.type === 'open' ? (
-                      <span style={{ color: 'var(--accent-red, #f87171)', fontSize: '0.78rem' }}>
-                        ⏳ Așteaptă jucător...
-                      </span>
-                    ) : seat.type === 'human' ? (
-                      <span style={{ color: 'var(--accent-green)', fontSize: '0.78rem' }}>✅ Conectat</span>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
-                        🤖 {seat.type.toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {onlineError && (
-                <div style={{ color: '#f87171', fontSize: '0.78rem', marginBottom: '0.5rem' }}>
-                  ⚠️ {onlineError}
-                </div>
-              )}
-
-              {onlineSession.playerId === onlineLobby.hostPlayerId ? (
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ width: '100%' }}
-                  disabled={onlineBusy || onlineLobby.seats.some((s) => s.type === 'open')}
-                  onClick={handleStartOnlineLobby}
-                >
-                  {onlineBusy
-                    ? 'Se pornește...'
-                    : onlineLobby.seats.some((s) => s.type === 'open')
-                      ? '⏳ Se așteaptă jucătorii...'
-                      : '🚀 Pornește Partida'}
-                </button>
-              ) : (
-                <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.84rem' }}>
-                  ⏳ Așteptăm ca gazda să înceapă partida...
-                </p>
-              )}
+              <WaitingRoomPanel
+                lobby={onlineLobby}
+                session={onlineSession}
+                onShareInvite={handleShareInvite}
+                isRenaming={isRenamingInWaitingRoom}
+                renameDraft={waitingRoomNewName}
+                onRenameDraftChange={setWaitingRoomNewName}
+                onRenamingChange={setIsRenamingInWaitingRoom}
+                onRenameSeat={handleRenameWaitingRoomSeat}
+                error={onlineError}
+                busy={onlineBusy}
+                onStartGame={handleStartOnlineLobby}
+              />
         </AdaptiveSurface>
       )}
 
