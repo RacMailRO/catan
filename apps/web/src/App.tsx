@@ -6048,14 +6048,10 @@ export const App: React.FC = () => {
 
       {/* Modal Confirmare Închidere Partidă pentru Jucătorii Umani din Joc */}
       {inGameTermination && onlineSession && (
-        // Wrapped in its own elevated stacking context (position + z-index) so this urgent
-        // alert always renders above any other open Dialog/AdaptiveSurface — both default to
-        // z-50, which only orders by DOM position, and this must win regardless of that.
-        <div style={{ position: 'relative', zIndex: 9999 }}>
-          <Dialog
-            open
-            onClose={() => {}}
-            title="⚠️ Cerere de Închidere a Partidei"
+        <Dialog
+          open
+          onClose={() => {}}
+          title="⚠️ Cerere de Închidere a Partidei"
             footer={
               <>
                 <button
@@ -6110,7 +6106,6 @@ export const App: React.FC = () => {
                 * Dacă nimeni nu răspunde până la expirarea celor 30 de secunde, partida se va închide automat. Dacă alegi <strong>„Nu, continuă partida”</strong>, cererea este respinsă definitiv, iar butonul de oprire dispare pentru toată lumea.
               </p>
           </Dialog>
-        </div>
       )}
 
       {/* Online Waiting Room — shown from the moment a lobby is created/joined until the game

@@ -16,7 +16,9 @@ export interface DialogProps {
 /**
  * Small centered blocking dialog for true yes/no decisions (discard cards, confirmations).
  * Closes on backdrop click or Escape. Styled with Tailwind utilities using the token-mapped
- * theme colors, so it follows whichever theme is active via `data-theme`.
+ * theme colors, so it follows whichever theme is active via `data-theme`. Stacks above
+ * AdaptiveSurface (z-50) by design — a blocking decision always wins over a content surface,
+ * so callers never need a custom z-index override.
  */
 export function Dialog({ open, onClose, title, children, footer }: DialogProps): React.ReactElement | null {
   useEffect(() => {
@@ -32,7 +34,7 @@ export function Dialog({ open, onClose, title, children, footer }: DialogProps):
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
       onClick={onClose}
       role="presentation"
     >
