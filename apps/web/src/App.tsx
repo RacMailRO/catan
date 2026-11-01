@@ -6,6 +6,7 @@ import {
   BUILDING_COSTS,
   DevCardType,
   GameAction,
+  GameEvent,
   GameRulesConfig,
   GameState,
   INITIAL_PLAYER_PIECES,
@@ -449,6 +450,11 @@ export const App: React.FC = () => {
   }, [onlineSession]);
   const [onlinePlayerView, setOnlinePlayerView] = useState<PlayerView | null>(null);
   const [onlineLegalActions, setOnlineLegalActions] = useState<GameAction[]>([]);
+  // Event Log ("Jurnal") data for online games — every sync payload carries the server's
+  // trailing window of recent events (GameSyncPayload.recentEvents), but nothing stored it
+  // anywhere before, so the event_log surface was gated on `recorder` (always null online —
+  // see Phase 0's "local hot-seat is dead code" finding) and silently never opened.
+  const [onlineEvents, setOnlineEvents] = useState<GameEvent[]>([]);
   const [onlineError, setOnlineError] = useState<string | null>(null);
   const [onlineBusy, setOnlineBusy] = useState<boolean>(false);
   const onlineWsRef = useRef<WebSocket | null>(null);
@@ -894,6 +900,7 @@ export const App: React.FC = () => {
     setOnlineSession({ lobbyId, gameId, sessionToken, playerId });
     setOnlinePlayerView(data.playerView);
     setOnlineLegalActions(data.legalActions as GameAction[]);
+    if (data.recentEvents) setOnlineEvents(data.recentEvents);
     setOnlineLobby(null);
     setActiveTab('game');
   };
@@ -1060,7 +1067,8 @@ export const App: React.FC = () => {
               setOnlinePlayerView(msg.playerView);
               setOnlineLegalActions(msg.legalActions);
 
-              const incomingEvents = (msg.recentEvents ?? []) as Array<{ sequence: number; playerId: string; action: GameAction; details: Record<string, unknown> }>;
+              const incomingEvents = (msg.recentEvents ?? []) as GameEvent[];
+              setOnlineEvents(incomingEvents);
               if (lastSeenEventSeqRef.current === -1) {
                 // First sync of this connection: adopt its latest sequence as the baseline
                 // without narrating anything older than "now".
@@ -1222,6 +1230,11 @@ export const App: React.FC = () => {
     : recorder
       ? recorder.getState()
       : null;
+
+  // Same local-vs-online split as gameState above, for the event log ("Jurnal"). Online events
+  // come from the server's trailing window (see the onlineEvents state declaration) rather than
+  // a full history, same tradeoff the rest of the online UI already makes.
+  const currentEvents: readonly GameEvent[] = recorder ? recorder.getEvents() : onlineEvents;
 
   // Automatically save finished games for later analysis (local hot-seat games only — online
   // games are already persisted server-side).
@@ -1484,7 +1497,7 @@ export const App: React.FC = () => {
     data: {
       playerView: PlayerView;
       legalActions: GameAction[];
-      recentEvents?: { sequence?: number; playerId?: string; action: GameAction; details: Record<string, unknown> }[];
+      recentEvents?: GameEvent[];
     },
     action?: GameAction,
     actingPlayerId?: string,
@@ -1493,6 +1506,7 @@ export const App: React.FC = () => {
     const newView = data.playerView;
     setOnlinePlayerView(newView);
     setOnlineLegalActions(data.legalActions);
+    if (data.recentEvents) setOnlineEvents(data.recentEvents);
 
     // Our own action's effects (and anything the server stepped for us, like bot turns) are
     // about to be narrated below via the action/actingPlayerId branch - mark every event up to
@@ -1921,6 +1935,7 @@ export const App: React.FC = () => {
         const data = await stepOnlineAi(onlineSession.gameId, 1, onlineSession.playerId);
         setOnlinePlayerView(data.playerView);
         setOnlineLegalActions(data.legalActions as GameAction[]);
+        if (data.recentEvents) setOnlineEvents(data.recentEvents);
       } catch (err) {
         console.error('Failed to step AI online:', err);
       } finally {
@@ -2710,7 +2725,7 @@ export const App: React.FC = () => {
                   className="btn"
                   onClick={() => setActiveModal('event_log')}
                 >
-                  📜 Jurnal ({recorder?.getEvents().length ?? 0})
+                  📜 Jurnal ({currentEvents.length})
                 </button>
                 <button
                   type="button"
@@ -2784,7 +2799,7 @@ export const App: React.FC = () => {
                 onClick={() => setActiveModal('event_log')}
                 style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}
               >
-                📜 {locale === 'ro' ? 'Jurnal' : 'Log'} ({recorder?.getEvents().length ?? 0})
+                📜 {locale === 'ro' ? 'Jurnal' : 'Log'} ({currentEvents.length})
               </button>
 
               {turnTimeLeft !== null && (
@@ -2852,7 +2867,7 @@ export const App: React.FC = () => {
                         title={locale === 'ro' ? 'Deschide Jurnalul Complet' : 'Open Full Event Log'}
                         onClick={() => setActiveModal('event_log')}
                       >
-                        📜 {locale === 'ro' ? 'Jurnal' : 'Log'} ({recorder?.getEvents().length ?? 0})
+                        📜 {locale === 'ro' ? 'Jurnal' : 'Log'} ({currentEvents.length})
                       </button>
                       <button
                         type="button"
@@ -3115,7 +3130,7 @@ export const App: React.FC = () => {
               autoPlayAi={autoPlayAi}
               onToggleAutoPlayAi={() => setAutoPlayAi((a) => !a)}
               onStepAi={executeOneAiStep}
-              eventCount={recorder?.getEvents().length ?? 0}
+              eventCount={currentEvents.length}
               onOpenEventLog={() => setActiveModal('event_log')}
               onOpenCostsHelp={() => setActiveModal('costs_help')}
             />
@@ -3329,14 +3344,17 @@ export const App: React.FC = () => {
             );
           })()}
 
-          {/* MODAL C: EVENT LOG */}
-          {activeModal === 'event_log' && recorder && (
+          {/* MODAL C: EVENT LOG — gated on gameState (true for both recorder-driven local play
+              and online play, via the adapter at the gameState declaration above), not recorder
+              directly: that previously made this surface a no-op for online games, the only way
+              to actually play (see Phase 0's "local hot-seat is dead code" finding). */}
+          {activeModal === 'event_log' && gameState && (
             <AdaptiveSurface
               open
               onClose={() => setActiveModal('none')}
-              title={`📜 ${t.eventLogTitle} (${recorder.getEvents().length} acțiuni)`}
+              title={`📜 ${t.eventLogTitle} (${currentEvents.length} acțiuni)`}
             >
-                  <EventLog locale={locale} gameState={gameState} events={recorder.getEvents()} />
+                  <EventLog locale={locale} gameState={gameState} events={currentEvents} />
             </AdaptiveSurface>
           )}
 
