@@ -70,7 +70,7 @@ import { PlayMonopolyDialog } from './components/game/PlayMonopolyDialog';
 import { PlayYearOfPlentyDialog } from './components/game/PlayYearOfPlentyDialog';
 import { DiscardDialog } from './components/game/DiscardDialog';
 import { StealResourceDialog } from './components/game/StealResourceDialog';
-import { IncomingTradeOfferDialog } from './components/game/IncomingTradeOfferDialog';
+import { IncomingTradeOfferDialog, IncomingTradeOfferModal } from './components/game/IncomingTradeOfferDialog';
 import { WaitingRoomPanel } from './components/game/WaitingRoomPanel';
 import { GameOverDialog } from './components/game/GameOverDialog';
 import { InGameTerminationDialog } from './components/game/InGameTerminationDialog';
@@ -3502,164 +3502,50 @@ export const App: React.FC = () => {
             const proposer = getPlayerById(gameState, incomingOffer.fromPlayerId);
             const myRes = viewerPlayerObj?.resources ?? createEmptyResources();
             const canAfford = hasResources(myRes, incomingOffer.requesting);
-            // A player who can't afford to accept is never forced into the transaction with a
-            // blocking modal anymore - they see the non-blocking negotiation banner below
-            // instead (which still lets them reject), and are free to keep acting.
-            if (!canAfford) return null;
+            // Requirement 1: If viewer cannot afford, auto-reject immediately and notify user!
+            if (!canAfford) {
+              dismissTradeOffer(incomingOffer.id, locale === 'ro' ? 'Nu am resursa cerută' : 'Missing requested resource');
+              const reqText = ALL_RESOURCES.filter((r) => incomingOffer.requesting[r] > 0)
+                .map((r) => `${incomingOffer.requesting[r]}x ${RESOURCE_LABELS[locale][r]}`)
+                .join(', ');
+              const offText = ALL_RESOURCES.filter((r) => incomingOffer.offering[r] > 0)
+                .map((r) => `${incomingOffer.offering[r]}x ${RESOURCE_LABELS[locale][r]}`)
+                .join(', ');
+              showActionFeedback(
+                locale === 'ro'
+                  ? `📢 ${proposer?.name ?? incomingOffer.fromPlayerId} a cerut ${reqText} pentru ${offText}. Refuzat automat (nu ai resursele cerute).`
+                  : `📢 ${proposer?.name ?? incomingOffer.fromPlayerId} requested ${reqText} for ${offText}. Auto-declined (insufficient resources).`
+              );
+              return null;
+            }
 
+            // Requirements 2, 3, 4, 5: Viewer has resources -> 30s countdown modal, non-dismissible on backdrop, auto-rejects at 0s!
             return (
-              <Dialog
-                open
-                onClose={() => dismissTradeOffer(incomingOffer.id, 'Fereastră închisă')}
-                title={`Ofertă de Schimb de la ${proposer?.name ?? incomingOffer.fromPlayerId}`}
-                footer={
-                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={!canAfford}
-                        onClick={() => {
-                          setDismissedTradeOfferIds((prev) => new Set(prev).add(incomingOffer.id));
-                          executeAction(viewerId, {
-                            type: 'respond_trade',
-                            offerId: incomingOffer.id,
-                            response: 'accept'
-                          });
-                        }}
-                      >
-                        ✅ Acceptă Schimbul
-                      </button>
-                      {/* Split Reject Button with Reason Dropdown */}
-                      <div style={{ position: 'relative', display: 'inline-flex', verticalAlign: 'middle' }}>
-                        <button
-                          type="button"
-                          className="btn"
-                          style={{
-                            background: 'rgba(239, 68, 68, 0.15)',
-                            borderColor: 'rgba(239, 68, 68, 0.5)',
-                            color: '#fca5a5',
-                            borderTopRightRadius: 0,
-                            borderBottomRightRadius: 0,
-                            borderRight: '1px solid rgba(239, 68, 68, 0.3)'
-                          }}
-                          onClick={() => {
-                            setRejectDropdownOfferId(null);
-                            dismissTradeOffer(incomingOffer.id, 'Refuz');
-                          }}
-                          title={locale === 'ro' ? 'Refuză oferta (rapid)' : 'Reject offer (quick)'}
-                        >
-                          ❌ {locale === 'ro' ? 'Refuză' : 'Reject'}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn"
-                          style={{
-                            background: 'rgba(239, 68, 68, 0.25)',
-                            borderColor: 'rgba(239, 68, 68, 0.5)',
-                            color: '#fca5a5',
-                            borderTopLeftRadius: 0,
-                            borderBottomLeftRadius: 0,
-                            padding: '0 0.55rem',
-                            fontSize: '0.82rem',
-                            fontWeight: 700
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRejectDropdownOfferId((curr) => (curr === incomingOffer.id ? null : incomingOffer.id));
-                          }}
-                          title={locale === 'ro' ? 'Alege motivul refuzului' : 'Select reason for refusal'}
-                        >
-                          ▾
-                        </button>
-
-                        {rejectDropdownOfferId === incomingOffer.id && (
-                          <div
-                            style={{
-                              position: 'absolute',
-                              top: '115%',
-                              right: 0,
-                              zIndex: 120,
-                              background: '#132337',
-                              border: '1px solid rgba(239, 68, 68, 0.4)',
-                              borderRadius: 8,
-                              padding: '6px',
-                              boxShadow: '0 8px 24px rgba(0,0,0,0.7)',
-                              minWidth: 220,
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: 4
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', padding: '2px 6px', fontWeight: 600 }}>
-                              {locale === 'ro' ? 'Motivul refuzului:' : 'Reason for decline:'}
-                            </div>
-                            {[
-                              { label: locale === 'ro' ? '🚫 Nu am resursa cerută' : '🚫 Missing requested resource', reason: 'Nu am resursa cerută' },
-                              { label: locale === 'ro' ? '🔒 Nu pot să dau' : '🔒 Cannot give', reason: 'Nu pot să dau' },
-                              { label: locale === 'ro' ? '❌ Refuz' : '❌ Just decline', reason: 'Refuz' },
-                              { label: locale === 'ro' ? '⚖️ Prea scump' : '⚖️ Too expensive', reason: 'Prea scump' }
-                            ].map((item) => (
-                              <button
-                                key={item.reason}
-                                type="button"
-                                className="btn"
-                                style={{
-                                  textAlign: 'left',
-                                  fontSize: '0.78rem',
-                                  padding: '0.35rem 0.6rem',
-                                  background: 'rgba(255, 255, 255, 0.05)',
-                                  borderColor: 'transparent',
-                                  color: '#e2e8f0',
-                                  justifyContent: 'flex-start',
-                                  width: '100%'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
-                                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                                  e.currentTarget.style.borderColor = 'transparent';
-                                }}
-                                onClick={() => {
-                                  setRejectDropdownOfferId(null);
-                                  dismissTradeOffer(incomingOffer.id, item.reason);
-                                }}
-                              >
-                                {item.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        className="btn"
-                        style={{ borderColor: 'var(--accent-gold)', color: 'var(--accent-gold)' }}
-                        onClick={() => {
-                          // Don't reject yet - only the actual counter_trade submission below
-                          // closes this offer (see counter_trade's engine handling: it rejects
-                          // the original AND opens the new one in one atomic action). Canceling
-                          // out of the counter-offer modal should leave the original untouched.
-                          setP2pOffer(createEmptyResources());
-                          setP2pRequest(createEmptyResources());
-                          setCounterOfferOriginalId(incomingOffer.id);
-                          setActiveModal('counter_trade');
-                        }}
-                      >
-                        🔄 Negociază / Contra-ofertă
-                      </button>
-                    </div>
-                }
-              >
-                    <IncomingTradeOfferDialog
-                      locale={locale}
-                      offer={incomingOffer}
-                      viewerResources={myRes}
-                      canAfford={canAfford}
-                    />
-              </Dialog>
+              <IncomingTradeOfferModal
+                key={incomingOffer.id}
+                incomingOffer={incomingOffer}
+                proposerName={proposer?.name ?? incomingOffer.fromPlayerId}
+                locale={locale}
+                viewerResources={myRes}
+                canAfford={canAfford}
+                onAccept={() => {
+                  setDismissedTradeOfferIds((prev) => new Set(prev).add(incomingOffer.id));
+                  executeAction(viewerId, {
+                    type: 'respond_trade',
+                    offerId: incomingOffer.id,
+                    response: 'accept'
+                  });
+                }}
+                onReject={(reason) => {
+                  dismissTradeOffer(incomingOffer.id, reason);
+                }}
+                onCounter={() => {
+                  setP2pOffer(createEmptyResources());
+                  setP2pRequest(createEmptyResources());
+                  setCounterOfferOriginalId(incomingOffer.id);
+                  setActiveModal('counter_trade');
+                }}
+              />
             );
           })()}
 

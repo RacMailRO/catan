@@ -1,9 +1,14 @@
 {
-  "version": "v1.192",
-  "commitCount": 192,
-  "shortHash": "7220692",
-  "buildDate": "2026-11-01T22:08:06.819Z",
+  "version": "v1.193",
+  "commitCount": 193,
+  "shortHash": "d42b745",
+  "buildDate": "2026-11-01T22:22:34.362Z",
   "releaseNotes": [
+    {
+      "hash": "d42b745",
+      "date": "2026-11-02",
+      "message": "feat: rename Lana to Oaie and Minereu to Piatra across the entire codebase, and add complete light theme styling with high-contrast hamburger button"
+    },
     {
       "hash": "7220692",
       "date": "2026-11-02",
@@ -248,11 +253,6 @@
       "hash": "496a0d7",
       "date": "2026-10-28",
       "message": "Fix mobile hamburger dropdown clipping and allow tolerant replay reconstruction for legacy ship actions"
-    },
-    {
-      "hash": "f3075cd",
-      "date": "2026-10-27",
-      "message": "Update version stamps v1.142"
     }
   ]
 }

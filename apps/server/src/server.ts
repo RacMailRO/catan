@@ -344,6 +344,7 @@ export function createCatanServer(options?: {
   ): void {
     let steps = 0;
     while (runtime.state.phase !== 'game_over' && steps < maxSteps) {
+      expireStaleTradesInPlace(runtime.state);
       // Determine which player needs to act right now
       let nextActorId: string | undefined;
 

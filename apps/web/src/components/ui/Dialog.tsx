@@ -12,6 +12,8 @@ export interface DialogProps {
   children: React.ReactNode;
   /** Optional footer content, typically action buttons. */
   footer?: React.ReactNode;
+  /** When true, disables closing by clicking the backdrop or pressing Escape. */
+  disableBackdropClick?: boolean;
 }
 
 /**
@@ -21,24 +23,31 @@ export interface DialogProps {
  * AdaptiveSurface (z-50) by design — a blocking decision always wins over a content surface,
  * so callers never need a custom z-index override.
  */
-export function Dialog({ open, onClose, title, children, footer }: DialogProps): React.ReactElement | null {
+export function Dialog({
+  open,
+  onClose,
+  title,
+  children,
+  footer,
+  disableBackdropClick = false
+}: DialogProps): React.ReactElement | null {
   const titleId = useId();
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || disableBackdropClick) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, onClose]);
+  }, [open, onClose, disableBackdropClick]);
 
   if (!open) return null;
 
   return (
     <div
       className="fixed inset-0 z-[160] flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
+      onClick={disableBackdropClick ? undefined : onClose}
       role="presentation"
     >
       <div
