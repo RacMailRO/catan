@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 
 const MOBILE_QUERY = '(max-width: 960px)';
 
@@ -36,8 +36,9 @@ export interface AdaptiveSurfaceProps {
   open: boolean;
   /** Called when the user dismisses the surface (backdrop click or close control). */
   onClose: () => void;
-  /** Title shown in the surface header. */
-  title: string;
+  /** Title shown in the surface header. Usually plain text, but accepts rich content
+   *  (e.g. a styled badge or subtitle) for callers that need it. */
+  title: React.ReactNode;
   /** Main surface content. */
   children: React.ReactNode;
 }
@@ -50,6 +51,7 @@ export interface AdaptiveSurfaceProps {
  */
 export function AdaptiveSurface({ open, onClose, title, children }: AdaptiveSurfaceProps): React.ReactElement | null {
   const isCompact = useIsCompactViewport();
+  const titleId = useId();
 
   if (!open) return null;
 
@@ -67,7 +69,7 @@ export function AdaptiveSurface({ open, onClose, title, children }: AdaptiveSurf
         className={`absolute flex flex-col border border-line bg-surface text-ink shadow-xl ${panelPositionClasses}`}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
         onClick={(event) => event.stopPropagation()}
       >
         {isCompact ? (
@@ -76,7 +78,7 @@ export function AdaptiveSurface({ open, onClose, title, children }: AdaptiveSurf
           </div>
         ) : null}
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
-          <h2 className="text-lg font-semibold text-ink">{title}</h2>
+          <h2 id={titleId} className="text-lg font-semibold text-ink">{title}</h2>
           <button
             type="button"
             onClick={onClose}

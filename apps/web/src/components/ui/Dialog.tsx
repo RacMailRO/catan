@@ -1,12 +1,13 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useId } from 'react';
 
 export interface DialogProps {
   /** Whether the dialog is visible. When false, nothing is rendered. */
   open: boolean;
   /** Called when the user dismisses the dialog (backdrop click or Escape key). */
   onClose: () => void;
-  /** Title shown in the dialog header. */
-  title: string;
+  /** Title shown in the dialog header. Usually plain text, but accepts rich content
+   *  (e.g. a styled badge or subtitle) for callers that need it. */
+  title: React.ReactNode;
   /** Main dialog content. */
   children: React.ReactNode;
   /** Optional footer content, typically action buttons. */
@@ -21,6 +22,8 @@ export interface DialogProps {
  * so callers never need a custom z-index override.
  */
 export function Dialog({ open, onClose, title, children, footer }: DialogProps): React.ReactElement | null {
+  const titleId = useId();
+
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -42,11 +45,11 @@ export function Dialog({ open, onClose, title, children, footer }: DialogProps):
         className="w-full max-w-md rounded-lg border border-line bg-surface text-ink shadow-xl"
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="border-b border-line px-5 py-4">
-          <h2 className="text-lg font-semibold text-ink">{title}</h2>
+          <h2 id={titleId} className="text-lg font-semibold text-ink">{title}</h2>
         </div>
         <div className="px-5 py-4 text-ink">{children}</div>
         {footer ? (
