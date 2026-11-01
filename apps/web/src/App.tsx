@@ -76,6 +76,7 @@ import { InGameTerminationDialog } from './components/game/InGameTerminationDial
 import { ReplayAndAnalysisView } from './components/ReplayAndAnalysisView';
 import { HallOfFameView } from './components/HallOfFameView';
 import { SandboxMode } from './components/SandboxMode';
+import { UiShowcase } from './components/UiShowcase';
 import { LobbyView } from './components/LobbyView';
 import { useTradeState } from './hooks/useTradeState';
 import {
@@ -124,7 +125,7 @@ import {
   FULL_RULES
 } from './i18n';
 
-type ActiveTab = 'lobby' | 'game' | 'replay' | 'benchmark' | 'spectate' | 'sandbox' | 'hall_of_fame';
+type ActiveTab = 'lobby' | 'game' | 'replay' | 'benchmark' | 'spectate' | 'sandbox' | 'hall_of_fame' | 'ui_showcase';
 
 const NAV_TAB_ICON: Record<ActiveTab, string> = {
   lobby: '⚙️',
@@ -133,7 +134,8 @@ const NAV_TAB_ICON: Record<ActiveTab, string> = {
   benchmark: '📈',
   spectate: '👁️',
   sandbox: '🛠️',
-  hall_of_fame: '🏆'
+  hall_of_fame: '🏆',
+  ui_showcase: '🧪'
 };
 
 export function isLocalEnvironment(): boolean {
@@ -2415,6 +2417,11 @@ export const App: React.FC = () => {
                     id: 'sandbox',
                     icon: NAV_TAB_ICON.sandbox,
                     label: locale === 'ro' ? 'Mediu de Test' : 'Sandbox Mode'
+                  },
+                  {
+                    id: 'ui_showcase',
+                    icon: NAV_TAB_ICON.ui_showcase,
+                    label: locale === 'ro' ? 'Galerie Componente' : 'UI Showcase'
                   }
                 ]
               : [])
@@ -4144,6 +4151,13 @@ export const App: React.FC = () => {
           locale={locale}
           onExit={() => setActiveTab('lobby')}
         />
+      )}
+
+      {/* TAB 6: UI SHOWCASE — dev-only gallery of every game-specific modal/panel component,
+          rendered immediately with sample data instead of only appearing once a live game
+          reaches the exact state that normally triggers it (Available locally). */}
+      {activeTab === 'ui_showcase' && (
+        <UiShowcase locale={locale} onExit={() => setActiveTab('lobby')} />
       )}
 
       {/* Modal Confirmare Închidere Partidă pentru Jucătorii Umani din Joc */}
