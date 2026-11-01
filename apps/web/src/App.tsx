@@ -42,6 +42,8 @@ import {
 import { BoardSvg } from './components/BoardSvg';
 import { Dialog } from './components/ui/Dialog';
 import { AdaptiveSurface } from './components/ui/AdaptiveSurface';
+import { AppNav } from './components/ui/AppNav';
+import { ThemeToggle } from './components/ui/ThemeToggle';
 import {
   AnimatedDiceWidget,
   ResourceIcon,
@@ -130,22 +132,6 @@ const NAV_TAB_ICON: Record<ActiveTab, string> = {
   sandbox: '🛠️',
   hall_of_fame: '🏆'
 };
-
-const NAV_TAB_LABEL = (t: {
-  navLobby: string;
-  navGame: string;
-  navReplay: string;
-  navBenchmark: string;
-  navHallOfFame: string;
-}): Record<ActiveTab, string> => ({
-  lobby: t.navLobby,
-  game: t.navGame,
-  replay: t.navReplay,
-  benchmark: t.navBenchmark,
-  spectate: 'Spectator',
-  sandbox: 'Mediu de Test',
-  hall_of_fame: t.navHallOfFame
-});
 
 export function isLocalEnvironment(): boolean {
   if (typeof window === 'undefined') return false;
@@ -470,7 +456,6 @@ export const App: React.FC = () => {
   const [mobileHudOpen, setMobileHudOpen] = useState<boolean>(false);
   const [mobileDockCollapsed, setMobileDockCollapsed] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-  const [navMenuOpen, setNavMenuOpen] = useState<boolean>(false);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -2419,98 +2404,56 @@ export const App: React.FC = () => {
         )}
 
         {/* Section nav collapses into a hamburger dropdown — four always-visible tab buttons
-            didn't belong inline in a 52px header, and crowded it on every screen size. */}
-        <div className="nav-menu-wrapper">
-          <button
-            type="button"
-            className="btn nav-menu-trigger"
-            onClick={() => setNavMenuOpen((o) => !o)}
-          >
-            ☰ {NAV_TAB_ICON[activeTab]} <span className="desktop-only">{NAV_TAB_LABEL(t)[activeTab]}</span>
-          </button>
-          {navMenuOpen && (
+            didn't belong inline in a 52px header, and crowded it on every screen size. Rendered
+            through the shared AppNav drawer component (Phase 7 of the UI refactor). */}
+        <AppNav
+          items={[
+            { id: 'lobby', icon: NAV_TAB_ICON.lobby, label: t.navLobby },
+            { id: 'game', icon: NAV_TAB_ICON.game, label: t.navGame },
+            { id: 'replay', icon: NAV_TAB_ICON.replay, label: t.navReplay },
+            { id: 'benchmark', icon: NAV_TAB_ICON.benchmark, label: t.navBenchmark },
+            { id: 'hall_of_fame', icon: NAV_TAB_ICON.hall_of_fame, label: t.navHallOfFame },
+            ...(isLocalEnvironment()
+              ? [
+                  {
+                    id: 'sandbox',
+                    icon: NAV_TAB_ICON.sandbox,
+                    label: locale === 'ro' ? 'Mediu de Test' : 'Sandbox Mode'
+                  }
+                ]
+              : [])
+          ]}
+          activeId={activeTab}
+          onNavigate={(id) => {
+            switch (id) {
+              case 'game':
+                // No game to jump into yet — send them to the lobby to create/join an
+                // online game instead of silently starting a local one.
+                setActiveTab(recorder || onlineSession ? 'game' : 'lobby');
+                break;
+              case 'replay':
+                openGameReplay();
+                break;
+              default:
+                setActiveTab(id as ActiveTab);
+            }
+          }}
+          footer={(closeNav) => (
             <>
-              <div className="nav-menu-backdrop" onClick={() => setNavMenuOpen(false)} />
-              <div className="nav-menu-dropdown">
-                <button
-                  type="button"
-                  className={`nav-btn ${activeTab === 'lobby' ? 'active' : ''}`}
-                  onClick={() => {
-                    setActiveTab('lobby');
-                    setNavMenuOpen(false);
-                  }}
-                >
-                  ⚙️ {t.navLobby}
-                </button>
-                <button
-                  type="button"
-                  className={`nav-btn ${activeTab === 'game' ? 'active' : ''}`}
-                  onClick={() => {
-                    // No game to jump into yet — send them to the lobby to create/join an
-                    // online game instead of silently starting a local one.
-                    setActiveTab(recorder || onlineSession ? 'game' : 'lobby');
-                    setNavMenuOpen(false);
-                  }}
-                >
-                  🎲 {t.navGame}
-                </button>
-                <button
-                  type="button"
-                  className={`nav-btn ${activeTab === 'replay' ? 'active' : ''}`}
-                  onClick={() => {
-                    openGameReplay();
-                    setNavMenuOpen(false);
-                  }}
-                >
-                  🎬 {t.navReplay}
-                </button>
-                <button
-                  type="button"
-                  className={`nav-btn ${activeTab === 'benchmark' ? 'active' : ''}`}
-                  onClick={() => {
-                    setActiveTab('benchmark');
-                    setNavMenuOpen(false);
-                  }}
-                >
-                  📈 {t.navBenchmark}
-                </button>
-                <button
-                  type="button"
-                  className={`nav-btn ${activeTab === 'hall_of_fame' ? 'active' : ''}`}
-                  onClick={() => {
-                    setActiveTab('hall_of_fame');
-                    setNavMenuOpen(false);
-                  }}
-                >
-                  🏆 {t.navHallOfFame}
-                </button>
-                {isLocalEnvironment() && (
-                  <button
-                    type="button"
-                    className={`nav-btn ${activeTab === 'sandbox' ? 'active' : ''}`}
-                    onClick={() => {
-                      setActiveTab('sandbox');
-                      setNavMenuOpen(false);
-                    }}
-                  >
-                    🛠️ {locale === 'ro' ? 'Mediu de Test' : 'Sandbox Mode'}
-                  </button>
-                )}
-                <div style={{ height: 1, background: 'var(--border-color)', margin: '4px 0' }} />
-                <button
-                  type="button"
-                  className="nav-btn"
-                  onClick={() => {
-                    setActiveModal('full_rules');
-                    setNavMenuOpen(false);
-                  }}
-                >
-                  📖 {locale === 'ro' ? 'Regulament' : 'Rulebook'}
-                </button>
-              </div>
+              <button
+                type="button"
+                className="flex min-h-[44px] w-full items-center gap-2 text-left text-ink hover:bg-surfaceMuted"
+                onClick={() => {
+                  setActiveModal('full_rules');
+                  closeNav();
+                }}
+              >
+                📖 {locale === 'ro' ? 'Regulament' : 'Rulebook'}
+              </button>
+              <ThemeToggle />
             </>
           )}
-        </div>
+        />
 
         <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
           <button

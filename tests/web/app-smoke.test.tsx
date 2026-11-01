@@ -94,7 +94,10 @@ describe('App (smoke)', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const navTrigger = screen.getByRole('button', { name: /☰/ });
+    // The hamburger trigger is now rendered by the shared AppNav component, whose accessible
+    // name comes from its own aria-label ("Open navigation") rather than the old hand-rolled
+    // button's visible "☰ <icon> <label>" text content.
+    const navTrigger = screen.getByRole('button', { name: /open navigation/i });
 
     // Benchmark tab — plain in-shell content, no network/game needed.
     await user.click(navTrigger);

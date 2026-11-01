@@ -22,7 +22,7 @@ export function ThemeToggle(): React.ReactElement {
           type="button"
           aria-pressed={theme === option.value}
           onClick={() => setTheme(option.value)}
-          className={`rounded border px-3 py-1.5 text-sm font-medium ${
+          className={`flex min-h-[44px] items-center justify-center rounded border px-3 py-1.5 text-sm font-medium ${
             theme === option.value
               ? 'border-accent bg-accent text-accentInk'
               : 'border-line bg-surface text-ink hover:bg-surfaceMuted'

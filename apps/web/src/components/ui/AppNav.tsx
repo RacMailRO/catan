@@ -5,6 +5,8 @@ export interface AppNavItem {
   id: string;
   /** Display label shown in the nav drawer. */
   label: string;
+  /** Optional leading icon (emoji or element) shown before the label. */
+  icon?: React.ReactNode;
 }
 
 export interface AppNavProps {
@@ -14,6 +16,12 @@ export interface AppNavProps {
   activeId: string;
   /** Called with an item's id when the user picks it from the drawer. */
   onNavigate: (id: string) => void;
+  /**
+   * Optional content rendered below the main nav list (e.g. quick links, theme toggle).
+   * Pass a render function instead of a plain node when footer content needs to close the
+   * drawer itself (e.g. a quick link that opens a modal) — it receives a `closeNav` callback.
+   */
+  footer?: React.ReactNode | ((closeNav: () => void) => React.ReactNode);
 }
 
 /**
@@ -22,7 +30,7 @@ export interface AppNavProps {
  * SandboxMode.tsx) — callers only provide the list of items, the active id, and a callback.
  * Generic over nav items; knows nothing about any app-specific tab type.
  */
-export function AppNav({ items, activeId, onNavigate }: AppNavProps): React.ReactElement {
+export function AppNav({ items, activeId, onNavigate, footer }: AppNavProps): React.ReactElement {
   const [open, setOpen] = useState(false);
 
   const handleNavigate = (id: string) => {
@@ -37,7 +45,7 @@ export function AppNav({ items, activeId, onNavigate }: AppNavProps): React.Reac
         aria-label="Open navigation"
         aria-expanded={open}
         onClick={() => setOpen(true)}
-        className="rounded px-3 py-2 text-ink hover:bg-surfaceMuted"
+        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded px-3 py-2 text-ink hover:bg-surfaceMuted"
       >
         ☰
       </button>
@@ -58,7 +66,7 @@ export function AppNav({ items, activeId, onNavigate }: AppNavProps): React.Reac
                 type="button"
                 aria-label="Close navigation"
                 onClick={() => setOpen(false)}
-                className="rounded px-2 py-1 text-inkSoft hover:bg-surfaceMuted hover:text-ink"
+                className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded px-2 py-1 text-inkSoft hover:bg-surfaceMuted hover:text-ink"
               >
                 ×
               </button>
@@ -70,17 +78,23 @@ export function AppNav({ items, activeId, onNavigate }: AppNavProps): React.Reac
                     type="button"
                     onClick={() => handleNavigate(item.id)}
                     aria-current={item.id === activeId ? 'page' : undefined}
-                    className={`block w-full px-4 py-3 text-left ${
+                    className={`flex min-h-[44px] w-full items-center gap-2 px-4 py-3 text-left ${
                       item.id === activeId
                         ? 'bg-accent text-accentInk'
                         : 'text-ink hover:bg-surfaceMuted'
                     }`}
                   >
-                    {item.label}
+                    {item.icon ? <span aria-hidden="true">{item.icon}</span> : null}
+                    <span>{item.label}</span>
                   </button>
                 </li>
               ))}
             </ul>
+            {footer ? (
+              <div className="flex flex-col gap-2 border-t border-line px-4 py-3">
+                {typeof footer === 'function' ? footer(() => setOpen(false)) : footer}
+              </div>
+            ) : null}
           </nav>
         </div>
       ) : null}
