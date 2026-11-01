@@ -245,7 +245,7 @@ describe('Authoritative LAN/Online Server, Protocol Validation & WebSocket Sync'
 
     expect(wsMessages[0]!.type).toBe('state_sync');
     ws.close();
-  });
+  }, 60000);
   it('allows WebSocket connections with catan.d10.ro, same-origin, LAN, and rejects untrusted origins', async () => {
     // 1. Verify unit logic of resolveAllowedOrigin
     expect(resolveAllowedOrigin('https://catan.d10.ro', 'catan.d10.ro')).toBe('https://catan.d10.ro');

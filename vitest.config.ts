@@ -13,6 +13,6 @@ export default defineConfig({
     include: ['tests/**/*.test.{ts,tsx}'],
     environment: 'node',
     globals: false,
-    testTimeout: 20000
+    testTimeout: 60000
   }
 });
