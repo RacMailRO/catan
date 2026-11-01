@@ -112,9 +112,9 @@ export const RESOURCE_LABELS: Record<Locale, Record<ResourceType, string>> = {
   ro: {
     wood: 'Lemn',
     brick: 'Cărămidă',
-    sheep: 'Lână',
+    sheep: 'Oaie',
     wheat: 'Grâu',
-    ore: 'Minereu'
+    ore: 'Piatră'
   },
   en: {
     wood: 'Wood',
@@ -137,9 +137,9 @@ export const TERRAIN_LABELS: Record<Locale, Record<TerrainType, string>> = {
   ro: {
     forest: 'Pădure (Lemn)',
     hills: 'Deal (Cărămidă)',
-    pasture: 'Pășune (Lână)',
+    pasture: 'Pășune (Oaie)',
     fields: 'Câmp (Grâu)',
-    mountains: 'Munte (Minereu)',
+    mountains: 'Munte (Piatră)',
     desert: 'Deșert',
     gold_field: 'Câmp de Aur (Resursă la alegere)',
     sea: 'Mare',
@@ -258,9 +258,9 @@ export const FULL_RULES: Record<Locale, RuleSection[]> = {
       title: '🏠 Construcții & Costuri',
       body: [
         'Drum: 1 Lemn + 1 Cărămidă — conectează așezări, extinde teritoriul. Max 15 drumuri.',
-        'Așezare: 1 Lemn + 1 Cărămidă + 1 Lână + 1 Grâu — trebuie plasată la cel puțin 2 intersecții distanță de orice altă așezare/oraș. Max 5 așezări (valorează 1 PV fiecare).',
-        'Oraș: 2 Grâu + 3 Minereu — construit prin upgrade-ul unei așezări existente, dublează producția acelui loc. Max 4 orașe (valorează 2 PV fiecare).',
-        'Carte de Dezvoltare: 1 Lână + 1 Grâu + 1 Minereu — tragi o carte aleatorie din pachet (Cavaler, Progres sau Punct de Victorie).'
+        'Așezare: 1 Lemn + 1 Cărămidă + 1 Oaie + 1 Grâu — trebuie plasată la cel puțin 2 intersecții distanță de orice altă așezare/oraș. Max 5 așezări (valorează 1 PV fiecare).',
+        'Oraș: 2 Grâu + 3 Piatră — construit prin upgrade-ul unei așezări existente, dublează producția acelui loc. Max 4 orașe (valorează 2 PV fiecare).',
+        'Carte de Dezvoltare: 1 Oaie + 1 Grâu + 1 Piatră — tragi o carte aleatorie din pachet (Cavaler, Progres sau Punct de Victorie).'
       ]
     },
     {
@@ -603,10 +603,10 @@ export function getScenarioRules(scenario: BoardScenario = 'classic', locale: Lo
     body: isRo
       ? [
           '🛣️ Drum (1 Lemn + 1 Cărămidă): conectează așezări pe muchii de uscat. Max 15 drumuri.',
-          '⛵ Corabie (1 Lemn + 1 Lână): navighează pe muchii de apă și coastă. Max 15 corăbii.',
-          '🏠 Așezare (1 Lemn + 1 Cărămidă + 1 Lână + 1 Grâu): acordă 1 PV și produce 1 resursă. Max 5 așezări.',
-          '🏰 Oraș (2 Grâu + 3 Minereu): upgrade-ul unei așezări, acordă 2 PV și dublează producția (2 resurse). Max 4 orașe.',
-          '🃏 Carte de Dezvoltare (1 Lână + 1 Grâu + 1 Minereu): oferă un Cavaler, o carte de Progres sau un Punct de Victorie.'
+          '⛵ Corabie (1 Lemn + 1 Oaie): navighează pe muchii de apă și coastă. Max 15 corăbii.',
+          '🏠 Așezare (1 Lemn + 1 Cărămidă + 1 Oaie + 1 Grâu): acordă 1 PV și produce 1 resursă. Max 5 așezări.',
+          '🏰 Oraș (2 Grâu + 3 Piatră): upgrade-ul unei așezări, acordă 2 PV și dublează producția (2 resurse). Max 4 orașe.',
+          '🃏 Carte de Dezvoltare (1 Oaie + 1 Grâu + 1 Piatră): oferă un Cavaler, o carte de Progres sau un Punct de Victorie.'
         ]
       : [
           '🛣️ Road (1 Wood + 1 Brick): connects settlements on land edges. Max 15 roads.',

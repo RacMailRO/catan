@@ -241,10 +241,10 @@ export function chooseAIAction(
       );
       const RES_NAMES: Record<ResourceType, string> = {
         wood: 'Lemn',
-        brick: 'Argilă',
-        sheep: 'Lână',
+        brick: 'Cărămidă',
+        sheep: 'Oaie',
         wheat: 'Grâu',
-        ore: 'Minereu'
+        ore: 'Piatră'
       };
       if (lacksRequested) {
         const missing = ALL_RESOURCES.filter(

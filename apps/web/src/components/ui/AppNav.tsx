@@ -54,8 +54,8 @@ export function AppNav({ items, activeId, onNavigate, footer, compactTrigger }: 
         onClick={() => setOpen(true)}
         className={
           compactTrigger
-            ? 'flex items-center justify-center rounded px-3 py-2 text-ink hover:bg-surfaceMuted'
-            : 'flex min-h-[44px] min-w-[44px] items-center justify-center rounded px-3 py-2 text-ink hover:bg-surfaceMuted'
+            ? 'flex items-center justify-center rounded px-3 py-2 text-ink text-lg font-bold hover:bg-surfaceMuted'
+            : 'flex min-h-[44px] min-w-[44px] items-center justify-center rounded px-3 py-2 text-ink text-lg font-bold hover:bg-surfaceMuted'
         }
       >
         ☰

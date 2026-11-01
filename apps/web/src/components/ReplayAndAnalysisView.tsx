@@ -1195,7 +1195,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                                       borderRadius: 4
                                     }}
                                   >
-                                    <ResourceIcon resource={res as ResourceType} height={16} />{' '}{res === 'wood' ? 'Lemn' : res === 'brick' ? 'Argilă' : res === 'wheat' ? 'Grâu' : res === 'sheep' ? 'Lână' : 'Minereu'}
+                                    <ResourceIcon resource={res as ResourceType} height={16} />{' '}{res === 'wood' ? 'Lemn' : res === 'brick' ? 'Cărămidă' : res === 'wheat' ? 'Grâu' : res === 'sheep' ? 'Oaie' : 'Piatră'}
                                   </span>
                                 ))}
                               </div>

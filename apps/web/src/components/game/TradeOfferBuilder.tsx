@@ -147,7 +147,7 @@ export const TradeOfferBuilder: React.FC<TradeOfferBuilderProps> = ({
           // City suggestion: 3 Ore + 2 Wheat needed
           if (activePlayer.resources.ore >= portRatioOre + 3 && activePlayer.resources.wheat < 2 && gameState.bank.wheat >= 1) {
             suggestions.push({
-              label: 'Schimbă ' + portRatioOre + ' Minereu ➔ 1 Grâu pentru Oraș',
+              label: 'Schimbă ' + portRatioOre + ' Piatră ➔ 1 Grâu pentru Oraș',
               give: 'ore',
               giveAmount: portRatioOre,
               receive: 'wheat'

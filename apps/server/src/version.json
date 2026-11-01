@@ -1,9 +1,14 @@
 {
-  "version": "v1.191",
-  "commitCount": 191,
-  "shortHash": "3a68cac",
-  "buildDate": "2026-11-01T22:01:56.933Z",
+  "version": "v1.192",
+  "commitCount": 192,
+  "shortHash": "7220692",
+  "buildDate": "2026-11-01T22:08:06.819Z",
   "releaseNotes": [
+    {
+      "hash": "7220692",
+      "date": "2026-11-02",
+      "message": "fix(ui): elevate AdaptiveSurface z-index above header, force default dark theme tokens, and remove VP from road/dev-card costs"
+    },
     {
       "hash": "3a68cac",
       "date": "2026-11-01",
@@ -248,11 +253,6 @@
       "hash": "f3075cd",
       "date": "2026-10-27",
       "message": "Update version stamps v1.142"
-    },
-    {
-      "hash": "3ce2127",
-      "date": "2026-10-27",
-      "message": "Fix mobile replay layout, PWA cache refresh, and restrict ships to Seafarers"
     }
   ]
 }

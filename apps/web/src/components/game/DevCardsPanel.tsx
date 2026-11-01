@@ -43,7 +43,7 @@ export const DevCardsPanel: React.FC<DevCardsPanelProps> = ({
   if (unplayedDevCards.length === 0) {
     return (
       <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>
-        Nu ai cărți de dezvoltare nefolosite în mână. Poți cumpăra o carte de dezvoltare (1 Grâu + 1 Oaie + 1 Minereu) în timpul turei tale.
+        Nu ai cărți de dezvoltare nefolosite în mână. Poți cumpăra o carte de dezvoltare (1 Grâu + 1 Oaie + 1 Piatră) în timpul turei tale.
       </p>
     );
   }

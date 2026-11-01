@@ -20,8 +20,8 @@
   --accent:#B8863F; --accent-ink:#0A1420; --warn:#B5432F; --line:#2E3F4E;
 }
 :root[data-theme="light"]{
-  --bg:#EEF1EC; --surface:#FFFFFF; --surface-2:#F6F8F4; --ink:#1C2620; --ink-soft:#5B6B61;
-  --accent:#2F6F5E; --accent-ink:#FFFFFF; --warn:#B5542F; --line:#D7DED5;
+  --bg:#F0F4F8; --surface:#FFFFFF; --surface-2:#F8FAFC; --ink:#0F172A; --ink-soft:#64748B;
+  --accent:#B45309; --accent-ink:#FFFFFF; --warn:#B5542F; --line:#CBD5E1;
 }
 :root[data-theme="xmas"]{
   --bg:#0F241A; --surface:#163B28; --surface-2:#1C3A28; --ink:#F4EFE3; --ink-soft:#B9C9BB;

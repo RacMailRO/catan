@@ -1545,7 +1545,7 @@ export function validateAction(
         return { valid: false, code: 'NO_PIECES_LEFT', reason: 'Nu mai ai piese de oraș disponibile (maxim 4).' };
       }
       if (!hasResources(player.resources, BUILDING_COSTS.city)) {
-        return { valid: false, code: 'INSUFFICIENT_RESOURCES', reason: 'Resurse insuficiente pentru oraș (3 minereu + 2 grâu).' };
+        return { valid: false, code: 'INSUFFICIENT_RESOURCES', reason: 'Resurse insuficiente pentru oraș (3 piatră + 2 grâu).' };
       }
       const existing = state.board.buildings[action.vertexId];
       if (!existing || existing.ownerId !== playerId || existing.type !== 'settlement') {
@@ -1562,7 +1562,7 @@ export function validateAction(
         return { valid: false, code: 'EMPTY_DEV_DECK', reason: 'Nu mai există cărți de dezvoltare în pachet.' };
       }
       if (!hasResources(player.resources, BUILDING_COSTS.dev_card)) {
-        return { valid: false, code: 'INSUFFICIENT_RESOURCES', reason: 'Resurse insuficiente (1 lână + 1 grâu + 1 minereu).' };
+        return { valid: false, code: 'INSUFFICIENT_RESOURCES', reason: 'Resurse insuficiente (1 oaie + 1 grâu + 1 piatră).' };
       }
       return { valid: true };
     }

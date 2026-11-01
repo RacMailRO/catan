@@ -69,7 +69,7 @@ const TERRAIN_NAMES: Record<TerrainType, { ro: string; en: string; emoji: string
   hills: { ro: 'Dealuri (Cărămidă)', en: 'Hills (Brick)', emoji: '🧱' },
   pasture: { ro: 'Pășune (Oaie)', en: 'Pasture (Sheep)', emoji: '🐑' },
   fields: { ro: 'Câmpuri (Grâu)', en: 'Fields (Wheat)', emoji: '🌾' },
-  mountains: { ro: 'Munți (Minereu)', en: 'Mountains (Ore)', emoji: '⛰️' },
+  mountains: { ro: 'Munți (Piatră)', en: 'Mountains (Ore)', emoji: '⛰️' },
   desert: { ro: 'Deșert', en: 'Desert', emoji: '🏜️' },
   gold_field: { ro: 'Câmp de Aur', en: 'Gold Field', emoji: '⭐' },
   sea: { ro: 'Mare / Apă', en: 'Sea / Water', emoji: '🌊' },
