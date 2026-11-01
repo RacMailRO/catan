@@ -74,10 +74,10 @@ jobs:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          port: ${{ secrets.FTP_PORT || 21 }}
-          protocol: ${{ secrets.FTP_PROTOCOL || 'ftp' }}
+          server-dir: ./
           local-dir: ./.deploy/
-          server-dir: ${{ secrets.FTP_SERVER_DIR || './' }}
+          log-level: verbose
+          security: loose
           dry-run: ${{ github.event.inputs.dry_run == 'true' }}
           dangerous-clean-slate: false
           exclude: |
