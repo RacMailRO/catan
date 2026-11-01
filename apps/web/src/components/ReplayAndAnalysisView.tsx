@@ -16,6 +16,7 @@ import {
   runSimulatedGame
 } from '@catan/ai';
 import { BoardSvg } from './BoardSvg';
+import { AdaptiveSurface } from './ui/AdaptiveSurface';
 import { AnimatedDiceWidget, ResourceCardSprite, ResourceIcon, playerBadgeStyle } from './GameAssets';
 import {
   SavedReplaySummary,
@@ -708,15 +709,11 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
 
       {/* MODAL 1: SAVED GAMES HISTORY */}
       {activeModal === 'saved_games' && (
-        <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
-          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>📚 Istoric Partide Salvate ({savedReplays.length})</h3>
-              <button type="button" className="btn" onClick={() => setActiveModal('none')}>
-                ✕ Închide
-              </button>
-            </div>
-            <div className="modal-body">
+        <AdaptiveSurface
+          open
+          onClose={() => setActiveModal('none')}
+          title={`📚 Istoric Partide Salvate (${savedReplays.length})`}
+        >
               <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
                 <button
                   type="button"
@@ -770,9 +767,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                   </div>
                 ))
               )}
-            </div>
-          </div>
-        </div>
+        </AdaptiveSurface>
       )}
 
             {/* MODAL 2: INTERACTIVE & DYNAMIC VISUAL STRATEGIC REPORT */}
@@ -812,37 +807,28 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
         }
 
         return (
-          <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
-            <div
-              className="modal-dialog"
-              style={{ maxWidth: 940, width: '96vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="modal-header" style={{ padding: '0.65rem 1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h3 style={{ margin: 0, fontSize: '1.05rem' }}>
-                    📊 Raport Strategic & Analiză Partidă ({replay.gameId})
-                  </h3>
-                  {winner && (
-                    <span
-                      style={{
-                        background: 'rgba(245, 158, 11, 0.15)',
-                        border: '1px solid var(--accent-gold)',
-                        color: 'var(--accent-gold)',
-                        fontSize: '0.78rem',
-                        padding: '2px 8px',
-                        borderRadius: 12,
-                        fontWeight: 700
-                      }}
-                    >
-                      🏆 Câștigător: {winner.playerName} ({winner.finalScore} VP)
-                    </span>
-                  )}
-                </div>
-                <button type="button" className="btn" onClick={() => setActiveModal('none')}>
-                  ✕ Închide
-                </button>
-              </div>
+          <AdaptiveSurface
+            open
+            onClose={() => setActiveModal('none')}
+            title={`📊 Raport Strategic & Analiză Partidă (${replay.gameId})`}
+          >
+              {winner && (
+                <span
+                  style={{
+                    display: 'inline-block',
+                    marginBottom: '0.6rem',
+                    background: 'rgba(245, 158, 11, 0.15)',
+                    border: '1px solid var(--accent-gold)',
+                    color: 'var(--accent-gold)',
+                    fontSize: '0.78rem',
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    fontWeight: 700
+                  }}
+                >
+                  🏆 Câștigător: {winner.playerName} ({winner.finalScore} VP)
+                </span>
+              )}
 
               {/* Sub-Navigation Tabs */}
               <div
@@ -876,7 +862,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                 ))}
               </div>
 
-              <div className="modal-body" style={{ flex: 1, overflowY: 'auto', padding: '0.85rem' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '0.85rem' }}>
                 {/* TAB 1: PARCURS & REPERE (DEVELOPMENT CURVE CHART + MILESTONES) */}
                 {reportTab === 'overview' && (
                   <div>
@@ -1645,22 +1631,17 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                   </div>
                 )}
               </div>
-            </div>
-          </div>
+          </AdaptiveSurface>
         );
       })()}
 
       {/* MODAL 3: FULL FILTERABLE EVENT LOG */}
       {activeModal === 'event_log' && (
-        <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
-          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>📜 Jurnalul Complet al Partidei ({filteredEvents.length} evenimente)</h3>
-              <button type="button" className="btn" onClick={() => setActiveModal('none')}>
-                ✕ Închide
-              </button>
-            </div>
-            <div className="modal-body">
+        <AdaptiveSurface
+          open
+          onClose={() => setActiveModal('none')}
+          title={`📜 Jurnalul Complet al Partidei (${filteredEvents.length} evenimente)`}
+        >
               <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.65rem' }}>
                 <select value={filterPlayerId} onChange={(e) => setFilterPlayerId(e.target.value)}>
                   <option value="all">Toți jucătorii</option>
@@ -1707,9 +1688,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                   );
                 })}
               </div>
-            </div>
-          </div>
-        </div>
+        </AdaptiveSurface>
       )}
     </div>
   );

@@ -133,8 +133,11 @@ describe('App (smoke)', () => {
     const heading = await screen.findByRole('heading', { name: /Regulament Oficial/i });
     expect(heading).toBeInTheDocument();
 
+    // Full Rules now renders via the shared AdaptiveSurface component (Phase 2 of the UI
+    // refactor), whose built-in close affordance is a locale-independent "×" button with
+    // aria-label "Close" rather than the old inline "✕ Închide" text button.
     const dialog = heading.closest('div')!.parentElement as HTMLElement;
-    await user.click(within(dialog).getByRole('button', { name: /Închide/i }));
+    await user.click(within(dialog).getByRole('button', { name: /close/i }));
 
     expect(screen.queryByRole('heading', { name: /Regulament Oficial/i })).not.toBeInTheDocument();
   });
@@ -150,7 +153,8 @@ describe('App (smoke)', () => {
     expect(heading).toBeInTheDocument();
     expect(screen.getByText(/Test release note/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /Închide/i }));
+    // Release Notes also renders via AdaptiveSurface now — same "Close" close button as above.
+    await user.click(screen.getByRole('button', { name: /close/i }));
 
     expect(screen.queryByRole('heading', { name: /Note de Lansare/i })).not.toBeInTheDocument();
   });

@@ -40,6 +40,8 @@ import {
   runSimulatedGame
 } from '@catan/ai';
 import { BoardSvg } from './components/BoardSvg';
+import { Dialog } from './components/ui/Dialog';
+import { AdaptiveSurface } from './components/ui/AdaptiveSurface';
 import {
   AnimatedDiceWidget,
   ResourceIcon,
@@ -3896,26 +3898,12 @@ export const App: React.FC = () => {
 
           {/* MODAL: Responsive Score, Players & Bank Grid */}
       {activeModal === 'score_bank' && gameState && playerView && (
-        <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
-          <div
-            className="modal-dialog"
-            style={{ maxWidth: 880 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <h3>
-                🏆 {locale === 'ro' ? 'Clasament, Participanți & Bancă' : 'Leaderboard, Players & Bank'} (Țintă: {gameState.rules.victoryPointsToWin} VP)
-              </h3>
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={() => setActiveModal('none')}
-              >
-                ✕ {locale === 'ro' ? 'Închide' : 'Close'}
-              </button>
-            </div>
-
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+        <AdaptiveSurface
+          open
+          onClose={() => setActiveModal('none')}
+          title={`🏆 ${locale === 'ro' ? 'Clasament, Participanți & Bancă' : 'Leaderboard, Players & Bank'} (Țintă: ${gameState.rules.victoryPointsToWin} VP)`}
+        >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
               {/* Responsive Grid of Players */}
               <div className="score-bank-grid">
                 {playerView.players.map((p) => {
@@ -4055,23 +4043,16 @@ export const App: React.FC = () => {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+        </AdaptiveSurface>
       )}
 
       {/* MODAL A: DEVELOPMENT CARDS HAND & PLAY ACTIONS */}
           {activeModal === 'dev_cards' && activePlayerObj && (
-            <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
-              <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-                <div className="modal-header">
-                  <h3>
-                    🃏 {t.devCardsTitle} — {(viewerPlayerObj ?? activePlayerObj).name} ({unplayedDevCards.length})
-                  </h3>
-                  <button type="button" className="btn" onClick={() => setActiveModal('none')}>
-                    ✕ Închide
-                  </button>
-                </div>
-                <div className="modal-body">
+            <AdaptiveSurface
+              open
+              onClose={() => setActiveModal('none')}
+              title={`🃏 ${t.devCardsTitle} — ${(viewerPlayerObj ?? activePlayerObj).name} (${unplayedDevCards.length})`}
+            >
                   {unplayedDevCards.length === 0 ? (
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>
                       Nu ai cărți de dezvoltare nefolosite în mână. Poți cumpăra o carte de dezvoltare (1 Grâu + 1 Oaie + 1 Minereu) în timpul turei tale.
@@ -4149,24 +4130,32 @@ export const App: React.FC = () => {
                         })}
                     </div>
                   )}
-                </div>
-              </div>
-            </div>
+            </AdaptiveSurface>
           )}
 
           {/* MODAL SPECIAL: PLAY MONOPOLY - SELECT RESOURCE INTERACTIVELY */}
           {activeModal === 'play_monopoly' && activePlayerObj && (
-            <div className="modal-backdrop" onClick={() => setActiveModal('dev_cards')}>
-              <div className="modal-dialog" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
-                <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--accent-gold)' }}>
-                    👑 Declară Monopol
-                  </h3>
-                  <button type="button" className="btn" onClick={() => setActiveModal('dev_cards')}>
-                    ✕ Înapoi
-                  </button>
-                </div>
-                <div className="modal-body">
+            <Dialog
+              open
+              onClose={() => setActiveModal('dev_cards')}
+              title="👑 Declară Monopol"
+              footer={
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ width: '100%', padding: '0.65rem', fontSize: '0.92rem', fontWeight: 700 }}
+                  onClick={() => {
+                    executeAction(activePlayerObj.id, {
+                      type: 'play_monopoly',
+                      resource: monopolyResource
+                    });
+                    setActiveModal('none');
+                  }}
+                >
+                  👑 Confiscă tot: {RESOURCE_LABELS[locale][monopolyResource].toUpperCase()}
+                </button>
+              }
+            >
                   <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', marginTop: 0, marginBottom: '0.85rem' }}>
                     {locale === 'ro'
                       ? 'Alege resursa pe care dorești să o confunzi/confiști de la toți ceilalți jucători. Toți adversarii vor fi obligați să-ți cedeze toate cărțile de acest tip pe care le au în mână!'
@@ -4214,39 +4203,32 @@ export const App: React.FC = () => {
                       );
                     })}
                   </div>
-
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    style={{ width: '100%', padding: '0.65rem', fontSize: '0.92rem', fontWeight: 700 }}
-                    onClick={() => {
-                      executeAction(activePlayerObj.id, {
-                        type: 'play_monopoly',
-                        resource: monopolyResource
-                      });
-                      setActiveModal('none');
-                    }}
-                  >
-                    👑 Confiscă tot: {RESOURCE_LABELS[locale][monopolyResource].toUpperCase()}
-                  </button>
-                </div>
-              </div>
-            </div>
+            </Dialog>
           )}
 
           {/* MODAL SPECIAL: PLAY YEAR OF PLENTY - SELECT 2 RESOURCES */}
           {activeModal === 'play_year_of_plenty' && activePlayerObj && (
-            <div className="modal-backdrop" onClick={() => setActiveModal('dev_cards')}>
-              <div className="modal-dialog" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
-                <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--accent-gold)' }}>
-                    🎁 Joacă: Anul Abundenței
-                  </h3>
-                  <button type="button" className="btn" onClick={() => setActiveModal('dev_cards')}>
-                    ✕ Înapoi
-                  </button>
-                </div>
-                <div className="modal-body">
+            <Dialog
+              open
+              onClose={() => setActiveModal('dev_cards')}
+              title="🎁 Joacă: Anul Abundenței"
+              footer={
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ width: '100%', padding: '0.6rem', fontWeight: 700 }}
+                  onClick={() => {
+                    executeAction(activePlayerObj.id, {
+                      type: 'play_year_of_plenty',
+                      resources: yopResources
+                    });
+                    setActiveModal('none');
+                  }}
+                >
+                  🎁 Ia {RESOURCE_LABELS[locale][yopResources[0]]} + {RESOURCE_LABELS[locale][yopResources[1]]}
+                </button>
+              }
+            >
                   <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', marginTop: 0, marginBottom: '0.6rem' }}>
                     {locale === 'ro'
                       ? 'Alege 2 resurse gratuite pe care le iei direct din bancă:'
@@ -4327,22 +4309,12 @@ export const App: React.FC = () => {
                   >
                     🎁 Ia {RESOURCE_LABELS[locale][yopResources[0]]} + {RESOURCE_LABELS[locale][yopResources[1]]}
                   </button>
-                </div>
-              </div>
-            </div>
+            </Dialog>
           )}
 
           {/* MODAL A: STARTING ORDER — each player's opening 2d6 roll, highest goes first */}
           {activeModal === 'starting_order' && gameState?.startingOrderRolls && (
-            <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
-              <div className="modal-dialog" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
-                <div className="modal-header">
-                  <h3>🎲 Cine Începe Partida</h3>
-                  <button type="button" className="btn" onClick={() => setActiveModal('none')}>
-                    ✕ Închide
-                  </button>
-                </div>
-                <div className="modal-body">
+            <AdaptiveSurface open onClose={() => setActiveModal('none')} title="🎲 Cine Începe Partida">
                   <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                     Fiecare jucător a dat cu zarurile; cel mai mare total începe jocul.
                   </p>
@@ -4389,22 +4361,16 @@ export const App: React.FC = () => {
                   >
                     Să Începem!
                   </button>
-                </div>
-              </div>
-            </div>
+            </AdaptiveSurface>
           )}
 
           {/* MODAL B: MARITIME / BANK TRADE & PLAYER-TO-PLAYER TRADE */}
           {activeModal === 'trade' && activePlayerObj && (
-            <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
-              <div className="modal-dialog" style={{ maxWidth: 760, width: '95%' }} onClick={(e) => e.stopPropagation()}>
-                <div className="modal-header">
-                  <h3>⚓ Comerț Maritim (Bancă / Porturi) & Schimb între Jucători</h3>
-                  <button type="button" className="btn" onClick={() => setActiveModal('none')}>
-                    ✕ Închide
-                  </button>
-                </div>
-                <div className="modal-body">
+            <AdaptiveSurface
+              open
+              onClose={() => setActiveModal('none')}
+              title="⚓ Comerț Maritim (Bancă / Porturi) & Schimb între Jucători"
+            >
                   <div className="candidate-row" style={{ marginBottom: '0.9rem', padding: '0.85rem' }}>
                     <h4 style={{ color: 'var(--accent-gold)', marginBottom: '0.6rem' }}>
                       1. 🏦 {t.tradeBankTitle}
@@ -4695,9 +4661,7 @@ export const App: React.FC = () => {
                       Trimite Oferta de Schimb Jucătorilor
                     </button>
                   </div>
-                </div>
-              </div>
-            </div>
+            </AdaptiveSurface>
           )}
 
           {/* COUNTER-OFFER MODAL: a responder putting their own terms on the table instead of
@@ -4717,37 +4681,30 @@ export const App: React.FC = () => {
               // The offer resolved/expired while this modal was open (e.g. someone else
               // accepted it first) - nothing left to counter.
               return (
-                <div className="modal-backdrop" onClick={closeCounterModal}>
-                  <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
-                    <div className="modal-body" style={{ textAlign: 'center', padding: '1.2rem' }}>
-                      <p>
-                        {locale === 'ro'
-                          ? 'Oferta originală nu mai este activă.'
-                          : 'The original offer is no longer active.'}
-                      </p>
-                      <button type="button" className="btn btn-primary" onClick={closeCounterModal}>
-                        {locale === 'ro' ? 'Închide' : 'Close'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                <Dialog
+                  open
+                  onClose={closeCounterModal}
+                  title={locale === 'ro' ? 'Contra-ofertă' : 'Counter-offer'}
+                  footer={
+                    <button type="button" className="btn btn-primary" onClick={closeCounterModal}>
+                      {locale === 'ro' ? 'Închide' : 'Close'}
+                    </button>
+                  }
+                >
+                  <p style={{ textAlign: 'center', margin: 0 }}>
+                    {locale === 'ro'
+                      ? 'Oferta originală nu mai este activă.'
+                      : 'The original offer is no longer active.'}
+                  </p>
+                </Dialog>
               );
             }
             return (
-              <div className="modal-backdrop" onClick={closeCounterModal}>
-                <div className="modal-dialog" style={{ maxWidth: 760, width: '95%' }} onClick={(e) => e.stopPropagation()}>
-                  <div className="modal-header">
-                    <h3 style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      🔄 {locale === 'ro' ? 'Contra-ofertă către' : 'Counter-offer to'}{' '}
-                      <span style={playerBadgeStyle(originalProposer?.color)}>
-                        {originalProposer?.name ?? originalOffer.fromPlayerId}
-                      </span>
-                    </h3>
-                    <button type="button" className="btn" onClick={closeCounterModal}>
-                      ✕ {locale === 'ro' ? 'Închide' : 'Close'}
-                    </button>
-                  </div>
-                  <div className="modal-body">
+              <AdaptiveSurface
+                open
+                onClose={closeCounterModal}
+                title={`🔄 ${locale === 'ro' ? 'Contra-ofertă către' : 'Counter-offer to'} ${originalProposer?.name ?? originalOffer.fromPlayerId}`}
+              >
                     <div
                       style={{
                         fontSize: '0.85rem',
@@ -4903,23 +4860,17 @@ export const App: React.FC = () => {
                     >
                       {locale === 'ro' ? 'Trimite Contra-oferta' : 'Send Counter-offer'}
                     </button>
-                  </div>
-                </div>
-              </div>
+              </AdaptiveSurface>
             );
           })()}
 
           {/* MODAL C: EVENT LOG */}
           {activeModal === 'event_log' && recorder && (
-            <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
-              <div className="modal-dialog" style={{ maxWidth: 760, width: '95%', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
-                <div className="modal-header">
-                  <h3>📜 {t.eventLogTitle} ({recorder.getEvents().length} acțiuni)</h3>
-                  <button type="button" className="btn" onClick={() => setActiveModal('none')}>
-                    ✕ Închide
-                  </button>
-                </div>
-                <div className="modal-body" style={{ overflowY: 'auto', flex: 1 }}>
+            <AdaptiveSurface
+              open
+              onClose={() => setActiveModal('none')}
+              title={`📜 ${t.eventLogTitle} (${recorder.getEvents().length} acțiuni)`}
+            >
                   <div className="event-list">
                     {[...recorder.getEvents()].reverse().map((ev) => {
                       const p = getPlayerById(gameState, ev.playerId);
@@ -4937,9 +4888,7 @@ export const App: React.FC = () => {
                       );
                     })}
                   </div>
-                </div>
-              </div>
-            </div>
+            </AdaptiveSurface>
           )}
 
           {/* MODAL D: BUILDING COSTS REFERENCE (/cost.jpg) */}
@@ -4959,15 +4908,11 @@ export const App: React.FC = () => {
               { key: 'dev_card', label: locale === 'ro' ? 'Carte de Dezvoltare' : 'Development Card', cost: BUILDING_COSTS.dev_card, vp: locale === 'ro' ? '? VP (variază)' : '? VP (varies)' }
             ];
             return (
-              <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
-                <div className="modal-dialog" style={{ maxWidth: 680, width: '95%' }} onClick={(e) => e.stopPropagation()}>
-                  <div className="modal-header">
-                    <h3>📋 {locale === 'ro' ? 'Tabel Costuri Construcții & Puncte de Victorie' : 'Building Costs & Victory Point Table'}</h3>
-                    <button type="button" className="btn" onClick={() => setActiveModal('none')}>
-                      ✕ {locale === 'ro' ? 'Închide' : 'Close'}
-                    </button>
-                  </div>
-                  <div className="modal-body">
+              <AdaptiveSurface
+                open
+                onClose={() => setActiveModal('none')}
+                title={locale === 'ro' ? '📋 Tabel Costuri Construcții & Puncte de Victorie' : '📋 Building Costs & Victory Point Table'}
+              >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {rows.map((row) => (
                         <div
@@ -5019,9 +4964,7 @@ export const App: React.FC = () => {
                           : '🛣️ Longest Road (5+ roads): +2 VP  ·  ⚔️ Largest Army (3+ Knights): +2 VP'}
                       </div>
                     </div>
-                  </div>
-                </div>
-              </div>
+            </AdaptiveSurface>
             );
           })()}
 
@@ -5071,12 +5014,13 @@ export const App: React.FC = () => {
               }
 
               return (
-                <div key={discardPid} className="modal-backdrop">
-                  <div className="modal-dialog" style={{ borderColor: 'var(--accent-red)' }}>
-                    <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <h3 style={{ color: 'var(--accent-red)', margin: 0, fontSize: '0.98rem' }}>
-                        ⚠️ S-a dat 7! {p.name} trebuie să decarteze {needed} cărți ({currentSelected}/{needed})
-                      </h3>
+                <Dialog
+                  key={discardPid}
+                  open
+                  onClose={() => setMinimizedDiscard(true)}
+                  title={`⚠️ S-a dat 7! ${p.name} trebuie să decarteze ${needed} cărți (${currentSelected}/${needed})`}
+                  footer={
+                    <>
                       <button
                         type="button"
                         className="btn"
@@ -5086,8 +5030,22 @@ export const App: React.FC = () => {
                       >
                         👁️ Vezi Harta
                       </button>
-                    </div>
-                    <div className="modal-body">
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={currentSelected !== needed}
+                        onClick={() =>
+                          executeAction(discardPid, {
+                            type: 'discard_cards',
+                            resources: discardSelection
+                          })
+                        }
+                      >
+                        Confirmă Decartarea ({currentSelected}/{needed})
+                      </button>
+                    </>
+                  }
+                >
                       <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
                         {ALL_RESOURCES.map((r) => (
                           <div key={r} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
@@ -5128,23 +5086,7 @@ export const App: React.FC = () => {
                           </div>
                         ))}
                       </div>
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        style={{ width: '100%' }}
-                        disabled={currentSelected !== needed}
-                        onClick={() =>
-                          executeAction(discardPid, {
-                            type: 'discard_cards',
-                            resources: discardSelection
-                          })
-                        }
-                      >
-                        Confirmă Decartarea ({currentSelected}/{needed})
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                </Dialog>
               );
             })}
 
@@ -5154,12 +5096,8 @@ export const App: React.FC = () => {
               deciding; sourced from playerView (not gameState directly) so an online opponent's
               hidden resource count shows correctly instead of the local adapter's 0 placeholder. */}
           {gameState.phase === 'steal_resource' && isHumanTurn && (
-            <div className="modal-backdrop">
-              <div className="modal-dialog" style={{ maxWidth: 480 }}>
-                <div className="modal-header">
-                  <h3>🥷 Alege adversarul de la care furi 1 resursă</h3>
-                </div>
-                <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+            <Dialog open onClose={() => {}} title="🥷 Alege adversarul de la care furi 1 resursă">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
                   {(gameState.robberContext?.eligibleTargetIds ?? []).map((tId) => {
                     const tp = playerView?.players.find((p) => p.id === tId) ?? getPlayerById(gameState, tId);
                     if (!tp) return null;
@@ -5202,8 +5140,7 @@ export const App: React.FC = () => {
                     );
                   })}
                 </div>
-              </div>
-            </div>
+            </Dialog>
           )}
 
           {/* INCOMING TRADE OFFER FOR HUMAN PLAYER (Allows Accept, Reject, Counter-Offer) */}
@@ -5228,30 +5165,151 @@ export const App: React.FC = () => {
             if (!canAfford) return null;
 
             return (
-              <div
-                className="modal-backdrop"
-                onClick={() => dismissTradeOffer(incomingOffer.id, 'Fereastră închisă')}
+              <Dialog
+                open
+                onClose={() => dismissTradeOffer(incomingOffer.id, 'Fereastră închisă')}
+                title={`Ofertă de Schimb de la ${proposer?.name ?? incomingOffer.fromPlayerId}`}
+                footer={
+                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={!canAfford}
+                        onClick={() => {
+                          setDismissedTradeOfferIds((prev) => new Set(prev).add(incomingOffer.id));
+                          executeAction(viewerId, {
+                            type: 'respond_trade',
+                            offerId: incomingOffer.id,
+                            response: 'accept'
+                          });
+                        }}
+                      >
+                        ✅ Acceptă Schimbul
+                      </button>
+                      {/* Split Reject Button with Reason Dropdown */}
+                      <div style={{ position: 'relative', display: 'inline-flex', verticalAlign: 'middle' }}>
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.15)',
+                            borderColor: 'rgba(239, 68, 68, 0.5)',
+                            color: '#fca5a5',
+                            borderTopRightRadius: 0,
+                            borderBottomRightRadius: 0,
+                            borderRight: '1px solid rgba(239, 68, 68, 0.3)'
+                          }}
+                          onClick={() => {
+                            setRejectDropdownOfferId(null);
+                            dismissTradeOffer(incomingOffer.id, 'Refuz');
+                          }}
+                          title={locale === 'ro' ? 'Refuză oferta (rapid)' : 'Reject offer (quick)'}
+                        >
+                          ❌ {locale === 'ro' ? 'Refuză' : 'Reject'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.25)',
+                            borderColor: 'rgba(239, 68, 68, 0.5)',
+                            color: '#fca5a5',
+                            borderTopLeftRadius: 0,
+                            borderBottomLeftRadius: 0,
+                            padding: '0 0.55rem',
+                            fontSize: '0.82rem',
+                            fontWeight: 700
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRejectDropdownOfferId((curr) => (curr === incomingOffer.id ? null : incomingOffer.id));
+                          }}
+                          title={locale === 'ro' ? 'Alege motivul refuzului' : 'Select reason for refusal'}
+                        >
+                          ▾
+                        </button>
+
+                        {rejectDropdownOfferId === incomingOffer.id && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: '115%',
+                              right: 0,
+                              zIndex: 120,
+                              background: '#132337',
+                              border: '1px solid rgba(239, 68, 68, 0.4)',
+                              borderRadius: 8,
+                              padding: '6px',
+                              boxShadow: '0 8px 24px rgba(0,0,0,0.7)',
+                              minWidth: 220,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 4
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', padding: '2px 6px', fontWeight: 600 }}>
+                              {locale === 'ro' ? 'Motivul refuzului:' : 'Reason for decline:'}
+                            </div>
+                            {[
+                              { label: locale === 'ro' ? '🚫 Nu am resursa cerută' : '🚫 Missing requested resource', reason: 'Nu am resursa cerută' },
+                              { label: locale === 'ro' ? '🔒 Nu pot să dau' : '🔒 Cannot give', reason: 'Nu pot să dau' },
+                              { label: locale === 'ro' ? '❌ Refuz' : '❌ Just decline', reason: 'Refuz' },
+                              { label: locale === 'ro' ? '⚖️ Prea scump' : '⚖️ Too expensive', reason: 'Prea scump' }
+                            ].map((item) => (
+                              <button
+                                key={item.reason}
+                                type="button"
+                                className="btn"
+                                style={{
+                                  textAlign: 'left',
+                                  fontSize: '0.78rem',
+                                  padding: '0.35rem 0.6rem',
+                                  background: 'rgba(255, 255, 255, 0.05)',
+                                  borderColor: 'transparent',
+                                  color: '#e2e8f0',
+                                  justifyContent: 'flex-start',
+                                  width: '100%'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                                  e.currentTarget.style.borderColor = 'transparent';
+                                }}
+                                onClick={() => {
+                                  setRejectDropdownOfferId(null);
+                                  dismissTradeOffer(incomingOffer.id, item.reason);
+                                }}
+                              >
+                                {item.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ borderColor: 'var(--accent-gold)', color: 'var(--accent-gold)' }}
+                        onClick={() => {
+                          // Don't reject yet - only the actual counter_trade submission below
+                          // closes this offer (see counter_trade's engine handling: it rejects
+                          // the original AND opens the new one in one atomic action). Canceling
+                          // out of the counter-offer modal should leave the original untouched.
+                          setP2pOffer(createEmptyResources());
+                          setP2pRequest(createEmptyResources());
+                          setCounterOfferOriginalId(incomingOffer.id);
+                          setActiveModal('counter_trade');
+                        }}
+                      >
+                        🔄 Negociază / Contra-ofertă
+                      </button>
+                    </div>
+                }
               >
-                <div
-                  className="modal-dialog"
-                  style={{ maxWidth: 500, borderColor: 'var(--accent-gold)' }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div
-                    className="modal-header"
-                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                  >
-                    <h3 style={{ margin: 0, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <span
-                        className="color-dot"
-                        style={{ backgroundColor: proposer?.color ?? 'var(--accent-gold)', width: 13, height: 13 }}
-                      />
-                      Ofertă de Schimb de la{' '}
-                      <span style={playerBadgeStyle(proposer?.color)}>
-                        {proposer?.name ?? incomingOffer.fromPlayerId}
-                      </span>
-                    </h3>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       {!canAfford && (
                         <span
                           style={{
@@ -5261,24 +5319,14 @@ export const App: React.FC = () => {
                             padding: '2px 8px',
                             borderRadius: 12,
                             fontSize: '0.78rem',
-                            fontWeight: 700
+                            fontWeight: 700,
+                            display: 'inline-block',
+                            marginBottom: '0.6rem'
                           }}
                         >
                           ⚠️ Resurse insuficiente
                         </span>
                       )}
-                      <button
-                        type="button"
-                        className="btn"
-                        style={{ padding: '0.2rem 0.55rem', fontSize: '0.82rem' }}
-                        title="Închide / Refuză oferta"
-                        onClick={() => dismissTradeOffer(incomingOffer.id, 'Fereastră închisă')}
-                      >
-                        ✕ Închide
-                      </button>
-                    </div>
-                  </div>
-                  <div className="modal-body">
                     <div
                       style={{
                         display: 'grid',
@@ -5449,148 +5497,7 @@ export const App: React.FC = () => {
                         </div>
                       </div>
                     )}
-
-                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={!canAfford}
-                        onClick={() => {
-                          setDismissedTradeOfferIds((prev) => new Set(prev).add(incomingOffer.id));
-                          executeAction(viewerId, {
-                            type: 'respond_trade',
-                            offerId: incomingOffer.id,
-                            response: 'accept'
-                          });
-                        }}
-                      >
-                        ✅ Acceptă Schimbul
-                      </button>
-                      {/* Split Reject Button with Reason Dropdown */}
-                      <div style={{ position: 'relative', display: 'inline-flex', verticalAlign: 'middle' }}>
-                        <button
-                          type="button"
-                          className="btn"
-                          style={{
-                            background: 'rgba(239, 68, 68, 0.15)',
-                            borderColor: 'rgba(239, 68, 68, 0.5)',
-                            color: '#fca5a5',
-                            borderTopRightRadius: 0,
-                            borderBottomRightRadius: 0,
-                            borderRight: '1px solid rgba(239, 68, 68, 0.3)'
-                          }}
-                          onClick={() => {
-                            setRejectDropdownOfferId(null);
-                            dismissTradeOffer(incomingOffer.id, 'Refuz');
-                          }}
-                          title={locale === 'ro' ? 'Refuză oferta (rapid)' : 'Reject offer (quick)'}
-                        >
-                          ❌ {locale === 'ro' ? 'Refuză' : 'Reject'}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn"
-                          style={{
-                            background: 'rgba(239, 68, 68, 0.25)',
-                            borderColor: 'rgba(239, 68, 68, 0.5)',
-                            color: '#fca5a5',
-                            borderTopLeftRadius: 0,
-                            borderBottomLeftRadius: 0,
-                            padding: '0 0.55rem',
-                            fontSize: '0.82rem',
-                            fontWeight: 700
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRejectDropdownOfferId((curr) => (curr === incomingOffer.id ? null : incomingOffer.id));
-                          }}
-                          title={locale === 'ro' ? 'Alege motivul refuzului' : 'Select reason for refusal'}
-                        >
-                          ▾
-                        </button>
-
-                        {rejectDropdownOfferId === incomingOffer.id && (
-                          <div
-                            style={{
-                              position: 'absolute',
-                              top: '115%',
-                              right: 0,
-                              zIndex: 120,
-                              background: '#132337',
-                              border: '1px solid rgba(239, 68, 68, 0.4)',
-                              borderRadius: 8,
-                              padding: '6px',
-                              boxShadow: '0 8px 24px rgba(0,0,0,0.7)',
-                              minWidth: 220,
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: 4
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', padding: '2px 6px', fontWeight: 600 }}>
-                              {locale === 'ro' ? 'Motivul refuzului:' : 'Reason for decline:'}
-                            </div>
-                            {[
-                              { label: locale === 'ro' ? '🚫 Nu am resursa cerută' : '🚫 Missing requested resource', reason: 'Nu am resursa cerută' },
-                              { label: locale === 'ro' ? '🔒 Nu pot să dau' : '🔒 Cannot give', reason: 'Nu pot să dau' },
-                              { label: locale === 'ro' ? '❌ Refuz' : '❌ Just decline', reason: 'Refuz' },
-                              { label: locale === 'ro' ? '⚖️ Prea scump' : '⚖️ Too expensive', reason: 'Prea scump' }
-                            ].map((item) => (
-                              <button
-                                key={item.reason}
-                                type="button"
-                                className="btn"
-                                style={{
-                                  textAlign: 'left',
-                                  fontSize: '0.78rem',
-                                  padding: '0.35rem 0.6rem',
-                                  background: 'rgba(255, 255, 255, 0.05)',
-                                  borderColor: 'transparent',
-                                  color: '#e2e8f0',
-                                  justifyContent: 'flex-start',
-                                  width: '100%'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
-                                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                                  e.currentTarget.style.borderColor = 'transparent';
-                                }}
-                                onClick={() => {
-                                  setRejectDropdownOfferId(null);
-                                  dismissTradeOffer(incomingOffer.id, item.reason);
-                                }}
-                              >
-                                {item.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        className="btn"
-                        style={{ borderColor: 'var(--accent-gold)', color: 'var(--accent-gold)' }}
-                        onClick={() => {
-                          // Don't reject yet - only the actual counter_trade submission below
-                          // closes this offer (see counter_trade's engine handling: it rejects
-                          // the original AND opens the new one in one atomic action). Canceling
-                          // out of the counter-offer modal should leave the original untouched.
-                          setP2pOffer(createEmptyResources());
-                          setP2pRequest(createEmptyResources());
-                          setCounterOfferOriginalId(incomingOffer.id);
-                          setActiveModal('counter_trade');
-                        }}
-                      >
-                        🔄 Negociază / Contra-ofertă
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              </Dialog>
             );
           })()}
 
@@ -5771,13 +5678,31 @@ export const App: React.FC = () => {
             const hasLargestArmy = gameState.largestArmyOwnerId === gameState.winnerId;
 
             return (
-              <div className="modal-backdrop">
+              <Dialog
+                open
+                onClose={() => {}}
+                title="🎉 Partidă Finalizată & Salvată Automat!"
+                footer={
+                    <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center' }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => openGameReplay(gameState.gameId)}
+                      >
+                        🎬 Deschide în Replay & Analiză
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => setActiveTab('lobby')}
+                      >
+                        ⚙️ Partidă Nouă
+                      </button>
+                    </div>
+                }
+              >
                 <Confetti />
-                <div className="modal-dialog" style={{ maxWidth: 540, textAlign: 'center' }}>
-                  <div className="modal-header">
-                    <h3>🎉 Partidă Finalizată & Salvată Automat!</h3>
-                  </div>
-                  <div className="modal-body">
+                <div style={{ textAlign: 'center' }}>
                     <h2 style={{ color: 'var(--accent-gold)', marginBottom: '0.4rem' }}>
                       🏆 {winner?.name}{' '}
                       {locale === 'ro' ? 'a câștigat partida!' : 'won the game!'}
@@ -5818,25 +5743,8 @@ export const App: React.FC = () => {
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.84rem', marginBottom: '1rem' }}>
                       Partida ({gameState.gameId}) a fost salvată automat în Istoricul Partidelor pentru analiză pas-cu-pas, evaluarea deciziilor și statistici.
                     </p>
-                    <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center' }}>
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        onClick={() => openGameReplay(gameState.gameId)}
-                      >
-                        🎬 Deschide în Replay & Analiză
-                      </button>
-                      <button
-                        type="button"
-                        className="btn"
-                        onClick={() => setActiveTab('lobby')}
-                      >
-                        ⚙️ Partidă Nouă
-                      </button>
-                    </div>
-                  </div>
                 </div>
-              </div>
+              </Dialog>
             );
           })()}
         </main>
@@ -6140,25 +6048,16 @@ export const App: React.FC = () => {
 
       {/* Modal Confirmare Închidere Partidă pentru Jucătorii Umani din Joc */}
       {inGameTermination && onlineSession && (
-        <div className="modal-backdrop" style={{ zIndex: 9999 }}>
-          <div className="modal-dialog" style={{ maxWidth: 450, border: '2px solid var(--accent-gold)' }}>
-            <div className="modal-header">
-              <h3 style={{ margin: 0, color: 'var(--accent-gold)' }}>⚠️ Cerere de Închidere a Partidei</h3>
-            </div>
-            <div style={{ padding: '1.1rem', display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
-              <p style={{ margin: 0, fontSize: '0.93rem', lineHeight: 1.5 }}>
-                Cineva (un spectator sau un utilizator din lobby) a solicitat oprirea acestei partide. Ești de acord să fie închisă definitiv?
-              </p>
-              <div style={{ background: 'var(--bg-inset)', padding: '0.65rem 0.9rem', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Timp rămas pentru răspuns:</span>
-                <span style={{ fontWeight: 700, fontSize: '1.15rem', color: inGameTerminationCountdown <= 10 ? '#ef4444' : 'var(--accent-gold)' }}>
-                  ⏱️ {inGameTerminationCountdown}s
-                </span>
-              </div>
-              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                * Dacă nimeni nu răspunde până la expirarea celor 30 de secunde, partida se va închide automat. Dacă alegi <strong>„Nu, continuă partida”</strong>, cererea este respinsă definitiv, iar butonul de oprire dispare pentru toată lumea.
-              </p>
-              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: 6 }}>
+        // Wrapped in its own elevated stacking context (position + z-index) so this urgent
+        // alert always renders above any other open Dialog/AdaptiveSurface — both default to
+        // z-50, which only orders by DOM position, and this must win regardless of that.
+        <div style={{ position: 'relative', zIndex: 9999 }}>
+          <Dialog
+            open
+            onClose={() => {}}
+            title="⚠️ Cerere de Închidere a Partidei"
+            footer={
+              <>
                 <button
                   type="button"
                   className="btn btn-primary"
@@ -6195,9 +6094,22 @@ export const App: React.FC = () => {
                 >
                   ⏹️ Da, închide
                 </button>
+              </>
+            }
+          >
+              <p style={{ margin: 0, fontSize: '0.93rem', lineHeight: 1.5 }}>
+                Cineva (un spectator sau un utilizator din lobby) a solicitat oprirea acestei partide. Ești de acord să fie închisă definitiv?
+              </p>
+              <div style={{ background: 'var(--bg-inset)', padding: '0.65rem 0.9rem', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0.9rem 0' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Timp rămas pentru răspuns:</span>
+                <span style={{ fontWeight: 700, fontSize: '1.15rem', color: inGameTerminationCountdown <= 10 ? '#ef4444' : 'var(--accent-gold)' }}>
+                  ⏱️ {inGameTerminationCountdown}s
+                </span>
               </div>
-            </div>
-          </div>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                * Dacă nimeni nu răspunde până la expirarea celor 30 de secunde, partida se va închide automat. Dacă alegi <strong>„Nu, continuă partida”</strong>, cererea este respinsă definitiv, iar butonul de oprire dispare pentru toată lumea.
+              </p>
+          </Dialog>
         </div>
       )}
 
@@ -6206,23 +6118,15 @@ export const App: React.FC = () => {
           button stays disabled while any seat is still "open" — the game cannot begin until
           every intended human has actually joined from their own device. */}
       {onlineLobby && onlineSession && (
-        <div className="modal-backdrop">
-          <div className="modal-dialog" style={{ maxWidth: 480 }}>
-            <div className="modal-header">
-              <h3>🌐 Sală de Așteptare</h3>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => {
-                  setOnlineLobby(null);
-                  setOnlineSession(null);
-                  setOnlineError(null);
-                }}
-              >
-                ✕ Părăsește
-              </button>
-            </div>
-            <div className="modal-body">
+        <AdaptiveSurface
+          open
+          onClose={() => {
+            setOnlineLobby(null);
+            setOnlineSession(null);
+            setOnlineError(null);
+          }}
+          title="🌐 Sală de Așteptare"
+        >
               {onlineLobby.inviteCode && (
                 <div className="invite-banner" style={{ marginBottom: '0.75rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
@@ -6351,27 +6255,17 @@ export const App: React.FC = () => {
                   ⏳ Așteptăm ca gazda să înceapă partida...
                 </p>
               )}
-            </div>
-          </div>
-        </div>
+        </AdaptiveSurface>
       )}
 
       {/* Release Notes — commit log read live from the server, opened by clicking the version
           badge in the header. Available from any tab, not just in-game. */}
       {showReleaseNotes && versionInfo && (
-        <div className="modal-backdrop" onClick={() => setShowReleaseNotes(false)}>
-          <div
-            className="modal-dialog"
-            style={{ maxWidth: 520, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <h3>📋 Note de Lansare — {versionInfo.version}</h3>
-              <button type="button" className="btn" onClick={() => setShowReleaseNotes(false)}>
-                ✕ Închide
-              </button>
-            </div>
-            <div className="modal-body" style={{ overflowY: 'auto' }}>
+        <AdaptiveSurface
+          open
+          onClose={() => setShowReleaseNotes(false)}
+          title={`📋 Note de Lansare — ${versionInfo.version}`}
+        >
               <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: 0 }}>
                 {versionInfo.commitCount} commit-uri · HEAD <code>{versionInfo.shortHash}</code>
               </p>
@@ -6393,9 +6287,7 @@ export const App: React.FC = () => {
                   </li>
                 ))}
               </ul>
-            </div>
-          </div>
-        </div>
+        </AdaptiveSurface>
       )}
 
       {/* Full rulebook — reachable from the lobby's card gallery button, for players who have
@@ -6406,24 +6298,14 @@ export const App: React.FC = () => {
         const scenarioSections = getScenarioRules(activeScenario, locale);
 
         return (
-          <div className="modal-backdrop" onClick={() => setActiveModal('none')}>
-            <div
-              className="modal-dialog"
-              style={{ maxWidth: 680, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="modal-header">
-                <div>
-                  <h3 style={{ margin: 0 }}>📖 {locale === 'ro' ? 'Regulament Oficial' : 'Official Rules'}</h3>
-                  <small style={{ color: 'var(--accent-gold)', fontSize: '0.8rem' }}>
-                    {scenarioLabel}
-                  </small>
-                </div>
-                <button type="button" className="btn" onClick={() => setActiveModal('none')}>
-                  ✕ {locale === 'ro' ? 'Închide' : 'Close'}
-                </button>
-              </div>
-              <div className="modal-body" style={{ overflowY: 'auto' }}>
+          <AdaptiveSurface
+            open
+            onClose={() => setActiveModal('none')}
+            title={`📖 ${locale === 'ro' ? 'Regulament Oficial' : 'Official Rules'}`}
+          >
+                <small style={{ color: 'var(--accent-gold)', fontSize: '0.8rem', display: 'block', marginBottom: '0.75rem' }}>
+                  {scenarioLabel}
+                </small>
                 {scenarioSections.map((section) => (
                   <div key={section.title} className="rules-section" style={{ marginBottom: '1.25rem' }}>
                     <h4 style={{ color: 'var(--accent-gold)', marginBottom: '0.4rem', fontSize: '0.95rem' }}>{section.title}</h4>
@@ -6434,9 +6316,7 @@ export const App: React.FC = () => {
                     </ul>
                   </div>
                 ))}
-              </div>
-            </div>
-          </div>
+          </AdaptiveSurface>
         );
       })()}
     </div>
