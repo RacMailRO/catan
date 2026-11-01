@@ -1,9 +1,109 @@
 {
-  "version": "v1.162",
-  "commitCount": 162,
-  "shortHash": "e8a5985",
-  "buildDate": "2026-10-30T13:44:43.453Z",
+  "version": "v1.182",
+  "commitCount": 182,
+  "shortHash": "dea79e4",
+  "buildDate": "2026-11-01T19:54:02.611Z",
   "releaseNotes": [
+    {
+      "hash": "dea79e4",
+      "date": "2026-11-01",
+      "message": "fix(web): resource-card count badge obscured on real mobile devices"
+    },
+    {
+      "hash": "9627c1b",
+      "date": "2026-11-01",
+      "message": "docs: note that Tailwind CSS compiles automatically during deploy build"
+    },
+    {
+      "hash": "afa4f3d",
+      "date": "2026-11-01",
+      "message": "fix(web): visual refinement pass on Event Log, Costs table, trade builders"
+    },
+    {
+      "hash": "830cfc5",
+      "date": "2026-11-01",
+      "message": "feat(web): add dev-only UI Showcase tab for reviewing components on demand"
+    },
+    {
+      "hash": "1dcb2d7",
+      "date": "2026-11-01",
+      "message": "fix(web): Jurnal/Event Log never opened in online games"
+    },
+    {
+      "hash": "b871fcc",
+      "date": "2026-11-01",
+      "message": "fix(web): mobile in-game HUD overflow + visible AI-thinking indicator"
+    },
+    {
+      "hash": "6d95433",
+      "date": "2026-11-01",
+      "message": "fix(web): fix theme application timing, nav trigger sizing, and reuse the app's real dark palette"
+    },
+    {
+      "hash": "7f7c0dc",
+      "date": "2026-11-01",
+      "message": "refactor(web): migrate hamburger nav onto shared AppNav, wire theming (Phase 7)"
+    },
+    {
+      "hash": "25f5d3b",
+      "date": "2026-11-01",
+      "message": "perf(web): memoize BoardSvg and stabilize its handler/prop references (Phase 6)"
+    },
+    {
+      "hash": "0a9eda1",
+      "date": "2026-11-01",
+      "message": "refactor(web): extract trade/bank/discard state cluster into useTradeState (Phase 5)"
+    },
+    {
+      "hash": "f8121c1",
+      "date": "2026-11-01",
+      "message": "refactor(web): extract lobby/setup screen from App.tsx (Phase 4)"
+    },
+    {
+      "hash": "29daa6d",
+      "date": "2026-11-01",
+      "message": "refactor(web): extract online/session modal content from App.tsx (Phase 3c)"
+    },
+    {
+      "hash": "761e6fe",
+      "date": "2026-11-01",
+      "message": "refactor(web): extract trade/dev-card modal content from App.tsx (Phase 3b)"
+    },
+    {
+      "hash": "b7748a8",
+      "date": "2026-11-01",
+      "message": "refactor(web): extract read-only surface content from App.tsx (Phase 3a)"
+    },
+    {
+      "hash": "704b7de",
+      "date": "2026-11-01",
+      "message": "feat(web): allow rich title content in Dialog/AdaptiveSurface"
+    },
+    {
+      "hash": "0004bc4",
+      "date": "2026-11-01",
+      "message": "fix(web): make Dialog always stack above AdaptiveSurface"
+    },
+    {
+      "hash": "0dcab4d",
+      "date": "2026-11-01",
+      "message": "refactor(web): migrate hand-rolled modals to Dialog/AdaptiveSurface"
+    },
+    {
+      "hash": "7951550",
+      "date": "2026-11-01",
+      "message": "feat(web): add Tailwind v3 setup, design tokens, and reusable UI primitives"
+    },
+    {
+      "hash": "df53c5a",
+      "date": "2026-11-01",
+      "message": "test: add jsdom/RTL render-test infra and App.tsx smoke coverage"
+    },
+    {
+      "hash": "5d0e1e0",
+      "date": "2026-10-30",
+      "message": "chore: sync version to v1.162"
+    },
     {
       "hash": "e8a5985",
       "date": "2026-10-30",
@@ -153,106 +253,6 @@
       "hash": "9576ad4",
       "date": "2026-10-27",
       "message": "fix(board): fix coastline shoreline to strictly hug land-water boundaries instead of raw hex perimeter"
-    },
-    {
-      "hash": "c6ae734",
-      "date": "2026-10-27",
-      "message": "feat(sandbox): enforce exact Catan placement rules and align boat angles with edge directions"
-    },
-    {
-      "hash": "7b85d10",
-      "date": "2026-10-27",
-      "message": "fix(board): restore letter labels on expansion/seafarers number tokens and fix gold field cropping center"
-    },
-    {
-      "hash": "6826326",
-      "date": "2026-10-27",
-      "message": "fix(board): remove outer blue frame, accurately bind harbor hex tiles to exact coastal edges, and align dock rotation"
-    },
-    {
-      "hash": "9997d50",
-      "date": "2026-10-27",
-      "message": "fix(sandbox): guard board properties and fix generateStandardBoard state unwrapping"
-    },
-    {
-      "hash": "42111ba",
-      "date": "2026-10-27",
-      "message": "fix(harbors): ancoreaza porturile exclusiv pe coasta insulelor de uscat si adauga ponton vizual catre apa"
-    },
-    {
-      "hash": "efd4372",
-      "date": "2026-10-27",
-      "message": "fix(board): aliniere simetrica orizontala a hartilor navigatori si scenariul oficial Fog Island din poza (97 hexuri)"
-    },
-    {
-      "hash": "8535c38",
-      "date": "2026-10-27",
-      "message": "feat(sandbox): adaugare mediu de test local, remediere decupare camp de aur si suport plasare piese"
-    },
-    {
-      "hash": "625b1dd",
-      "date": "2026-10-27",
-      "message": "feat: isometric 3/4 front-perspective ship models with wooden hull and player-colored billowing sails"
-    },
-    {
-      "hash": "7c61980",
-      "date": "2026-10-27",
-      "message": "chore: bump version to v1.123"
-    },
-    {
-      "hash": "22e2eaa",
-      "date": "2026-10-27",
-      "message": "feat: catan seafarers (navigatori) expansion, ships, gold fields, and custom scenarios (world map, shores, islands, fog)"
-    },
-    {
-      "hash": "a11a294",
-      "date": "2026-10-27",
-      "message": "chore: bump version to v1.121"
-    },
-    {
-      "hash": "f15a97a",
-      "date": "2026-10-27",
-      "message": "chore: use tsx watch for server dev script"
-    },
-    {
-      "hash": "646ff9d",
-      "date": "2026-10-27",
-      "message": "chore: bump version to v1.119"
-    },
-    {
-      "hash": "7c7dab5",
-      "date": "2026-10-27",
-      "message": "fix: align 5-6 player expansion sea border & ports, add terminate game endpoint, fix spectator board height & resize, add explicit turn status and show built piece counts in HUD"
-    },
-    {
-      "hash": "e7a4179",
-      "date": "2026-10-27",
-      "message": "fix(board,web): harbor placement centering bug, dev-mode false update banner, gold->white color"
-    },
-    {
-      "hash": "3c2c064",
-      "date": "2026-10-27",
-      "message": "fix(board): correct a shear bug in the expansion board's hex coordinates"
-    },
-    {
-      "hash": "568c0fd",
-      "date": "2026-10-27",
-      "message": "fix(board): correct the 5-6 Player Expansion's hex shape to match the real board"
-    },
-    {
-      "hash": "640f37f",
-      "date": "2026-10-27",
-      "message": "feat(web): update-available banner, revert board-layout choice, balance expansion tokens, real special-card art"
-    },
-    {
-      "hash": "74fd552",
-      "date": "2026-10-27",
-      "message": "docs(deploy): rewrite DEPLOY.md for the actual FTP-only workflow"
-    },
-    {
-      "hash": "b102ad3",
-      "date": "2026-10-27",
-      "message": "feat(board): add the 5-6 Player Expansion board scenario"
     }
   ]
 }

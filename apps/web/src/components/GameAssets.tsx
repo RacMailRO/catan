@@ -122,6 +122,25 @@ export function renderResourceTokens(text: string): React.ReactNode {
     i % 2 === 1 ? <ResourceIcon key={i} resource={part as ResourceType} /> : <React.Fragment key={i}>{part}</React.Fragment>
   );
 }
+export interface CardBadgeProps {
+  count?: number;
+  className?: string;
+}
+
+/**
+ * Reusable top-right corner count badge for any game card.
+ * When count === 0: renders muted style.
+ * When count > 0: renders highlighted gold style (.has-items).
+ */
+export const CardBadge: React.FC<CardBadgeProps> = ({ count, className = '' }) => {
+  if (count === undefined) return null;
+  return (
+    <span className={`sprite-card-count ${count > 0 ? 'has-items' : ''} ${className}`}>
+      {count}
+    </span>
+  );
+};
+
 export interface ResourceCardSpriteProps {
   resource: ResourceType;
   count: number;
@@ -155,20 +174,16 @@ export const ResourceCardSprite: React.FC<ResourceCardSpriteProps> = ({
       style={{
         width: dimensions.width,
         height: dimensions.height,
-        // Reserves room for the count badge below the card (see .sprite-card-count), as part
-        // of the card's own box so normal document flow pushes whatever comes after it down -
-        // a caller that forgets this can no longer let the badge get obscured by content below.
-        marginBottom: 22,
         backgroundImage: 'url("/cards.jpg")',
         backgroundSize: '500% 400%',
         backgroundPosition: `${pos.x} ${pos.y}`,
         cursor: onClick ? 'pointer' : 'default'
       }}
     >
-      <span className={`sprite-card-count ${count > 0 ? 'has-items' : ''}`}>{count}</span>
-      {size !== 'xs' && (
-        <span className="sprite-card-label">{RESOURCE_LABELS[locale][resource]}</span>
-      )}
+      <CardBadge count={count} />
+      <span className={`sprite-card-label ${size === 'xs' ? 'sprite-card-label-xs' : ''}`}>
+        {RESOURCE_LABELS[locale][resource]}
+      </span>
     </div>
   );
 };
@@ -210,49 +225,54 @@ export const DevCardSprite: React.FC<DevCardSpriteProps> = ({
   const fullLabel = type === 'back' ? 'Catan' : DEV_CARD_LABELS[locale][type];
   const label = type === 'back' ? 'Catan' : DEV_CARD_SHORT_LABELS[locale][type];
 
+  const cardContent = (
+    <div
+      className={`sprite-card sprite-card-${size} ${canPlay ? 'selected' : ''}`}
+      onClick={canPlay && onPlay && !actionLabel ? onPlay : undefined}
+      title={fullLabel}
+      style={{
+        width: dimensions.width,
+        height: dimensions.height,
+        backgroundImage: 'url("/cards.jpg")',
+        backgroundSize: '500% 400%',
+        backgroundPosition: `${pos.x} ${pos.y}`,
+        cursor: (canPlay && onPlay) || onClickDefault(canPlay, onPlay, actionLabel) ? 'pointer' : 'default'
+      }}
+    >
+      <CardBadge count={count} />
+      {isNew && (
+        <span
+          style={{
+            position: 'absolute',
+            top: 4,
+            left: 4,
+            background: 'rgba(15, 23, 42, 0.88)',
+            color: '#facc15',
+            fontSize: '0.62rem',
+            padding: '1px 5px',
+            borderRadius: 4,
+            fontWeight: 700,
+            border: '1px solid #facc15'
+          }}
+        >
+          {locale === 'ro' ? 'NOUĂ' : 'NEW'}
+        </span>
+      )}
+      <span className={`sprite-card-label ${size === 'xs' ? 'sprite-card-label-xs' : ''}`}>{label}</span>
+    </div>
+  );
+
+  if (size === 'xs' && !actionLabel) {
+    return cardContent;
+  }
+
   return (
     <div
       className={`dev-card-wrapper ${canPlay ? 'playable' : ''}`}
       style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}
     >
-      <div
-        className={`sprite-card ${canPlay ? 'selected' : ''}`}
-        onClick={canPlay && onPlay ? onPlay : undefined}
-        title={fullLabel}
-        style={{
-          width: dimensions.width,
-          height: dimensions.height,
-          backgroundImage: 'url("/cards.jpg")',
-          backgroundSize: '500% 400%',
-          backgroundPosition: `${pos.x} ${pos.y}`,
-          cursor: canPlay && onPlay ? 'pointer' : 'default'
-        }}
-      >
-        {count !== undefined && (
-          <span className="sprite-card-count has-items">x{count}</span>
-        )}
-        {isNew && (
-          <span
-            style={{
-              position: 'absolute',
-              top: 4,
-              left: 4,
-              background: 'rgba(15, 23, 42, 0.88)',
-              color: '#facc15',
-              fontSize: '0.62rem',
-              padding: '1px 5px',
-              borderRadius: 4,
-              fontWeight: 700,
-              border: '1px solid #facc15'
-            }}
-          >
-            {locale === 'ro' ? 'NOUĂ' : 'NEW'}
-          </span>
-        )}
-        <span className={`sprite-card-label ${size === 'xs' ? 'sprite-card-label-xs' : ''}`}>{label}</span>
-      </div>
-
-      {canPlay && onPlay && (
+      {cardContent}
+      {canPlay && onPlay && actionLabel && (
         <button
           type="button"
           className="btn btn-primary"
@@ -262,6 +282,47 @@ export const DevCardSprite: React.FC<DevCardSpriteProps> = ({
           {actionLabel ?? (locale === 'ro' ? 'Joacă' : 'Play')}
         </button>
       )}
+    </div>
+  );
+};
+
+function onClickDefault(canPlay: boolean, onPlay?: () => void, actionLabel?: string): boolean {
+  return Boolean(canPlay && onPlay && !actionLabel);
+}
+
+export interface CostCardThumbProps {
+  locale: Locale;
+  onClick?: () => void;
+  size?: 'xs' | 'sm' | 'md';
+}
+
+/**
+ * Reusable building costs shortcut card.
+ * Styled with identical dimensions, borders, and label as resource and dev cards.
+ */
+export const CostCardThumb: React.FC<CostCardThumbProps> = ({ locale, onClick, size = 'xs' }) => {
+  const dimensions =
+    size === 'xs'
+      ? { width: 38, height: 56 }
+      : size === 'sm'
+      ? { width: 50, height: 74 }
+      : { width: 64, height: 96 };
+
+  return (
+    <div
+      className={`cost-card-thumb sprite-card sprite-card-${size}`}
+      onClick={onClick}
+      title={locale === 'ro' ? 'Vezi Tabelul de Costuri' : 'View the Cost Table'}
+      style={{
+        width: dimensions.width,
+        height: dimensions.height,
+        cursor: onClick ? 'pointer' : 'default'
+      }}
+    >
+      <span style={{ fontSize: size === 'xs' ? '1.15rem' : '1.5rem', userSelect: 'none' }}>📋</span>
+      <span className={`sprite-card-label ${size === 'xs' ? 'sprite-card-label-xs' : ''}`}>
+        {locale === 'ro' ? 'Costuri' : 'Costs'}
+      </span>
     </div>
   );
 };
@@ -300,20 +361,21 @@ const PIP_COORDS: Record<number, Array<[number, number]>> = {
   ]
 };
 
-const DieFaceSvg: React.FC<{ value: number; isRolling: boolean; accentRed?: boolean }> = ({
+const DieFaceSvg: React.FC<{ value: number; isRolling: boolean; accentRed?: boolean; size?: number }> = ({
   value,
   isRolling,
-  accentRed = false
+  accentRed = false,
+  size = 32
 }) => {
   const pips = PIP_COORDS[value] ?? PIP_COORDS[1]!;
   return (
     <svg
-      width={44}
-      height={44}
+      width={size}
+      height={size}
       viewBox="0 0 48 48"
       className={isRolling ? 'die-rolling-anim' : 'die-settled-anim'}
       style={{
-        filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.55))',
+        filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.55))',
         flexShrink: 0
       }}
     >
@@ -417,33 +479,30 @@ export const AnimatedDiceWidget: React.FC<AnimatedDiceWidgetProps> = ({
       style={{ cursor: canRoll ? 'pointer' : 'default' }}
       title={canRoll ? (locale === 'ro' ? 'Apasă pentru a da cu zarul!' : 'Click to roll dice!') : undefined}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <DieFaceSvg value={displayDie1} isRolling={isRolling} accentRed={false} />
-        <DieFaceSvg value={displayDie2} isRolling={isRolling} accentRed={true} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+        <DieFaceSvg value={displayDie1} isRolling={isRolling} accentRed={false} size={30} />
+        <DieFaceSvg value={displayDie2} isRolling={isRolling} accentRed={true} size={30} />
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 78 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', minWidth: 64 }}>
         {isRolling ? (
-          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-gold)' }}>
+          <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--accent-gold)', whiteSpace: 'nowrap' }}>
             🎲 {locale === 'ro' ? 'Se învârt...' : 'Rolling...'}
           </span>
         ) : total !== undefined ? (
-          <>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-              {locale === 'ro' ? `Zar Tura ${turn}` : `Turn ${turn} Roll`}
-            </span>
-            <span
-              style={{
-                fontSize: '1.05rem',
-                fontWeight: 800,
-                color: isSeven ? '#ef4444' : total === 6 || total === 8 ? '#f59e0b' : '#38bdf8'
-              }}
-            >
-              {die1} + {die2} = {total} {isSeven ? '🥷' : ''}
-            </span>
-          </>
+          <span
+            style={{
+              fontSize: '0.82rem',
+              fontWeight: 800,
+              lineHeight: 1.15,
+              whiteSpace: 'nowrap',
+              color: isSeven ? '#ef4444' : total === 6 || total === 8 ? '#f59e0b' : '#38bdf8'
+            }}
+          >
+            {die1} + {die2} = {total} {isSeven ? '🥷' : ''}
+          </span>
         ) : (
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
             {locale === 'ro' ? 'Așteptare zar' : 'Waiting roll'}
           </span>
         )}
@@ -452,13 +511,13 @@ export const AnimatedDiceWidget: React.FC<AnimatedDiceWidgetProps> = ({
           <button
             type="button"
             className="btn btn-primary"
-            style={{ padding: '2px 8px', fontSize: '0.74rem', marginTop: 3 }}
+            style={{ padding: '1px 6px', fontSize: '0.68rem', marginTop: 2, whiteSpace: 'nowrap', lineHeight: 1.2 }}
             onClick={(e) => {
               e.stopPropagation();
               onRollClick();
             }}
           >
-            🎲 {locale === 'ro' ? 'Dă cu zarul!' : 'Roll Dice!'}
+            🎲 {locale === 'ro' ? 'Dă cu zarul!' : 'Roll!'}
           </button>
         )}
       </div>

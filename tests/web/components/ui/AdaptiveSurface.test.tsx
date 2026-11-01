@@ -63,7 +63,7 @@ describe('AdaptiveSurface', () => {
     expect(screen.getByRole('dialog', { name: 'Trade' })).toBeInTheDocument();
   });
 
-  it('calls onClose from the close button and backdrop click', async () => {
+  it('calls onClose from the close button, header, and backdrop click', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     render(
@@ -74,7 +74,10 @@ describe('AdaptiveSurface', () => {
     await user.click(screen.getByRole('button', { name: 'Close' }));
     expect(onClose).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByRole('presentation'));
+    await user.click(screen.getByRole('heading', { name: 'Trade' }));
     expect(onClose).toHaveBeenCalledTimes(2);
+
+    await user.click(screen.getByRole('presentation'));
+    expect(onClose).toHaveBeenCalledTimes(3);
   });
 });

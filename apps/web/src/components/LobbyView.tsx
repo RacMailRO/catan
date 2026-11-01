@@ -371,7 +371,7 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
                             style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
                             onClick={() => onSpectate(l.gameId!)}
                           >
-                            👁️ {locale === 'ro' ? 'Spectează' : 'Spectate'}
+                            👁️ {locale === 'ro' ? 'Urmărește partida' : 'Watch Game'}
                           </button>
                         )}
                         {l.terminationDismissed ? (

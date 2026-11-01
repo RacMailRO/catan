@@ -1,24 +1,59 @@
 import React from 'react';
-import { ALL_RESOURCES, BUILDING_COSTS, ResourceCount } from '@catan/core';
+import { ALL_RESOURCES, BUILDING_COSTS, ResourceCount, ResourceType } from '@catan/core';
 import { ResourceIcon } from '../GameAssets';
 import { Locale } from '../../i18n';
+
+export interface ResourceCostBadgeProps {
+  resource: ResourceType;
+  amount: number;
+  locale?: Locale;
+}
+
+/**
+ * Reusable single-cost pill showing resource card graphic and required count.
+ */
+export const ResourceCostBadge: React.FC<ResourceCostBadgeProps> = ({ resource, amount, locale = 'ro' }) => (
+  <div className="inline-flex items-center gap-1.5 rounded-md border border-line/60 bg-black/25 px-2 py-0.5 shadow-sm flex-shrink-0">
+    <ResourceIcon resource={resource} height={28} locale={locale} />
+    <span className="text-sm font-extrabold text-ink">{amount}</span>
+  </div>
+);
+
+export interface CostItemRowProps {
+  label: string;
+  vp: string;
+  cost: ResourceCount;
+  locale: Locale;
+}
+
+/**
+ * Reusable single-building cost row with title, VP reward, and single-row resource tokens.
+ */
+export const CostItemRow: React.FC<CostItemRowProps> = ({ label, vp, cost, locale }) => (
+  <div className="flex flex-col gap-1 rounded-lg border border-line bg-surfaceMuted/50 px-3 py-2 transition-colors hover:border-amber-400/40">
+    <div className="flex items-center justify-between">
+      <strong className="text-sm font-bold text-ink">{label}</strong>
+      <span className="text-xs font-extrabold text-amber-500 sm:text-sm">{vp}</span>
+    </div>
+    {/* All resource costs guaranteed on ONE single row, no wrapping */}
+    <div className="flex flex-row flex-nowrap items-center gap-2 overflow-x-auto py-0.5">
+      {ALL_RESOURCES.filter((r) => cost[r] > 0).map((r) => (
+        <ResourceCostBadge key={r} resource={r} amount={cost[r]} locale={locale} />
+      ))}
+    </div>
+  </div>
+);
 
 export interface CostsHelpProps {
   /** Active UI locale, used for labels. */
   locale: Locale;
-  /** Whether the active scenario (in-game) or lobby scenario uses ships, so the Ship row
-   *  is included in the costs table. Omit/false when no game is active. */
+  /** Whether the active scenario uses ships, so the Ship row is included. */
   hasShipsInScenario: boolean;
 }
 
 /** Building-cost and victory-point reference table, built live from BUILDING_COSTS so it
- *  always matches the active rules (rather than a static, single-language reference image). */
+ *  always matches the active rules. Compact single-row layout that fits without scrolling. */
 export const CostsHelp: React.FC<CostsHelpProps> = ({ locale, hasShipsInScenario }) => {
-  // Built from BUILDING_COSTS directly (always matches the real rules, in whatever
-  // language is active) rather than a baked-in reference image - cost.jpg had no
-  // Romanian or English version, only Spanish ("Carretera", "Poblado"...), which a
-  // flat image can't fix per-locale the way every other card in the game already
-  // shows translated text: blank/textless art with the label drawn separately.
   const rows: { key: string; label: string; cost: ResourceCount; vp: string }[] = [
     { key: 'road', label: locale === 'ro' ? 'Drum' : 'Road', cost: BUILDING_COSTS.road, vp: '0 VP' },
     ...(hasShipsInScenario
@@ -28,59 +63,22 @@ export const CostsHelp: React.FC<CostsHelpProps> = ({ locale, hasShipsInScenario
     { key: 'city', label: locale === 'ro' ? 'Oraș' : 'City', cost: BUILDING_COSTS.city, vp: '2 VP' },
     { key: 'dev_card', label: locale === 'ro' ? 'Carte de Dezvoltare' : 'Development Card', cost: BUILDING_COSTS.dev_card, vp: locale === 'ro' ? '? VP (variază)' : '? VP (varies)' }
   ];
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div className="flex flex-col gap-2">
       {rows.map((row) => (
-        <div
+        <CostItemRow
           key={row.key}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8,
-            background: 'var(--bg-inset)',
-            border: '1px solid var(--border-color-soft)',
-            borderRadius: 10,
-            padding: '0.65rem 1rem'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <strong style={{ fontSize: '1.05rem', color: 'var(--parchment)' }}>
-              {row.label}
-            </strong>
-            <span style={{ color: 'var(--accent-gold)', fontWeight: 800, fontSize: '1.05rem' }}>
-              {row.vp}
-            </span>
-          </div>
-          {/* Cards flow left-to-right and wrap as a row of their own, not squeezed by the
-              label/VP text sharing the same row - that's what forced one-per-line before. */}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {ALL_RESOURCES.filter((r) => row.cost[r] > 0).map((r) => (
-              <div
-                key={r}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  background: 'rgba(0, 0, 0, 0.35)',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
-                  borderRadius: 8,
-                  padding: '4px 10px',
-                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.3)'
-                }}
-              >
-                <ResourceIcon resource={r} height={52} />
-                <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#fff' }}>
-                  {row.cost[r]}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
+          label={row.label}
+          vp={row.vp}
+          cost={row.cost}
+          locale={locale}
+        />
       ))}
-      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: 6, padding: '0.45rem', background: 'rgba(0, 0, 0, 0.2)', borderRadius: 6 }}>
+      <div className="mt-1 rounded-md bg-black/20 px-2.5 py-1.5 text-center text-xs text-inkSoft">
         {locale === 'ro'
-          ? '🛣️ Drumul cel mai Lung (min. 5 drumuri): +2 VP  ·  ⚔️ Armata cea mai Mare (min. 3 Cavaleri): +2 VP'
-          : '🛣️ Longest Road (5+ roads): +2 VP  ·  ⚔️ Largest Army (3+ Knights): +2 VP'}
+          ? '🛣️ Drumul cel mai Lung (min. 5): +2 VP  ·  ⚔️ Armata cea mai Mare (min. 3 Cavaleri): +2 VP'
+          : '🛣️ Longest Road (5+): +2 VP  ·  ⚔️ Largest Army (3+ Knights): +2 VP'}
       </div>
     </div>
   );

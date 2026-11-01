@@ -34,13 +34,15 @@ function useIsCompactViewport(): boolean {
 export interface AdaptiveSurfaceProps {
   /** Whether the surface is visible. When false, nothing is rendered. */
   open: boolean;
-  /** Called when the user dismisses the surface (backdrop click or close control). */
+  /** Called when the user dismisses the surface (backdrop click, header click, or close button). */
   onClose: () => void;
   /** Title shown in the surface header. Usually plain text, but accepts rich content
    *  (e.g. a styled badge or subtitle) for callers that need it. */
   title: React.ReactNode;
   /** Main surface content. */
   children: React.ReactNode;
+  /** Whether the body content is vertically scrollable. Defaults to true. When false, avoids scrollbars. */
+  scrollable?: boolean;
 }
 
 /**
@@ -49,14 +51,20 @@ export interface AdaptiveSurfaceProps {
  * The breakpoint is tracked via matchMedia rather than CSS alone, since the two presentations
  * need different DOM/animation treatment.
  */
-export function AdaptiveSurface({ open, onClose, title, children }: AdaptiveSurfaceProps): React.ReactElement | null {
+export function AdaptiveSurface({
+  open,
+  onClose,
+  title,
+  children,
+  scrollable = true
+}: AdaptiveSurfaceProps): React.ReactElement | null {
   const isCompact = useIsCompactViewport();
   const titleId = useId();
 
   if (!open) return null;
 
   const panelPositionClasses = isCompact
-    ? 'inset-x-0 bottom-0 max-h-[85vh] rounded-t-2xl animate-[slideUp_0.2s_ease-out]'
+    ? 'inset-x-0 bottom-0 max-h-[90vh] rounded-t-2xl animate-[slideUp_0.2s_ease-out]'
     : 'inset-y-0 right-0 h-full w-full max-w-md animate-[slideIn_0.2s_ease-out]';
 
   return (
@@ -73,22 +81,38 @@ export function AdaptiveSurface({ open, onClose, title, children }: AdaptiveSurf
         onClick={(event) => event.stopPropagation()}
       >
         {isCompact ? (
-          <div className="flex justify-center pt-2">
+          <div
+            className="flex cursor-pointer justify-center pt-2.5 pb-1 select-none transition-opacity hover:opacity-75"
+            onClick={onClose}
+            title="Apasă pentru a închide / Click to close"
+          >
             <div className="h-1.5 w-12 rounded-full bg-line" aria-hidden="true" />
           </div>
         ) : null}
-        <div className="flex items-center justify-between border-b border-line px-5 py-4">
-          <h2 id={titleId} className="text-lg font-semibold text-ink">{title}</h2>
+        {/* Header - entire bar triggers close on click */}
+        <div
+          onClick={onClose}
+          className="group flex cursor-pointer select-none items-center justify-between border-b border-line px-5 py-3.5 transition-colors hover:bg-surfaceMuted/60"
+          title="Apasă oriunde pe antet sau pe butonul X pentru a închide / Click header or X to close"
+        >
+          <h2 id={titleId} className="flex-1 pr-2 text-base font-semibold text-ink sm:text-lg">
+            {title}
+          </h2>
           <button
             type="button"
-            onClick={onClose}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
             aria-label="Close"
-            className="rounded px-2 py-1 text-inkSoft hover:bg-surfaceMuted hover:text-ink"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-line bg-surfaceMuted font-bold text-ink shadow-sm transition-all hover:border-red-400 hover:bg-red-500/20 hover:text-red-400 focus:outline-none focus:ring-2 focus:ring-accent"
           >
-            ×
+            <span className="text-lg leading-none">✕</span>
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div className={`flex-1 ${scrollable ? 'overflow-y-auto' : 'overflow-hidden'} px-5 py-4`}>
+          {children}
+        </div>
       </div>
     </div>
   );

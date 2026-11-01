@@ -1,6 +1,6 @@
 import React from 'react';
 import { ALL_RESOURCES, INITIAL_PLAYER_PIECES, PlayerView, ResourceType } from '@catan/core';
-import { ResourceCardSprite, ResourceIcon } from '../GameAssets';
+import { ResourceIcon } from '../GameAssets';
 import { Locale, RESOURCE_LABELS, TRANSLATIONS } from '../../i18n';
 
 export interface ScoreBankProps {
@@ -76,23 +76,10 @@ export const ScoreBank: React.FC<ScoreBankProps> = ({
                 </span>
               </div>
 
-              {p.resources ? (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'center', marginTop: 2 }}>
-                  {ALL_RESOURCES.map((r) => {
-                    const gain = resourceGainFlash[p.id]?.[r];
-                    return (
-                      <div key={r} style={{ position: 'relative' }}>
-                        <ResourceCardSprite resource={r} count={p.resources![r]} locale={locale} size="xs" />
-                        {gain ? <span className="resource-gain-flash">+{gain}</span> : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.2rem 0' }}>
-                  🎴 {p.resourceCount} resurse · 🃏 {p.devCardCount} dezvoltare
-                </div>
-              )}
+              {/* Resource & Dev Card Summary (compact & uniform for all players; local human's full cards are permanent in bottom dock) */}
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.2rem 0' }}>
+                🎴 {p.resourceCount} {locale === 'ro' ? 'resurse' : 'resources'} · 🃏 {p.devCardCount} {locale === 'ro' ? 'dezvoltare' : 'dev cards'}
+              </div>
 
               <div className="player-grid-stats">
                 {/* Pieces placed vs the fixed physical supply (5 settlements / 4

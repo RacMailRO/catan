@@ -54,6 +54,7 @@ import {
   Confetti,
   DevCardSprite,
   ResourceCardSprite,
+  CostCardThumb,
   playerBadgeStyle
 } from './components/GameAssets';
 import { ScoreBank } from './components/game/ScoreBank';
@@ -2791,52 +2792,56 @@ export const App: React.FC = () => {
                   )}
                 </div>
               )}
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => setActiveModal('score_bank')}
-                style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}
-              >
-                👥 {locale === 'ro' ? 'Scor & Bancă' : 'Scores & Bank'}
-              </button>
-
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setActiveModal('event_log')}
-                style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}
-              >
-                📜 {locale === 'ro' ? 'Jurnal' : 'Log'} ({currentEvents.length})
-              </button>
-
-              {turnTimeLeft !== null && (
-                <div
-                  className="turn-timer-badge"
-                  style={{
-                    pointerEvents: 'auto',
-                    borderColor: turnTimeLeft <= 10 ? 'var(--accent-red)' : 'var(--accent-gold)',
-                    color: turnTimeLeft <= 10 ? 'var(--accent-red)' : 'var(--accent-gold-bright)'
-                  }}
+              {/* Action row: Scor & Bancă (left), Dice (center), Jurnal & Timer (right) */}
+              <div className="board-top-controls">
+                <button
+                  type="button"
+                  className="btn btn-primary top-ctrl-btn"
+                  onClick={() => setActiveModal('score_bank')}
+                  title={locale === 'ro' ? 'Vezi Clasament & Bancă' : 'View Scores & Bank'}
                 >
-                  ⏱️ {turnTimeLeft}s
-                </div>
-              )}
+                  👥 {locale === 'ro' ? 'Scor & Bancă' : 'Scores & Bank'}
+                </button>
 
-              {/* Animated Dice Roll Widget in Top-Right of the Board */}
-              <AnimatedDiceWidget
-                die1={gameState.lastDiceRoll?.die1}
-                die2={gameState.lastDiceRoll?.die2}
-                total={gameState.lastDiceRoll?.total}
-                turn={gameState.turn}
-                rollTriggerKey={diceRollAnimKey}
-                canRoll={gameState.phase === 'turn_start' && isHumanTurn}
-                onRollClick={() => {
-                  if (activePlayerObj) {
-                    executeAction(activePlayerObj.id, { type: 'roll_dice' });
-                  }
-                }}
-                locale={locale}
-              />
+                {/* Animated Dice Roll Widget centered between the two buttons */}
+                <AnimatedDiceWidget
+                  die1={gameState.lastDiceRoll?.die1}
+                  die2={gameState.lastDiceRoll?.die2}
+                  total={gameState.lastDiceRoll?.total}
+                  turn={gameState.turn}
+                  rollTriggerKey={diceRollAnimKey}
+                  canRoll={gameState.phase === 'turn_start' && isHumanTurn}
+                  onRollClick={() => {
+                    if (activePlayerObj) {
+                      executeAction(activePlayerObj.id, { type: 'roll_dice' });
+                    }
+                  }}
+                  locale={locale}
+                />
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, pointerEvents: 'auto' }}>
+                  <button
+                    type="button"
+                    className="btn top-ctrl-btn"
+                    onClick={() => setActiveModal('event_log')}
+                    title={locale === 'ro' ? 'Deschide Jurnalul de acțiuni' : 'Open Event Log'}
+                  >
+                    📜 {locale === 'ro' ? 'Jurnal' : 'Log'} ({currentEvents.length})
+                  </button>
+
+                  {turnTimeLeft !== null && (
+                    <div
+                      className="turn-timer-badge"
+                      style={{
+                        borderColor: turnTimeLeft <= 10 ? 'var(--accent-red)' : 'var(--accent-gold)',
+                        color: turnTimeLeft <= 10 ? 'var(--accent-red)' : 'var(--accent-gold-bright)'
+                      }}
+                    >
+                      ⏱️ {turnTimeLeft}s
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             {actionError && (
@@ -2968,7 +2973,7 @@ export const App: React.FC = () => {
 
                   <div
                     onClick={() => setActiveModal('dev_cards')}
-                    style={STYLE_DOCK_DEV_CARD_CLICKABLE}
+                    style={STYLE_RESOURCE_SLOT}
                     title={locale === 'ro' ? 'Deschide Cărțile de Dezvoltare' : 'Open Development Cards'}
                   >
                     <DevCardSprite
@@ -2980,19 +2985,11 @@ export const App: React.FC = () => {
                     />
                   </div>
 
-                  {/* Small cost-card thumbnail right next to the resources the player holds -
-                      clicking it opens the same full Cost Table modal as the sidebar button, so
-                      build/dev-card costs are one click away from where the resources are shown. */}
-                  <div
-                    className="cost-card-thumb"
+                  <CostCardThumb
+                    size="xs"
+                    locale={locale}
                     onClick={() => setActiveModal('costs_help')}
-                    title={locale === 'ro' ? 'Vezi Tabelul de Costuri' : 'View the Cost Table'}
-                  >
-                    📋
-                    <span className="sprite-card-label sprite-card-label-xs">
-                      {locale === 'ro' ? 'Costuri' : 'Costs'}
-                    </span>
-                  </div>
+                  />
                 </div>
 
                 {/* Actions Row: Underneath the cards, ZERO SCROLL */}
@@ -3371,11 +3368,12 @@ export const App: React.FC = () => {
               open
               onClose={() => setActiveModal('none')}
               title={locale === 'ro' ? '📋 Tabel Costuri Construcții & Puncte de Victorie' : '📋 Building Costs & Victory Point Table'}
+              scrollable={false}
             >
-                  <CostsHelp
-                    locale={locale}
-                    hasShipsInScenario={Boolean(gameState && isScenarioWithShips(gameState.rules.boardScenario))}
-                  />
+              <CostsHelp
+                locale={locale}
+                hasShipsInScenario={Boolean(gameState && isScenarioWithShips(gameState.rules.boardScenario))}
+              />
             </AdaptiveSurface>
           )}
 

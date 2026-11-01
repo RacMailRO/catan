@@ -388,10 +388,28 @@ select:focus,
   right: 10px;
   z-index: 10;
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 0.4rem;
   pointer-events: none;
+}
+
+.board-top-controls {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.top-ctrl-btn {
+  pointer-events: auto;
+  font-size: 0.82rem;
+  padding: 0.35rem 0.65rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .phase-pill {
@@ -674,23 +692,23 @@ select:focus,
 
 .sprite-card-count {
   position: absolute;
-  top: auto;
-  bottom: -18px;
-  left: 50%;
-  right: auto;
-  transform: translateX(-50%);
+  top: -6px;
+  right: -6px;
   background: rgba(8, 16, 24, 0.92);
   color: var(--text-muted);
   border: 1px solid var(--border-color-soft);
   border-radius: 999px;
-  min-width: 21px;
-  height: 21px;
-  padding: 0 5px;
-  font-size: 0.74rem;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  font-size: 0.72rem;
   font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.55);
+  z-index: 5;
+  pointer-events: none;
 }
 
 .sprite-card-count.has-items {
@@ -848,14 +866,18 @@ select:focus,
 .dice-widget-box {
   pointer-events: auto;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.6rem;
+  justify-content: center;
+  gap: 3px;
   background: rgba(10, 20, 30, 0.94);
   border: 1.5px solid var(--border-color);
-  padding: 0.35rem 0.65rem;
+  padding: 0.25rem 0.45rem;
   border-radius: var(--radius-lg);
   box-shadow: 0 3px 12px rgba(0, 0, 0, 0.5);
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, transform 0.15s ease;
+  user-select: none;
+  flex-shrink: 0;
 }
 
 .dice-widget-box.can-roll-pulse {
@@ -1276,8 +1298,16 @@ select:focus,
     top: 6px;
     left: 6px;
     right: 6px;
-    gap: 0.35rem;
-    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  .board-top-controls {
+    gap: 4px;
+  }
+
+  .top-ctrl-btn {
+    font-size: 0.74rem;
+    padding: 0.28rem 0.45rem;
   }
 
   .phase-pill {

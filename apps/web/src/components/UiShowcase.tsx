@@ -389,7 +389,7 @@ export function UiShowcase({ locale, onExit }: UiShowcaseProps): React.ReactElem
 
       {/* CostsHelp */}
       {openPanel === 'costs_help' && (
-        <AdaptiveSurface open onClose={closePanel} title={locale === 'ro' ? '📋 Tabel Costuri Construcții & Puncte de Victorie' : '📋 Building Costs & Victory Point Table'}>
+        <AdaptiveSurface open onClose={closePanel} title={locale === 'ro' ? '📋 Tabel Costuri Construcții & Puncte de Victorie' : '📋 Building Costs & Victory Point Table'} scrollable={false}>
           <CostsHelp locale={locale} hasShipsInScenario={hasShipsInScenario} />
         </AdaptiveSurface>
       )}
