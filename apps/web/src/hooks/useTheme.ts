@@ -14,7 +14,8 @@ function isTheme(value: unknown): value is Theme {
 function readStoredTheme(): Theme {
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    return isTheme(stored) ? stored : DEFAULT_THEME;
+    if (stored === 'dark' || stored === 'xmas') return stored;
+    return DEFAULT_THEME;
   } catch {
     // localStorage unavailable (private browsing, disabled storage, etc.) — fall back silently.
     return DEFAULT_THEME;

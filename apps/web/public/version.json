@@ -1,9 +1,49 @@
 {
-  "version": "v1.183",
-  "commitCount": 183,
-  "shortHash": "fbbb153",
-  "buildDate": "2026-11-01T20:54:15.123Z",
+  "version": "v1.191",
+  "commitCount": 191,
+  "shortHash": "3a68cac",
+  "buildDate": "2026-11-01T22:01:56.933Z",
   "releaseNotes": [
+    {
+      "hash": "3a68cac",
+      "date": "2026-11-01",
+      "message": "ci: deploy to both apps/server/dist and root dist to match cpanel passenger entry"
+    },
+    {
+      "hash": "cadd334",
+      "date": "2026-11-01",
+      "message": "ci: enforce ftps protocol for Pure-FTPd TLS requirement"
+    },
+    {
+      "hash": "ed10b0b",
+      "date": "2026-11-01",
+      "message": "ci: set ftp server-dir to / for cpanel root scoping"
+    },
+    {
+      "hash": "f1fa9a5",
+      "date": "2026-11-01",
+      "message": "ci: configure explicit server-dir, security loose, and verbose logging for FTP action"
+    },
+    {
+      "hash": "a401ecd",
+      "date": "2026-11-01",
+      "message": "test: increase testTimeout to 60s for CI integration tests"
+    },
+    {
+      "hash": "b5aef23",
+      "date": "2026-11-01",
+      "message": "ci: bump Node.js to 22 for native node:sqlite support"
+    },
+    {
+      "hash": "2ff5f5f",
+      "date": "2026-11-01",
+      "message": "ci: trigger automated deploy to catan.d10.ro"
+    },
+    {
+      "hash": "ab704ef",
+      "date": "2026-11-01",
+      "message": "ci: add GitHub Actions automated deployment workflow and full documentation"
+    },
     {
       "hash": "fbbb153",
       "date": "2026-11-01",
@@ -213,46 +253,6 @@
       "hash": "3ce2127",
       "date": "2026-10-27",
       "message": "Fix mobile replay layout, PWA cache refresh, and restrict ships to Seafarers"
-    },
-    {
-      "hash": "347461e",
-      "date": "2026-10-27",
-      "message": "Update version stamps v1.140"
-    },
-    {
-      "hash": "2cac4d8",
-      "date": "2026-10-27",
-      "message": "Implement participant panel redesign and official 3-step gameplay features (5-6p Special Build, Seafarers ship movement and island VP chits, Fog hex exploration)"
-    },
-    {
-      "hash": "7d5273c",
-      "date": "2026-10-27",
-      "message": "feat(online): in-game human confirmation vote for game termination and max concurrent games limit"
-    },
-    {
-      "hash": "5e30940",
-      "date": "2026-10-27",
-      "message": "feat(lobby): display invite code, seat breakdown, and allow stopping waiting lobbies"
-    },
-    {
-      "hash": "d7cc2f8",
-      "date": "2026-10-27",
-      "message": "fix(lobby): remove terminated games immediately from spectator and server lobby list"
-    },
-    {
-      "hash": "bbcd8f4",
-      "date": "2026-10-27",
-      "message": "feat(seafarers): boat orientation with hull facing water, official Pirate and Robber mechanics, dynamic scenario rulebook and hamburger button"
-    },
-    {
-      "hash": "2131d32",
-      "date": "2026-10-27",
-      "message": "fix(board): remove pier overlay on harbors and enable variable map generation for seafarers"
-    },
-    {
-      "hash": "9a4b3b8",
-      "date": "2026-10-27",
-      "message": "fix(assets): re-extract and align gold field terrain tiles with true hex vertices"
     }
   ]
 }

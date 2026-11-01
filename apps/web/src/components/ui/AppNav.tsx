@@ -62,7 +62,7 @@ export function AppNav({ items, activeId, onNavigate, footer, compactTrigger }: 
       </button>
       {open ? (
         <div
-          className="fixed inset-0 z-50 bg-black/50"
+          className="fixed inset-0 z-[150] bg-black/60"
           onClick={() => setOpen(false)}
           role="presentation"
         >

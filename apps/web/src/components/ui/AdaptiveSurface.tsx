@@ -68,7 +68,7 @@ export function AdaptiveSurface({
     : 'inset-y-0 right-0 h-full w-full max-w-md animate-[slideIn_0.2s_ease-out]';
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50" onClick={onClose} role="presentation">
+    <div className="fixed inset-0 z-[150] bg-black/60" onClick={onClose} role="presentation">
       <style>{`
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }

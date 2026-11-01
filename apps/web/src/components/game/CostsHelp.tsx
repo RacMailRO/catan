@@ -13,7 +13,7 @@ export interface ResourceCostBadgeProps {
  * Reusable single-cost pill showing resource card graphic and required count.
  */
 export const ResourceCostBadge: React.FC<ResourceCostBadgeProps> = ({ resource, amount, locale = 'ro' }) => (
-  <div className="inline-flex items-center gap-1.5 rounded-md border border-line/60 bg-black/25 px-2 py-0.5 shadow-sm flex-shrink-0">
+  <div className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-black/40 px-2 py-0.5 shadow-sm flex-shrink-0">
     <ResourceIcon resource={resource} height={28} locale={locale} />
     <span className="text-sm font-extrabold text-ink">{amount}</span>
   </div>
@@ -21,19 +21,19 @@ export const ResourceCostBadge: React.FC<ResourceCostBadgeProps> = ({ resource, 
 
 export interface CostItemRowProps {
   label: string;
-  vp: string;
+  vp?: string;
   cost: ResourceCount;
   locale: Locale;
 }
 
 /**
- * Reusable single-building cost row with title, VP reward, and single-row resource tokens.
+ * Reusable single-building cost row with title, VP reward (if any), and single-row resource tokens.
  */
 export const CostItemRow: React.FC<CostItemRowProps> = ({ label, vp, cost, locale }) => (
-  <div className="flex flex-col gap-1 rounded-lg border border-line bg-surfaceMuted/50 px-3 py-2 transition-colors hover:border-amber-400/40">
+  <div className="flex flex-col gap-1 rounded-lg border border-line/60 bg-surfaceMuted/50 px-3 py-2 transition-colors hover:border-amber-400/40">
     <div className="flex items-center justify-between">
       <strong className="text-sm font-bold text-ink">{label}</strong>
-      <span className="text-xs font-extrabold text-amber-500 sm:text-sm">{vp}</span>
+      {vp ? <span className="text-xs font-extrabold text-amber-500 sm:text-sm">{vp}</span> : null}
     </div>
     {/* All resource costs guaranteed on ONE single row, no wrapping */}
     <div className="flex flex-row flex-nowrap items-center gap-2 overflow-x-auto py-0.5">
@@ -54,14 +54,14 @@ export interface CostsHelpProps {
 /** Building-cost and victory-point reference table, built live from BUILDING_COSTS so it
  *  always matches the active rules. Compact single-row layout that fits without scrolling. */
 export const CostsHelp: React.FC<CostsHelpProps> = ({ locale, hasShipsInScenario }) => {
-  const rows: { key: string; label: string; cost: ResourceCount; vp: string }[] = [
-    { key: 'road', label: locale === 'ro' ? 'Drum' : 'Road', cost: BUILDING_COSTS.road, vp: '0 VP' },
+  const rows: { key: string; label: string; cost: ResourceCount; vp?: string }[] = [
+    { key: 'road', label: locale === 'ro' ? 'Drum' : 'Road', cost: BUILDING_COSTS.road },
     ...(hasShipsInScenario
-      ? [{ key: 'ship', label: locale === 'ro' ? 'Navă' : 'Ship', cost: BUILDING_COSTS.ship, vp: '0 VP' }]
+      ? [{ key: 'ship', label: locale === 'ro' ? 'Navă' : 'Ship', cost: BUILDING_COSTS.ship }]
       : []),
     { key: 'settlement', label: locale === 'ro' ? 'Așezare' : 'Settlement', cost: BUILDING_COSTS.settlement, vp: '1 VP' },
     { key: 'city', label: locale === 'ro' ? 'Oraș' : 'City', cost: BUILDING_COSTS.city, vp: '2 VP' },
-    { key: 'dev_card', label: locale === 'ro' ? 'Carte de Dezvoltare' : 'Development Card', cost: BUILDING_COSTS.dev_card, vp: locale === 'ro' ? '? VP (variază)' : '? VP (varies)' }
+    { key: 'dev_card', label: locale === 'ro' ? 'Carte de Dezvoltare' : 'Development Card', cost: BUILDING_COSTS.dev_card }
   ];
 
   return (
