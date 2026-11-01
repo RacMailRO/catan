@@ -46,27 +46,40 @@ jobs:
 
       - name: Prepare Deployment Staging Directory
         run: |
+          # 1. Support both cPanel structures (apps/server layout and flat root layout)
+          mkdir -p .deploy/apps/server/dist
+          mkdir -p .deploy/apps/web/dist
           mkdir -p .deploy/dist
           mkdir -p .deploy/tmp
+          mkdir -p .deploy/apps/server/tmp
 
-          # 1. Entry point for cPanel / Phusion Passenger
+          # 2. Entry point for cPanel / Phusion Passenger
           cp apps/server/server-entry.mjs .deploy/server-entry.mjs
+          cp apps/server/server-entry.mjs .deploy/apps/server/server-entry.mjs
 
-          # 2. Standalone bundle (server.mjs, version.json, and public/ static assets)
+          # 3. Standalone bundle (server.mjs, version.json, and public/ static assets)
           cp -r apps/server/dist/* .deploy/dist/
+          cp -r apps/server/dist/* .deploy/apps/server/dist/
 
-          # 3. Phusion Passenger reload trigger (touching tmp/restart.txt triggers worker reload)
+          # 4. Web bundle
+          cp -r apps/web/dist/* .deploy/apps/web/dist/
+
+          # 5. Root version.json
+          cp apps/server/dist/version.json .deploy/version.json
+
+          # 6. Phusion Passenger reload triggers
           date -u +"%Y-%m-%d %H:%M:%S UTC" > .deploy/tmp/restart.txt
+          date -u +"%Y-%m-%d %H:%M:%S UTC" > .deploy/apps/server/tmp/restart.txt
 
-          # 4. Strict safety verification: Ensure local SQLite is NEVER in the payload
-          if [ -f .deploy/catan-local.sqlite ] || [ -f .deploy/dist/catan-local.sqlite ]; then
+          # 7. Strict safety verification: Ensure local SQLite is NEVER in the payload
+          if [ -f .deploy/catan-local.sqlite ] || [ -f .deploy/dist/catan-local.sqlite ] || [ -f .deploy/apps/server/catan-local.sqlite ]; then
             echo "❌ CRITICAL ERROR: Found SQLite database in deployment staging folder! Aborting."
             exit 1
           fi
 
           echo "✅ Deployment payload prepared successfully:"
           ls -la .deploy
-          ls -la .deploy/dist
+          ls -la .deploy/apps/server/dist
 
       - name: Deploy to Remote Server (FTP / FTPS)
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
