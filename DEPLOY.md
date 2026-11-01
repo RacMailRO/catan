@@ -13,11 +13,16 @@ Am implementat un workflow de CI/CD complet în [`.github/workflows/deploy.yml`]
 ### Cum funcționează:
 1. La fiecare `git push origin main` (sau declanșare manuală din tab-ul **Actions** de pe GitHub):
    - Face checkout complet al repo-ului (istoric complet pentru generarea corectă a `version.json`).
-   - Instalează dependințele și rulează suita de teste (`npm test`).
+   - Rulează pe runner **Node.js 22** (necesar pentru suportul nativ `node:sqlite`).
+   - Instalează dependințele și rulează suita completă de teste (`npm test`) cu timeout de 60s pentru simulările AI.
    - Compilează backend-ul standalone (`server.mjs`) și frontend-ul Vite (`npm run build`).
-   - Creează fișierul `tmp/restart.txt` cu timestamp-ul curent (Phusion Passenger repornește automat workerii la detectarea acestui fișier!).
-   - Verifică automat că nicio bază de date SQLite nu se află în pachetul de upload.
-   - Sincronizează fișierele pe server prin FTP/FTPS folosind `SamKirkland/FTP-Deploy-Action`.
+   - Pregătește directorul de staging `.deploy/` cu structură dublă:
+     - `apps/server/dist/*` și `apps/server/server-entry.mjs` (corespunzător configurării cPanel Passenger `Application startup file: apps/server/server-entry.mjs`).
+     - `dist/*` și `server-entry.mjs` în rădăcină (pentru compatibilitate directă).
+     - `apps/web/dist/*` (pentru servire statică Vite).
+     - `tmp/restart.txt` și `apps/server/tmp/restart.txt` (Phusion Passenger repornește automat workerii la detectarea acestui fișier!).
+   - Verifică automat că nicio bază de date SQLite (`*.sqlite*`) nu se află în pachetul de upload.
+   - Sincronizează fișierele pe server prin **FTPS (FTP over TLS)** folosind `SamKirkland/FTP-Deploy-Action` cu `protocol: ftps` și `security: loose` (obligatoriu pe serverele cPanel cu Pure-FTPd).
    - Interoghează `https://catan.d10.ro/api/version` pentru a confirma că noua versiune este live.
 
 ### Configurarea secretelor pe GitHub (Un singur pas inițial)

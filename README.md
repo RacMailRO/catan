@@ -132,6 +132,7 @@ Theme switching is controlled via `:root[data-theme="..."]`:
 All UI elements are organized into modular, reusable components:
 
 ### 1. Game Cards & Badges (`GameAssets.tsx`)
+- **Resource Terminology**: Strictly standardized as `Lemn` (Wood), `Cărămidă` (Brick), `Oaie` (Sheep — *never Lână*), `Grâu` (Wheat), and `Piatră` (Ore — *never Minereu*), mapped via `RESOURCE_LABELS` in `i18n.ts`.
 - **`ResourceCardSprite`**: Renders wood, brick, sheep, wheat, or ore card sprites with exact coordinate cropping from `/cards.jpg`.
 - **`DevCardSprite`**: Renders development card faces (Knight, Road Building, Year of Plenty, Monopoly, Victory Point) or card back ("Catan").
 - **`CostCardThumb`**: Reusable shortcut card for building costs with matching card dimensions (38×56px for `xs`), border, and label.
@@ -144,17 +145,24 @@ All UI elements are organized into modular, reusable components:
 
 ### 2. Modals & Surfaces (`AdaptiveSurface.tsx`, `Dialog.tsx`)
 - **`AdaptiveSurface`**:
-  - Slide-over drawer on desktop screens (>960px).
-  - Bottom sheet on mobile screens (<=960px).
+  - Slide-over drawer on desktop screens (>960px) and bottom sheet on mobile screens (<=960px).
+  - Layered at `z-[150]` so it sits above `.app-header` (`z-index: 100`), guaranteeing that drawer headers, titles, and close buttons are never clipped or obscured.
   - **Close Trigger**: Clicking anywhere on the header bar or the mobile drag-handle dismisses the surface.
   - **Close Button**: High-contrast, tactile, prominent circular button with `aria-label="Close"`.
   - **`scrollable={false}` prop**: Enables fixed, non-scrollable modals for compact reference tables.
-- **`Dialog`**: Centered blocking dialog for confirmations and discard decisions (z-index 60, stacks above surfaces).
+- **`Dialog`**: Centered blocking dialog for confirmations, discards, and trade offers (z-index 160, stacks above surfaces and navbar). Supports `disableBackdropClick={true}` for modal decisions that require explicit interaction.
 
 ### 3. Building Costs Reference (`CostsHelp.tsx`)
 - Live rule-accurate reference table built from `BUILDING_COSTS`.
 - **Single-Row Cost Layout**: All resource requirements for each building (Drum, Navă, Așezare, Oraș, Carte de Dezvoltare) are rendered on **one single horizontal row** (`flex-row flex-nowrap`) using compact `ResourceCostBadge` pills.
+- **Victory Points**: Fixed VP badges are rendered exclusively for **Așezare** (`1 VP`) and **Oraș** (`2 VP`). VP mentions are omitted from Drum, Navă, and Carte de Dezvoltare.
 - Guaranteed to fit inside `AdaptiveSurface` without vertical scrolling.
+
+### 4. Trade Negotiation & Anti-Stall System (`IncomingTradeOfferModal`)
+- **Auto-Decline Unaffordable Offers**: If the responder does not hold the required resources (`!canAfford`), the client immediately dispatches `respond_trade: reject` (reason: `Nu am resursa cerută`) and shows an informative banner. The AI/game never stalls.
+- **30-Second Decision Window**: If the player can afford the trade, a blocking modal opens with an animated countdown progress bar (`30s` down to `0s`).
+- **Backdrop Lock**: Clicking the board or background will not accidentally dismiss the trade modal (`disableBackdropClick={true}`).
+- **Automatic Timeout Decline**: If 30 seconds elapse without user action, the trade automatically declines (`Timp expirat (30s)`), closing the modal and advancing the game smoothly.
 
 ---
 

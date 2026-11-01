@@ -10,23 +10,27 @@ The application UI is built with **Tailwind CSS** and a tokenized design system.
 
 ### Design Tokens & Themes
 Themes are configured in `apps/web/src/styles/tokens.css` and extended in `apps/web/tailwind.config.js`. Three themes are supported via `:root[data-theme="..."]`:
-- `dark` (Default) — Classic Catan navy, gold, parchment theme
-- `light` — Modern clean light theme
+- `dark` (Default) — Classic Catan navy, gold, parchment theme (defined directly on `:root` and `<html data-theme="dark">`)
+- `light` — Modern clean light theme with full light styling for `.app-header` (white), panels, lobby cards, and high-contrast hamburger menu
 - `xmas` — Festive evergreen & warm gold theme
-
-### Tailwind Token Mapping
-Always use semantic Tailwind utility classes mapped to theme tokens:
-- **Backgrounds**: `bg-bg`, `bg-surface`, `bg-surfaceMuted` (`--surface-2`)
-- **Text**: `text-ink` (high contrast), `text-inkSoft` (secondary / muted)
-- **Borders & Dividers**: `border-line`
-- **Accents**: `bg-accent`, `text-accentInk`, `border-accent`, `text-amber-500`
-- **Warnings & Alerts**: `text-warn`, `bg-warn`
-
-> **RULE**: Do NOT hardcode hex colors (e.g. `#ffffff`, `#192A3A`) for UI chrome, backgrounds, panels, and borders. Use the semantic Tailwind classes so the entire UI adapts cleanly across all 3 themes.
 
 ---
 
-## 2. Reusable Component Standard (DRY)
+## 2. Resource Terminology Standard (RO & EN)
+
+The game's resource names are strictly standardized and centralized in `apps/web/src/i18n.ts` (`RESOURCE_LABELS`):
+- **`wood`**: `Lemn` (RO) / `Wood` (EN) — Icon: 🌲
+- **`brick`**: `Cărămidă` (RO) / `Brick` (EN) — Icon: 🧱
+- **`sheep`**: `Oaie` (RO) / `Sheep` (EN) — Icon: 🐑 (⚠️ **NEVER** use `Lână` anywhere in UI, dialogs, rules, or bot engine)
+- **`wheat`**: `Grâu` (RO) / `Wheat` (EN) — Icon: 🌾
+- **`ore`**: `Piatră` (RO) / `Ore` (EN) — Icon: ⛰️ (⚠️ **NEVER** use `Minereu` anywhere in UI, dialogs, rules, or bot engine)
+- **Terrains**: `Pădure (Lemn)`, `Deal (Cărămidă)`, `Pășune (Oaie)`, `Câmp (Grâu)`, `Munte (Piatră)`
+
+> **RULE**: Never hardcode Romanian resource names in components. Always consume `RESOURCE_LABELS[locale][resource]` to guarantee 100% uniformity across player hand, trade builders, bank, notifications, logs, and rules.
+
+---
+
+## 3. Reusable Component Standard (DRY)
 
 > **RULE**: Every UI modification must be implemented as a reusable component or utility so changes propagate everywhere automatically. Never duplicate inline styles or markup for shared patterns.
 
@@ -76,6 +80,11 @@ In `.board-top-banner`:
 
 ## 4. Modals & Surfaces Standard
 
+### Z-Index Layering & Header Clearance
+- **`.app-header`**: `z-index: 100` (height 52px).
+- **`AdaptiveSurface`**: `z-[150]` — MUST render above `.app-header` so its title and close button are never cut off or overlapped by header icons (`[ EN ]`, `[ ⛶ ]`).
+- **`Dialog`**: `z-[160]` — Stacks above both `AdaptiveSurface` and `.app-header`.
+
 ### Content Drawers & Sheets (`AdaptiveSurface`)
 - Use `AdaptiveSurface` for slide-over drawers on desktop (>960px) and bottom sheets on mobile (<=960px).
 - **Header as Close Trigger**: The entire header bar is clickable (`onClick={onClose}`) with `cursor-pointer` and hover feedback.
@@ -85,11 +94,30 @@ In `.board-top-banner`:
 
 ### Building Costs Reference (`CostsHelp`)
 - **Single-Row Resources**: All required resource costs for each construction (Drum, Navă, Așezare, Oraș, Carte de Dezvoltare) MUST fit on **one single horizontal row** (`flex-row flex-nowrap`).
+- **VP Labels**: Only show victory points for items that grant fixed points: **Așezare** (`1 VP`) and **Oraș** (`2 VP`). Omit VP labels from Drum, Navă, and Carte de Dezvoltare.
 - Resource tokens must be compact (`ResourceCostBadge`) so that even 4 resources fit without wrapping or scrolling.
 
 ---
 
-## 5. Architecture & Monorepo Structure
+## 5. Trade Negotiation & Anti-Stall Standard
+
+To prevent games from ever stalling when an AI or human proposes a trade:
+1. **Auto-Refuse when Unaffordable**:
+   - If the receiving player does not hold the requested resources (`!canAfford`), the client **must immediately dispatch `respond_trade: reject`** (reason: `Nu am resursa cerută`).
+   - Display a non-blocking toast banner informing the user: *„📢 [Player] requested [X]. Auto-declined (insufficient resources).”*
+   - Never wait on an unaffordable player; the game proceeds without stalling.
+2. **30-Second Animated Timer for Affordable Trades**:
+   - If the player holds the resources, display the `IncomingTradeOfferModal` with an animated countdown progress bar (`30s` down to `0s`).
+3. **Accidental Click Protection**:
+   - The modal must set `disableBackdropClick={true}`. Clicking on the board, background, or Escape will NOT close the modal.
+4. **Auto-Refuse on Timeout**:
+   - If 30 seconds elapse without the player choosing Accept, Reject, or Counter-Offer, the modal automatically dispatches `respond_trade: reject` with reason `Timp expirat (30s)` and closes.
+5. **Server Stale Trade Cleanup**:
+   - The server calls `expireStaleTradesInPlace(runtime.state)` at the start of bot execution loops to automatically prune expired trades.
+
+---
+
+## 6. Architecture & Monorepo Structure
 
 - **`packages/core`**:
   - 100% pure TypeScript game engine, zero DOM, zero network dependencies.
@@ -107,7 +135,7 @@ In `.board-top-banner`:
 
 ---
 
-## 6. Remote Server & Deployment Standard
+## 7. Remote Server & Deployment Standard
 
 The live production server is hosted at **`https://catan.d10.ro`** on cPanel with Phusion Passenger (Node.js).
 
@@ -115,10 +143,14 @@ The live production server is hosted at **`https://catan.d10.ro`** on cPanel wit
 1. **Automated CI/CD via GitHub Actions (Primary)**:
    - Workflow file: `.github/workflows/deploy.yml`
    - Triggers on `push` to `main` branch or manual `workflow_dispatch`.
-   - Runs `npm ci`, `npm test`, `npm run build`, and stages payload into `.deploy/`.
-   - Uploads via FTP/FTPS using GitHub Secrets (`FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD`, etc.).
-   - Creates `tmp/restart.txt` to trigger Phusion Passenger worker reload automatically.
-   - Verifies deployment via `https://catan.d10.ro/api/version`.
+   - Setup: Node.js 22 (required for native `node:sqlite`).
+   - Runs `npm ci`, `npm test` (with 60s timeout for AI simulations), and `npm run build`.
+   - Stages files into `.deploy/` with dual-structure mirroring:
+     - `apps/server/dist/*` and `apps/server/server-entry.mjs` (matching cPanel's Passenger startup file `apps/server/server-entry.mjs`).
+     - Root `dist/*` and `server-entry.mjs` (for root-scoped fallback).
+     - `tmp/restart.txt` and `apps/server/tmp/restart.txt` (triggers Passenger worker restart).
+   - Protocol: Enforces **`protocol: ftps`** with `security: loose` to satisfy Pure-FTPd's TLS requirement.
+   - Verifies live deployment by curling `https://catan.d10.ro/api/version`.
 2. **Manual FTP Deployment (Fallback)**:
    - Build locally via `npm run build`.
    - Upload `apps/server/server-entry.mjs` and `apps/server/dist/` to server app root.
@@ -132,7 +164,7 @@ The live production server is hosted at **`https://catan.d10.ro`** on cPanel wit
 
 ---
 
-## 7. Verification & Quality Assurance
+## 8. Verification & Quality Assurance
 
 Before committing or pushing any change:
 1. Run `npm test` — all test suites must pass (engine, replay, AI, web components, UI showcase).
