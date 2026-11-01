@@ -57,6 +57,14 @@ import { CostsHelp } from './components/game/CostsHelp';
 import { FullRules } from './components/game/FullRules';
 import { ReleaseNotes } from './components/game/ReleaseNotes';
 import { StartingOrder } from './components/game/StartingOrder';
+import { TradeOfferBuilder } from './components/game/TradeOfferBuilder';
+import { CounterTradeOffer } from './components/game/CounterTradeOffer';
+import { DevCardsPanel } from './components/game/DevCardsPanel';
+import { PlayMonopolyDialog } from './components/game/PlayMonopolyDialog';
+import { PlayYearOfPlentyDialog } from './components/game/PlayYearOfPlentyDialog';
+import { DiscardDialog } from './components/game/DiscardDialog';
+import { StealResourceDialog } from './components/game/StealResourceDialog';
+import { IncomingTradeOfferDialog } from './components/game/IncomingTradeOfferDialog';
 import { ReplayAndAnalysisView } from './components/ReplayAndAnalysisView';
 import { HallOfFameView } from './components/HallOfFameView';
 import { SandboxMode } from './components/SandboxMode';
@@ -3930,83 +3938,24 @@ export const App: React.FC = () => {
               onClose={() => setActiveModal('none')}
               title={`🃏 ${t.devCardsTitle} — ${(viewerPlayerObj ?? activePlayerObj).name} (${unplayedDevCards.length})`}
             >
-                  {unplayedDevCards.length === 0 ? (
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>
-                      Nu ai cărți de dezvoltare nefolosite în mână. Poți cumpăra o carte de dezvoltare (1 Grâu + 1 Oaie + 1 Minereu) în timpul turei tale.
-                    </p>
-                  ) : (
-                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center', marginBottom: '1rem' }}>
-                      {(
-                        [
-                          'knight',
-                          'road_building',
-                          'year_of_plenty',
-                          'monopoly',
-                          'victory_point'
-                        ] as DevCardType[]
-                      )
-                        .filter((dt) => devCardCountsByType[dt] > 0)
-                        .map((dt) => {
-                          const canPlayThis =
-                            isHumanTurn && canPlayDevCardType(gameState, activePlayerObj, dt);
-                          const allBoughtThisTurn = unplayedDevCards
-                            .filter((c) => c.type === dt)
-                            .every((c) => c.boughtAtTurn === gameState.turn);
-                          return (
-                            <div
-                              key={dt}
-                              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, width: 150 }}
-                            >
-                              <DevCardSprite
-                                type={dt}
-                                locale={locale}
-                                count={devCardCountsByType[dt]}
-                                isNew={allBoughtThisTurn && dt !== 'victory_point'}
-                                canPlay={canPlayThis}
-                                size="lg"
-                                actionLabel={
-                                  dt === 'knight'
-                                    ? '⚔️ Activează Cavaler'
-                                    : dt === 'road_building'
-                                    ? '🛣️ Joacă 2 Drumuri'
-                                    : dt === 'monopoly'
-                                    ? '👑 Joacă Monopol'
-                                    : dt === 'year_of_plenty'
-                                    ? '🎁 Joacă Anul Abundenței'
-                                    : undefined
-                                }
-                                onPlay={
-                                  dt === 'knight'
-                                    ? () => {
-                                        setBuildMode('knight');
-                                        setActiveModal('none');
-                                      }
-                                    : dt === 'road_building'
-                                    ? () => {
-                                        executeAction(activePlayerObj.id, {
-                                          type: 'play_road_building'
-                                        });
-                                        setActiveModal('none');
-                                      }
-                                    : dt === 'monopoly'
-                                    ? () => {
-                                        setActiveModal('play_monopoly');
-                                      }
-                                    : dt === 'year_of_plenty'
-                                    ? () => {
-                                        setActiveModal('play_year_of_plenty');
-                                      }
-                                    : undefined
-                                }
-                              />
-                              <p className="card-gallery-rule-text" style={{ textAlign: 'center', margin: 0 }}>
-                                {DEV_CARD_RULE_TEXT[locale][dt]}
-                              </p>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  )}
+                  <DevCardsPanel
+                    locale={locale}
+                    gameState={gameState}
+                    activePlayer={activePlayerObj}
+                    unplayedDevCards={unplayedDevCards}
+                    devCardCountsByType={devCardCountsByType}
+                    isHumanTurn={isHumanTurn}
+                    onActivateKnight={() => {
+                      setBuildMode('knight');
+                      setActiveModal('none');
+                    }}
+                    onPlayRoadBuilding={() => {
+                      executeAction(activePlayerObj.id, { type: 'play_road_building' });
+                      setActiveModal('none');
+                    }}
+                    onOpenMonopoly={() => setActiveModal('play_monopoly')}
+                    onOpenYearOfPlenty={() => setActiveModal('play_year_of_plenty')}
+                  />
             </AdaptiveSurface>
           )}
 
@@ -4033,161 +3982,51 @@ export const App: React.FC = () => {
                 </button>
               }
             >
-                  <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', marginTop: 0, marginBottom: '0.85rem' }}>
-                    {locale === 'ro'
-                      ? 'Alege resursa pe care dorești să o confunzi/confiști de la toți ceilalți jucători. Toți adversarii vor fi obligați să-ți cedeze toate cărțile de acest tip pe care le au în mână!'
-                      : 'Choose the resource to monopolize. All opponents will be forced to yield all cards of this resource in their hand!'}
-                  </p>
-
-                  <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: '1.1rem' }}>
-                    {ALL_RESOURCES.map((r) => {
-                      const isSelected = monopolyResource === r;
-                      return (
-                        <div
-                          key={r}
-                          onClick={() => setMonopolyResource(r)}
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            cursor: 'pointer',
-                            padding: '6px 8px',
-                            borderRadius: 8,
-                            border: isSelected ? '2px solid var(--accent-gold)' : '2px solid rgba(255,255,255,0.12)',
-                            background: isSelected ? 'rgba(234, 179, 8, 0.2)' : 'rgba(255,255,255,0.04)',
-                            transform: isSelected ? 'scale(1.06)' : 'scale(1)',
-                            transition: 'all 0.15s ease'
-                          }}
-                        >
-                          <ResourceCardSprite
-                            resource={r}
-                            count={activePlayerObj.resources[r] ?? 0}
-                            locale={locale}
-                            size="sm"
-                            selected={isSelected}
-                          />
-                          <span
-                            style={{
-                              fontSize: '0.76rem',
-                              fontWeight: 700,
-                              marginTop: 5,
-                              color: isSelected ? 'var(--accent-gold)' : 'inherit'
-                            }}
-                          >
-                            {RESOURCE_LABELS[locale][r]} {isSelected ? '✓' : ''}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <PlayMonopolyDialog
+                    locale={locale}
+                    activePlayer={activePlayerObj}
+                    selectedResource={monopolyResource}
+                    onSelectResource={setMonopolyResource}
+                  />
             </Dialog>
           )}
 
           {/* MODAL SPECIAL: PLAY YEAR OF PLENTY - SELECT 2 RESOURCES */}
-          {activeModal === 'play_year_of_plenty' && activePlayerObj && (
-            <Dialog
-              open
-              onClose={() => setActiveModal('dev_cards')}
-              title="🎁 Joacă: Anul Abundenței"
-              footer={
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ width: '100%', padding: '0.6rem', fontWeight: 700 }}
-                  onClick={() => {
-                    executeAction(activePlayerObj.id, {
-                      type: 'play_year_of_plenty',
-                      resources: yopResources
-                    });
-                    setActiveModal('none');
-                  }}
-                >
-                  🎁 Ia {RESOURCE_LABELS[locale][yopResources[0]]} + {RESOURCE_LABELS[locale][yopResources[1]]}
-                </button>
-              }
-            >
-                  <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', marginTop: 0, marginBottom: '0.6rem' }}>
-                    {locale === 'ro'
-                      ? 'Alege 2 resurse gratuite pe care le iei direct din bancă:'
-                      : 'Choose 2 free resources to take directly from the bank:'}
-                  </p>
-
-                  {/* Own hand, so the choice can factor in what's already held — e.g. no need
-                      to pick more of a resource already stockpiled. */}
-                  <div style={{ marginBottom: '0.85rem' }}>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 4, textAlign: 'center' }}>
-                      {locale === 'ro' ? '🎴 Cărțile tale în mână:' : '🎴 Your cards in hand:'}
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
-                      {ALL_RESOURCES.map((r) => (
-                        <ResourceCardSprite
-                          key={r}
-                          resource={r}
-                          count={activePlayerObj.resources[r]}
-                          locale={locale}
-                          size="xs"
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                    <div style={{ textAlign: 'center' }}>
-                      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
-                        {locale === 'ro' ? 'Prima resursă:' : 'First resource:'}
-                      </span>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.25)', padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)' }}>
-                        <ResourceIcon resource={yopResources[0]} height={26} />
-                        <select
-                          value={yopResources[0]}
-                          onChange={(e) => setYopResources([e.target.value as ResourceType, yopResources[1]])}
-                          style={{ fontSize: '0.86rem', padding: '0.3rem 0.6rem', margin: 0 }}
-                        >
-                          {ALL_RESOURCES.map((r) => (
-                            <option key={r} value={r}>
-                              {RESOURCE_LABELS[locale][r]} ({gameState.bank[r]} în bancă)
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'center' }}>
-                      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
-                        {locale === 'ro' ? 'A doua resursă:' : 'Second resource:'}
-                      </span>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.25)', padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)' }}>
-                        <ResourceIcon resource={yopResources[1]} height={26} />
-                        <select
-                          value={yopResources[1]}
-                          onChange={(e) => setYopResources([yopResources[0], e.target.value as ResourceType])}
-                          style={{ fontSize: '0.86rem', padding: '0.3rem 0.6rem', margin: 0 }}
-                        >
-                          {ALL_RESOURCES.map((r) => (
-                            <option key={r} value={r}>
-                              {RESOURCE_LABELS[locale][r]} ({gameState.bank[r]} în bancă)
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
+          {activeModal === 'play_year_of_plenty' && activePlayerObj && (() => {
+            const confirmYearOfPlenty = () => {
+              executeAction(activePlayerObj.id, {
+                type: 'play_year_of_plenty',
+                resources: yopResources
+              });
+              setActiveModal('none');
+            };
+            return (
+              <Dialog
+                open
+                onClose={() => setActiveModal('dev_cards')}
+                title="🎁 Joacă: Anul Abundenței"
+                footer={
                   <button
                     type="button"
                     className="btn btn-primary"
                     style={{ width: '100%', padding: '0.6rem', fontWeight: 700 }}
-                    onClick={() => {
-                      executeAction(activePlayerObj.id, {
-                        type: 'play_year_of_plenty',
-                        resources: yopResources
-                      });
-                      setActiveModal('none');
-                    }}
+                    onClick={confirmYearOfPlenty}
                   >
                     🎁 Ia {RESOURCE_LABELS[locale][yopResources[0]]} + {RESOURCE_LABELS[locale][yopResources[1]]}
                   </button>
-            </Dialog>
-          )}
+                }
+              >
+                    <PlayYearOfPlentyDialog
+                      locale={locale}
+                      gameState={gameState}
+                      activePlayer={activePlayerObj}
+                      selected={yopResources}
+                      onSelectedChange={setYopResources}
+                      onConfirm={confirmYearOfPlenty}
+                    />
+              </Dialog>
+            );
+          })()}
 
           {/* MODAL A: STARTING ORDER — each player's opening 2d6 roll, highest goes first */}
           {activeModal === 'starting_order' && gameState?.startingOrderRolls && (
@@ -4207,296 +4046,32 @@ export const App: React.FC = () => {
               onClose={() => setActiveModal('none')}
               title="⚓ Comerț Maritim (Bancă / Porturi) & Schimb între Jucători"
             >
-                  <div className="candidate-row" style={{ marginBottom: '0.9rem', padding: '0.85rem' }}>
-                    <h4 style={{ color: 'var(--accent-gold)', marginBottom: '0.6rem' }}>
-                      1. 🏦 {t.tradeBankTitle}
-                    </h4>
-                    {(() => {
-                      const ratio = getPlayerBankTradeRatio(
-                        gameState.board,
-                        activePlayerObj.id,
-                        bankGiveRes
-                      );
-                      const canAfford =
-                        activePlayerObj.resources[bankGiveRes] >= ratio &&
-                        bankGiveRes !== bankReceiveRes &&
-                        gameState.bank[bankReceiveRes] >= 1;
-
-                      return (
-                        <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: 'rgba(0,0,0,0.3)', padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)' }}>
-                            <ResourceIcon resource={bankGiveRes} height={48} />
-                            <select
-                              value={bankGiveRes}
-                              onChange={(e) => setBankGiveRes(e.target.value as ResourceType)}
-                              style={{ margin: 0, fontWeight: 600 }}
-                            >
-                              {ALL_RESOURCES.map((r) => {
-                                const rRatio = getPlayerBankTradeRatio(
-                                  gameState.board,
-                                  activePlayerObj.id,
-                                  r
-                                );
-                                return (
-                                  <option key={r} value={r}>
-                                    Oferă {rRatio}x {RESOURCE_LABELS[locale][r]} (ai {activePlayerObj.resources[r]})
-                                  </option>
-                                );
-                              })}
-                            </select>
-                          </div>
-                          <span style={{ fontSize: '1.4rem', color: 'var(--accent-gold)' }}>➔</span>
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: 'rgba(0,0,0,0.3)', padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)' }}>
-                            <ResourceIcon resource={bankReceiveRes} height={48} />
-                            <select
-                              value={bankReceiveRes}
-                              onChange={(e) => setBankReceiveRes(e.target.value as ResourceType)}
-                              style={{ margin: 0, fontWeight: 600 }}
-                            >
-                              {ALL_RESOURCES.map((r) => (
-                                <option key={r} value={r}>
-                                  Primește 1x {RESOURCE_LABELS[locale][r]} (bancă: {gameState.bank[r]})
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            disabled={!canAfford}
-                            onClick={() => {
-                              executeAction(activePlayerObj.id, {
-                                type: 'trade_bank',
-                                give: bankGiveRes,
-                                giveAmount: ratio,
-                                receive: bankReceiveRes
-                              });
-                            }}
-                          >
-                            Schimbă cu Banca ({ratio}:1)
-                          </button>
-                        </div>
-                      );
-                    })()}
-
-                    {/* Port Quick-Trade Suggestions (e.g. 3 Wood + 2:1 Wood Port -> 1 Brick for Road) */}
-                    {(() => {
-                      const portRatioWood = getPlayerBankTradeRatio(gameState.board, activePlayerObj.id, 'wood');
-                      const portRatioBrick = getPlayerBankTradeRatio(gameState.board, activePlayerObj.id, 'brick');
-                      const portRatioOre = getPlayerBankTradeRatio(gameState.board, activePlayerObj.id, 'ore');
-                      const portRatioWheat = getPlayerBankTradeRatio(gameState.board, activePlayerObj.id, 'wheat');
-
-                      const suggestions: { label: string; give: ResourceType; giveAmount: number; receive: ResourceType }[] = [];
-
-                      // Road suggestion: 1 Wood + 1 Brick needed
-                      if (activePlayerObj.resources.wood >= portRatioWood + 1 && activePlayerObj.resources.brick === 0 && gameState.bank.brick >= 1) {
-                        suggestions.push({
-                          label: 'Ai Port la Lemn (' + portRatioWood + ':1) și ' + activePlayerObj.resources.wood + ' Lemn! Schimbă ' + portRatioWood + ' Lemn ➔ 1 Argilă pentru Drum',
-                          give: 'wood',
-                          giveAmount: portRatioWood,
-                          receive: 'brick'
-                        });
-                      } else if (activePlayerObj.resources.brick >= portRatioBrick + 1 && activePlayerObj.resources.wood === 0 && gameState.bank.wood >= 1) {
-                        suggestions.push({
-                          label: 'Ai Port la Argilă (' + portRatioBrick + ':1) și ' + activePlayerObj.resources.brick + ' Argilă! Schimbă ' + portRatioBrick + ' Argilă ➔ 1 Lemn pentru Drum',
-                          give: 'brick',
-                          giveAmount: portRatioBrick,
-                          receive: 'wood'
-                        });
-                      }
-
-                      // City suggestion: 3 Ore + 2 Wheat needed
-                      if (activePlayerObj.resources.ore >= portRatioOre + 3 && activePlayerObj.resources.wheat < 2 && gameState.bank.wheat >= 1) {
-                        suggestions.push({
-                          label: 'Schimbă ' + portRatioOre + ' Minereu ➔ 1 Grâu pentru Oraș',
-                          give: 'ore',
-                          giveAmount: portRatioOre,
-                          receive: 'wheat'
-                        });
-                      }
-
-                      if (suggestions.length === 0) return null;
-
-                      return (
-                        <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid var(--accent-gold)', borderRadius: 6, padding: '0.45rem 0.65rem', marginTop: '0.6rem' }}>
-                          <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--accent-gold)', marginBottom: 4 }}>
-                            ⚓ Sugestii Rapide de Schimb la Porturi:
-                          </div>
-                          {suggestions.map((sug, idx) => (
-                            <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                                <ResourceIcon resource={sug.give} height={36} />
-                                <strong>{sug.giveAmount}x</strong>
-                                <span>➔</span>
-                                <ResourceIcon resource={sug.receive} height={36} />
-                                <strong>1x</strong>
-                                <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>({sug.label})</span>
-                              </span>
-                              <button
-                                type="button"
-                                className="btn btn-primary"
-                                style={{ fontSize: '0.74rem', padding: '0.2rem 0.5rem' }}
-                                onClick={() => {
-                                  executeAction(activePlayerObj.id, {
-                                    type: 'trade_bank',
-                                    give: sug.give,
-                                    giveAmount: sug.giveAmount,
-                                    receive: sug.receive
-                                  });
-                                }}
-                              >
-                                Schimbă Rapid la Port
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                  </div>
-
-                  <div className="candidate-row" style={{ padding: '0.85rem' }}>
-                    <h4 style={{ color: 'var(--accent-gold)', marginBottom: '0.5rem' }}>
-                      2. 🤝 {t.tradeP2PTitle} (Expirare ofertă: {gameState.rules.tradeOfferTimeoutSec}s)
-                    </h4>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                      <div>
-                        <strong style={{ fontSize: '0.85rem' }}>Oferi din mână:</strong>
-                        <div style={{ display: 'flex', gap: 6, marginTop: 6, marginBottom: 4 }}>
-                          {ALL_RESOURCES.map((r) => (
-                            <ResourceCardSprite
-                              key={r}
-                              resource={r}
-                              count={activePlayerObj.resources[r]}
-                              locale={locale}
-                              size="xs"
-                            />
-                          ))}
-                        </div>
-                        {ALL_RESOURCES.map((r) => (
-                          <div
-                            key={r}
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              marginTop: 6,
-                              padding: '4px 8px',
-                              background: 'rgba(0,0,0,0.22)',
-                              border: '1px solid rgba(255,255,255,0.08)',
-                              borderRadius: 8
-                            }}
-                          >
-                            <span style={{ fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                              <ResourceIcon resource={r} height={42} />
-                              <span>
-                                <strong>{RESOURCE_LABELS[locale][r]}</strong>
-                                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 4 }}>
-                                  (ai {activePlayerObj.resources[r]})
-                                </span>
-                              </span>
-                            </span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <button
-                                type="button"
-                                className="btn"
-                                style={{ padding: '0.2rem 0.55rem', fontWeight: 800 }}
-                                onClick={() =>
-                                  setP2pOffer({ ...p2pOffer, [r]: Math.max(0, p2pOffer[r] - 1) })
-                                }
-                              >
-                                -
-                              </button>
-                              <span style={{ minWidth: 24, textAlign: 'center', fontWeight: 900, fontSize: '1.1rem', color: p2pOffer[r] > 0 ? 'var(--accent-gold)' : 'inherit' }}>
-                                {p2pOffer[r]}
-                              </span>
-                              <button
-                                type="button"
-                                className="btn"
-                                style={{ padding: '0.2rem 0.55rem', fontWeight: 800 }}
-                                onClick={() =>
-                                  setP2pOffer({
-                                    ...p2pOffer,
-                                    [r]: Math.min(activePlayerObj.resources[r], p2pOffer[r] + 1)
-                                  })
-                                }
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      <div>
-                        <strong style={{ fontSize: '0.85rem' }}>Ceri la schimb:</strong>
-                        <div style={{ height: 26 }} />
-                        {ALL_RESOURCES.map((r) => (
-                          <div
-                            key={r}
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              marginTop: 6,
-                              padding: '4px 8px',
-                              background: 'rgba(0,0,0,0.22)',
-                              border: '1px solid rgba(255,255,255,0.08)',
-                              borderRadius: 8
-                            }}
-                          >
-                            <span style={{ fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                              <ResourceIcon resource={r} height={42} />
-                              <strong>{RESOURCE_LABELS[locale][r]}</strong>
-                            </span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <button
-                                type="button"
-                                className="btn"
-                                style={{ padding: '0.2rem 0.55rem', fontWeight: 800 }}
-                                onClick={() =>
-                                  setP2pRequest({ ...p2pRequest, [r]: Math.max(0, p2pRequest[r] - 1) })
-                                }
-                              >
-                                -
-                              </button>
-                              <span style={{ minWidth: 24, textAlign: 'center', fontWeight: 900, fontSize: '1.1rem', color: p2pRequest[r] > 0 ? 'var(--accent-gold)' : 'inherit' }}>
-                                {p2pRequest[r]}
-                              </span>
-                              <button
-                                type="button"
-                                className="btn"
-                                style={{ padding: '0.2rem 0.55rem', fontWeight: 800 }}
-                                onClick={() =>
-                                  setP2pRequest({ ...p2pRequest, [r]: p2pRequest[r] + 1 })
-                                }
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      style={{ marginTop: '0.65rem', width: '100%' }}
-                      disabled={
-                        totalResourceCount(p2pOffer) === 0 || totalResourceCount(p2pRequest) === 0
-                      }
-                      onClick={() => {
-                        executeAction(activePlayerObj.id, {
-                          type: 'propose_trade',
-                          offering: p2pOffer,
-                          requesting: p2pRequest
-                        });
-                        setP2pOffer(createEmptyResources());
-                        setP2pRequest(createEmptyResources());
-                        setActiveModal('none');
-                      }}
-                    >
-                      Trimite Oferta de Schimb Jucătorilor
-                    </button>
-                  </div>
+                  <TradeOfferBuilder
+                    locale={locale}
+                    gameState={gameState}
+                    activePlayer={activePlayerObj}
+                    bankGiveRes={bankGiveRes}
+                    bankReceiveRes={bankReceiveRes}
+                    onBankGiveResChange={setBankGiveRes}
+                    onBankReceiveResChange={setBankReceiveRes}
+                    onBankTrade={(give, giveAmount, receive) =>
+                      executeAction(activePlayerObj.id, { type: 'trade_bank', give, giveAmount, receive })
+                    }
+                    p2pOffer={p2pOffer}
+                    p2pRequest={p2pRequest}
+                    onP2pOfferChange={setP2pOffer}
+                    onP2pRequestChange={setP2pRequest}
+                    onProposeTrade={() => {
+                      executeAction(activePlayerObj.id, {
+                        type: 'propose_trade',
+                        offering: p2pOffer,
+                        requesting: p2pRequest
+                      });
+                      setP2pOffer(createEmptyResources());
+                      setP2pRequest(createEmptyResources());
+                      setActiveModal('none');
+                    }}
+                  />
             </AdaptiveSurface>
           )}
 
@@ -4541,150 +4116,15 @@ export const App: React.FC = () => {
                 onClose={closeCounterModal}
                 title={`🔄 ${locale === 'ro' ? 'Contra-ofertă către' : 'Counter-offer to'} ${originalProposer?.name ?? originalOffer.fromPlayerId}`}
               >
-                    <div
-                      style={{
-                        fontSize: '0.85rem',
-                        color: 'var(--text-muted)',
-                        marginBottom: '0.85rem',
-                        textAlign: 'center',
-                        background: 'rgba(0,0,0,0.25)',
-                        padding: '8px 12px',
-                        borderRadius: 8
-                      }}
-                    >
-                      {locale === 'ro'
-                        ? 'Oferta lor: oferă'
-                        : 'Their offer: offers'}{' '}
-                      {ALL_RESOURCES.filter((r) => originalOffer.offering[r] > 0)
-                        .map((r) => (
-                          <span key={r} className="res-count" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, margin: '0 4px' }}>
-                            <ResourceIcon resource={r} height={34} />
-                            <strong style={{ fontSize: '1.1rem' }}>{originalOffer.offering[r]}</strong>
-                          </span>
-                        ))}{' '}
-                      · {locale === 'ro' ? 'cere' : 'asks'}{' '}
-                      {ALL_RESOURCES.filter((r) => originalOffer.requesting[r] > 0)
-                        .map((r) => (
-                          <span key={r} className="res-count" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, margin: '0 4px' }}>
-                            <ResourceIcon resource={r} height={34} />
-                            <strong style={{ fontSize: '1.1rem' }}>{originalOffer.requesting[r]}</strong>
-                          </span>
-                        ))}
-                      {' — '}
-                      {locale === 'ro'
-                        ? 'alege mai jos ce vrei TU să oferi/ceri în loc:'
-                        : 'pick what YOU want to offer/ask instead below:'}
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                      <div>
-                        <strong style={{ fontSize: '0.85rem' }}>
-                          {locale === 'ro' ? 'Oferi din mână:' : 'You offer:'}
-                        </strong>
-                        {ALL_RESOURCES.map((r) => (
-                          <div
-                            key={r}
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              marginTop: 6,
-                              padding: '4px 8px',
-                              background: 'rgba(0,0,0,0.22)',
-                              border: '1px solid rgba(255,255,255,0.08)',
-                              borderRadius: 8
-                            }}
-                          >
-                            <span style={{ fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                              <ResourceIcon resource={r} height={42} />
-                              <span>
-                                <strong>{RESOURCE_LABELS[locale][r]}</strong>
-                                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 4 }}>
-                                  (ai {viewerPlayerObj.resources[r]})
-                                </span>
-                              </span>
-                            </span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <button
-                                type="button"
-                                className="btn"
-                                style={{ padding: '0.2rem 0.55rem', fontWeight: 800 }}
-                                onClick={() => setP2pOffer({ ...p2pOffer, [r]: Math.max(0, p2pOffer[r] - 1) })}
-                              >
-                                -
-                              </button>
-                              <span style={{ minWidth: 24, textAlign: 'center', fontWeight: 900, fontSize: '1.1rem', color: p2pOffer[r] > 0 ? 'var(--accent-gold)' : 'inherit' }}>
-                                {p2pOffer[r]}
-                              </span>
-                              <button
-                                type="button"
-                                className="btn"
-                                style={{ padding: '0.2rem 0.55rem', fontWeight: 800 }}
-                                onClick={() =>
-                                  setP2pOffer({
-                                    ...p2pOffer,
-                                    [r]: Math.min(viewerPlayerObj.resources[r], p2pOffer[r] + 1)
-                                  })
-                                }
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      <div>
-                        <strong style={{ fontSize: '0.85rem' }}>
-                          {locale === 'ro' ? 'Ceri la schimb:' : 'You ask for:'}
-                        </strong>
-                        {ALL_RESOURCES.map((r) => (
-                          <div
-                            key={r}
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              marginTop: 6,
-                              padding: '4px 8px',
-                              background: 'rgba(0,0,0,0.22)',
-                              border: '1px solid rgba(255,255,255,0.08)',
-                              borderRadius: 8
-                            }}
-                          >
-                            <span style={{ fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                              <ResourceIcon resource={r} height={42} />
-                              <strong>{RESOURCE_LABELS[locale][r]}</strong>
-                            </span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <button
-                                type="button"
-                                className="btn"
-                                style={{ padding: '0.2rem 0.55rem', fontWeight: 800 }}
-                                onClick={() => setP2pRequest({ ...p2pRequest, [r]: Math.max(0, p2pRequest[r] - 1) })}
-                              >
-                                -
-                              </button>
-                              <span style={{ minWidth: 24, textAlign: 'center', fontWeight: 900, fontSize: '1.1rem', color: p2pRequest[r] > 0 ? 'var(--accent-gold)' : 'inherit' }}>
-                                {p2pRequest[r]}
-                              </span>
-                              <button
-                                type="button"
-                                className="btn"
-                                style={{ padding: '0.2rem 0.55rem', fontWeight: 800 }}
-                                onClick={() => setP2pRequest({ ...p2pRequest, [r]: p2pRequest[r] + 1 })}
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      style={{ marginTop: '0.75rem', width: '100%' }}
-                      disabled={totalResourceCount(p2pOffer) === 0 || totalResourceCount(p2pRequest) === 0}
-                      onClick={() => {
+                    <CounterTradeOffer
+                      locale={locale}
+                      originalOffer={originalOffer}
+                      viewerPlayer={viewerPlayerObj}
+                      p2pOffer={p2pOffer}
+                      p2pRequest={p2pRequest}
+                      onP2pOfferChange={setP2pOffer}
+                      onP2pRequestChange={setP2pRequest}
+                      onSendCounterOffer={() => {
                         executeAction(viewerId, {
                           type: 'counter_trade',
                           offerId: originalOffer.id,
@@ -4693,9 +4133,7 @@ export const App: React.FC = () => {
                         });
                         closeCounterModal();
                       }}
-                    >
-                      {locale === 'ro' ? 'Trimite Contra-oferta' : 'Send Counter-offer'}
-                    </button>
+                    />
               </AdaptiveSurface>
             );
           })()}
@@ -4803,46 +4241,12 @@ export const App: React.FC = () => {
                     </>
                   }
                 >
-                      <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
-                        {ALL_RESOURCES.map((r) => (
-                          <div key={r} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                            <ResourceCardSprite
-                              resource={r}
-                              count={p.resources[r]}
-                              locale={locale}
-                              size="md"
-                              selected={discardSelection[r] > 0}
-                            />
-                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                              <button
-                                type="button"
-                                className="btn"
-                                onClick={() =>
-                                  setDiscardSelection({
-                                    ...discardSelection,
-                                    [r]: Math.max(0, discardSelection[r] - 1)
-                                  })
-                                }
-                              >
-                                -
-                              </button>
-                              <strong>{discardSelection[r]}</strong>
-                              <button
-                                type="button"
-                                className="btn"
-                                onClick={() =>
-                                  setDiscardSelection({
-                                    ...discardSelection,
-                                    [r]: Math.min(p.resources[r], discardSelection[r] + 1)
-                                  })
-                                }
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                      <DiscardDialog
+                        locale={locale}
+                        player={p}
+                        selection={discardSelection}
+                        onSelectionChange={setDiscardSelection}
+                      />
                 </Dialog>
               );
             })}
@@ -4854,49 +4258,17 @@ export const App: React.FC = () => {
               hidden resource count shows correctly instead of the local adapter's 0 placeholder. */}
           {gameState.phase === 'steal_resource' && isHumanTurn && (
             <Dialog open onClose={() => {}} title="🥷 Alege adversarul de la care furi 1 resursă">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-                  {(gameState.robberContext?.eligibleTargetIds ?? []).map((tId) => {
-                    const tp = playerView?.players.find((p) => p.id === tId) ?? getPlayerById(gameState, tId);
-                    if (!tp) return null;
-                    const score = 'publicScore' in tp ? (tp.totalScore ?? tp.publicScore) : calculateScore(gameState, tId).publicScore;
-                    const resCount = 'resourceCount' in tp ? tp.resourceCount : totalResourceCount(tp.resources);
-                    const devCount = 'devCardCount' in tp ? tp.devCardCount : tp.devCards.filter((c) => !c.played).length;
-                    return (
-                      <button
-                        key={tId}
-                        type="button"
-                        className="btn"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: 10,
-                          width: '100%',
-                          padding: '0.55rem 0.75rem',
-                          background: 'var(--bg-inset)',
-                          border: '1px solid var(--border-color-soft)',
-                          textAlign: 'left'
-                        }}
-                        onClick={() =>
-                          executeAction(gameState.activePlayerId, {
-                            type: 'steal_from_player',
-                            targetPlayerId: tId
-                          })
-                        }
-                      >
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span className="color-dot" style={{ backgroundColor: tp.color, width: 12, height: 12 }} />
-                          <strong>{tp.name}</strong>
-                        </span>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                          <span style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>{score} VP</span>
-                          <span title={locale === 'ro' ? 'Cărți de resurse în mână' : 'Resource cards in hand'}>🎴 {resCount}</span>
-                          <span title={locale === 'ro' ? 'Cărți de dezvoltare nejucate' : 'Unplayed dev cards'}>🃏 {devCount}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                <StealResourceDialog
+                  locale={locale}
+                  gameState={gameState}
+                  playerView={playerView}
+                  onStealFromPlayer={(targetPlayerId) =>
+                    executeAction(gameState.activePlayerId, {
+                      type: 'steal_from_player',
+                      targetPlayerId
+                    })
+                  }
+                />
             </Dialog>
           )}
 
@@ -5067,193 +4439,12 @@ export const App: React.FC = () => {
                     </div>
                 }
               >
-                      {!canAfford && (
-                        <span
-                          style={{
-                            background: 'rgba(239, 68, 68, 0.2)',
-                            color: '#f87171',
-                            border: '1px solid rgba(239, 68, 68, 0.4)',
-                            padding: '2px 8px',
-                            borderRadius: 12,
-                            fontSize: '0.78rem',
-                            fontWeight: 700,
-                            display: 'inline-block',
-                            marginBottom: '0.6rem'
-                          }}
-                        >
-                          ⚠️ Resurse insuficiente
-                        </span>
-                      )}
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 1fr',
-                        gap: '0.85rem',
-                        marginBottom: '1rem'
-                      }}
-                    >
-                      <div
-                        style={{
-                          background: 'rgba(34, 197, 94, 0.12)',
-                          padding: '0.6rem',
-                          borderRadius: 8,
-                          border: '1px solid rgba(34, 197, 94, 0.3)'
-                        }}
-                      >
-                        <h4 style={{ color: '#4ade80', fontSize: '0.84rem', margin: '0 0 0.4rem 0' }}>
-                          Primești (îți oferă):
-                        </h4>
-                        {ALL_RESOURCES.filter((r) => incomingOffer.offering[r] > 0).map((r) => (
-                          <div key={r} style={{ fontSize: '0.84rem', fontWeight: 600, marginTop: 2 }}>
-                            <ResourceIcon resource={r} /> {incomingOffer.offering[r]}x {RESOURCE_LABELS[locale][r]}
-                          </div>
-                        ))}
-                      </div>
-                      <div
-                        style={{
-                          background: 'rgba(239, 68, 68, 0.12)',
-                          padding: '0.6rem',
-                          borderRadius: 8,
-                          border: '1px solid rgba(239, 68, 68, 0.3)'
-                        }}
-                      >
-                        <h4 style={{ color: '#f87171', fontSize: '0.84rem', margin: '0 0 0.4rem 0' }}>
-                          Dai (îți cere):
-                        </h4>
-                        {ALL_RESOURCES.filter((r) => incomingOffer.requesting[r] > 0).map((r) => (
-                          <div key={r} style={{ fontSize: '0.84rem', fontWeight: 600, marginTop: 2 }}>
-                            <ResourceIcon resource={r} /> {incomingOffer.requesting[r]}x {RESOURCE_LABELS[locale][r]}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Resursele din mână ale jucătorului receptor */}
-                    <div
-                      style={{
-                        background: 'rgba(255, 255, 255, 0.04)',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        borderRadius: 8,
-                        padding: '0.6rem 0.65rem',
-                        marginBottom: '0.85rem'
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          marginBottom: '0.45rem'
-                        }}
-                      >
-                        <h4 style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>
-                          {locale === 'ro' ? '🃏 Cărțile tale în mână:' : '🃏 Your cards in hand:'}
-                        </h4>
-                        <span style={{ fontSize: '0.78rem', opacity: 0.75 }}>
-                          {Object.values(myRes).reduce((a, b) => a + b, 0)}{' '}
-                          {locale === 'ro' ? 'cărți în total' : 'cards total'}
-                        </span>
-                      </div>
-                      <div
-                        style={{
-                          display: 'flex',
-                          gap: 6,
-                          justifyContent: 'center',
-                          flexWrap: 'wrap'
-                        }}
-                      >
-                        {ALL_RESOURCES.map((r) => {
-                          const count = myRes[r] ?? 0;
-                          const req = incomingOffer.requesting[r] ?? 0;
-                          const off = incomingOffer.offering[r] ?? 0;
-                          const isRequested = req > 0;
-                          const isOffered = off > 0;
-                          const hasEnough = count >= req;
-
-                          return (
-                            <div
-                              key={r}
-                              style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                position: 'relative'
-                              }}
-                            >
-                              <ResourceCardSprite
-                                resource={r}
-                                count={count}
-                                locale={locale}
-                                size="sm"
-                                selected={isRequested}
-                              />
-                              {isRequested && (
-                                <span
-                                  style={{
-                                    fontSize: '0.68rem',
-                                    fontWeight: 700,
-                                    marginTop: 3,
-                                    padding: '1px 4px',
-                                    borderRadius: 4,
-                                    background: hasEnough
-                                      ? 'rgba(34, 197, 94, 0.22)'
-                                      : 'rgba(239, 68, 68, 0.25)',
-                                    color: hasEnough ? '#4ade80' : '#f87171',
-                                    border: `1px solid ${hasEnough ? 'rgba(34, 197, 94, 0.45)' : 'rgba(239, 68, 68, 0.5)'}`,
-                                    whiteSpace: 'nowrap'
-                                  }}
-                                  title={hasEnough ? `Deții ${count} din ${req} cerute` : `Îți lipsesc ${req - count} resurse`}
-                                >
-                                  {hasEnough ? (req === 1 ? 'cere 1' : `cere ${req}`) : `lipsesc ${req - count}`}
-                                </span>
-                              )}
-                              {isOffered && !isRequested && (
-                                <span
-                                  style={{
-                                    fontSize: '0.68rem',
-                                    fontWeight: 700,
-                                    marginTop: 3,
-                                    padding: '1px 4px',
-                                    borderRadius: 4,
-                                    background: 'rgba(59, 130, 246, 0.2)',
-                                    color: '#60a5fa',
-                                    border: '1px solid rgba(59, 130, 246, 0.4)',
-                                    whiteSpace: 'nowrap'
-                                  }}
-                                  title={`Vei primi +${off}`}
-                                >
-                                  +{off}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {!canAfford && (
-                      <div
-                        style={{
-                          background: 'rgba(239, 68, 68, 0.12)',
-                          border: '1px solid rgba(239, 68, 68, 0.35)',
-                          borderRadius: 8,
-                          padding: '0.6rem 0.75rem',
-                          textAlign: 'center',
-                          marginBottom: '0.85rem'
-                        }}
-                      >
-                        <div
-                          style={{
-                            color: '#f87171',
-                            fontSize: '0.84rem',
-                            fontWeight: 700,
-                            marginBottom: 4
-                          }}
-                        >
-                          ⚠️ Nu ai în mână toate resursele cerute pentru a accepta acest schimb.
-                        </div>
-                      </div>
-                    )}
+                    <IncomingTradeOfferDialog
+                      locale={locale}
+                      offer={incomingOffer}
+                      viewerResources={myRes}
+                      canAfford={canAfford}
+                    />
               </Dialog>
             );
           })()}
