@@ -9,8 +9,8 @@
     "preview": "vite preview --port 4173"
   },
   "dependencies": {
-    "@catan/core": "1.0.0",
     "@catan/ai": "1.0.0",
+    "@catan/core": "1.0.0",
     "@catan/protocol": "1.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
@@ -19,6 +19,9 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.6.2",
+    "postcss": "^8.5.32",
+    "tailwindcss": "^3.4.19",
     "vite": "^5.4.11"
   }
 }
