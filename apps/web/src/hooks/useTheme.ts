@@ -3,7 +3,9 @@ import { useCallback, useEffect, useState } from 'react';
 export type Theme = 'light' | 'dark' | 'xmas';
 
 const STORAGE_KEY = 'catan-theme';
-const DEFAULT_THEME: Theme = 'light';
+// The app's legacy CSS has only ever shipped one look — navy/gold ('dark' here, which reuses
+// those exact values, see tokens.css) — so that's the default, not an independently-chosen 'light'.
+const DEFAULT_THEME: Theme = 'dark';
 
 function isTheme(value: unknown): value is Theme {
   return value === 'light' || value === 'dark' || value === 'xmas';

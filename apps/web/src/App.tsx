@@ -44,6 +44,7 @@ import { Dialog } from './components/ui/Dialog';
 import { AdaptiveSurface } from './components/ui/AdaptiveSurface';
 import { AppNav } from './components/ui/AppNav';
 import { ThemeToggle } from './components/ui/ThemeToggle';
+import { useTheme } from './hooks/useTheme';
 import {
   AnimatedDiceWidget,
   ResourceIcon,
@@ -275,6 +276,9 @@ const STYLE_FONT_WEIGHT_BOLD: React.CSSProperties = { fontWeight: 700 };
 export const App: React.FC = () => {
   const [locale, setLocale] = useState<Locale>('ro');
   const [activeTab, setActiveTab] = useState<ActiveTab>('lobby');
+  // Called here (always-mounted) rather than inside ThemeToggle itself, so the theme applies
+  // to the whole app from first paint — ThemeToggle only mounts once the nav drawer is opened.
+  const { theme, setTheme } = useTheme();
 
   // App version badge + release notes — read live from the server's /api/version endpoint
   // (derived from git commit count/log), so it reflects whatever is currently checked out
@@ -2407,6 +2411,7 @@ export const App: React.FC = () => {
             didn't belong inline in a 52px header, and crowded it on every screen size. Rendered
             through the shared AppNav drawer component (Phase 7 of the UI refactor). */}
         <AppNav
+          compactTrigger
           items={[
             { id: 'lobby', icon: NAV_TAB_ICON.lobby, label: t.navLobby },
             { id: 'game', icon: NAV_TAB_ICON.game, label: t.navGame },
@@ -2450,7 +2455,7 @@ export const App: React.FC = () => {
               >
                 📖 {locale === 'ro' ? 'Regulament' : 'Rulebook'}
               </button>
-              <ThemeToggle />
+              <ThemeToggle theme={theme} setTheme={setTheme} />
             </>
           )}
         />

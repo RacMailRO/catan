@@ -22,6 +22,13 @@ export interface AppNavProps {
    * drawer itself (e.g. a quick link that opens a modal) — it receives a `closeNav` callback.
    */
   footer?: React.ReactNode | ((closeNav: () => void) => React.ReactNode);
+  /**
+   * Set when the trigger renders inside a height-constrained bar (e.g. a compact app header)
+   * where a 44px minimum touch target would overflow it. Sizes the trigger to match its header
+   * siblings instead. Everything inside the drawer itself always keeps its full 44px target,
+   * since the drawer isn't height-constrained the way a header bar is.
+   */
+  compactTrigger?: boolean;
 }
 
 /**
@@ -30,7 +37,7 @@ export interface AppNavProps {
  * SandboxMode.tsx) — callers only provide the list of items, the active id, and a callback.
  * Generic over nav items; knows nothing about any app-specific tab type.
  */
-export function AppNav({ items, activeId, onNavigate, footer }: AppNavProps): React.ReactElement {
+export function AppNav({ items, activeId, onNavigate, footer, compactTrigger }: AppNavProps): React.ReactElement {
   const [open, setOpen] = useState(false);
 
   const handleNavigate = (id: string) => {
@@ -45,7 +52,11 @@ export function AppNav({ items, activeId, onNavigate, footer }: AppNavProps): Re
         aria-label="Open navigation"
         aria-expanded={open}
         onClick={() => setOpen(true)}
-        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded px-3 py-2 text-ink hover:bg-surfaceMuted"
+        className={
+          compactTrigger
+            ? 'flex items-center justify-center rounded px-3 py-2 text-ink hover:bg-surfaceMuted'
+            : 'flex min-h-[44px] min-w-[44px] items-center justify-center rounded px-3 py-2 text-ink hover:bg-surfaceMuted'
+        }
       >
         ☰
       </button>

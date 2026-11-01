@@ -1,17 +1,26 @@
 /*
  * Design tokens for the UI refactor. Three themes selected via `data-theme` on the
- * document root: 'light' (default, no attribute needed), 'dark', and 'xmas'.
- * Values approved by the user in the design mockup — kept verbatim here.
- * Components should always consume these via Tailwind's token-mapped color classes
- * (see tailwind.config.js) rather than hardcoding any hex value.
+ * document root: 'light' (bare :root, a genuinely new look this app never had before),
+ * 'dark' (the app's real, only-ever-shipped identity, and the default — see below), and
+ * 'xmas'. Components should always consume these via Tailwind's token-mapped color
+ * classes (see tailwind.config.js) rather than hardcoding any hex value.
+ *
+ * 'dark' intentionally reuses this app's existing legacy palette verbatim (styles.css's
+ * :root --bg-dark/--bg-card/--bg-panel/--text-main/--text-muted/--accent-gold/--accent-red/
+ * --border-color-soft, and the --accent-gold+--bg-dark pairing already used by .btn-primary)
+ * rather than an independently-designed dark palette: this app has no separate light mode
+ * today, its whole legacy UI is this navy/gold look, and most of the UI stays on that legacy
+ * CSS until a later full migration. Reusing the exact values — not just similar ones — is
+ * what makes the new Tailwind-based chrome (nav drawer, dialogs, surfaces) look like part of
+ * the same app instead of a visibly different design system bolted on.
  */
 :root{
   --bg:#EEF1EC; --surface:#FFFFFF; --surface-2:#F6F8F4; --ink:#1C2620; --ink-soft:#5B6B61;
   --accent:#2F6F5E; --accent-ink:#FFFFFF; --warn:#B5542F; --line:#D7DED5;
 }
 :root[data-theme="dark"]{
-  --bg:#141A17; --surface:#1D2522; --surface-2:#212B27; --ink:#EAF0EA; --ink-soft:#9CB0A4;
-  --accent:#4FA98A; --accent-ink:#0B1210; --warn:#E07A52; --line:#2B362F;
+  --bg:#0A1420; --surface:#192A3A; --surface-2:#11212F; --ink:#EEF2F4; --ink-soft:#93A3AE;
+  --accent:#B8863F; --accent-ink:#0A1420; --warn:#B5432F; --line:#2E3F4E;
 }
 :root[data-theme="xmas"]{
   --bg:#0F241A; --surface:#163B28; --surface-2:#1C3A28; --ink:#F4EFE3; --ink-soft:#B9C9BB;
