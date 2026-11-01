@@ -1,9 +1,14 @@
 {
-  "version": "v1.182",
-  "commitCount": 182,
-  "shortHash": "dea79e4",
-  "buildDate": "2026-11-01T19:54:02.611Z",
+  "version": "v1.183",
+  "commitCount": 183,
+  "shortHash": "fbbb153",
+  "buildDate": "2026-11-01T20:54:15.123Z",
   "releaseNotes": [
+    {
+      "hash": "fbbb153",
+      "date": "2026-11-01",
+      "message": "feat(web): unified card badges, clean hand dock alignment, single-row costs, balanced top HUD, and dev docs"
+    },
     {
       "hash": "dea79e4",
       "date": "2026-11-01",
@@ -248,11 +253,6 @@
       "hash": "9a4b3b8",
       "date": "2026-10-27",
       "message": "fix(assets): re-extract and align gold field terrain tiles with true hex vertices"
-    },
-    {
-      "hash": "9576ad4",
-      "date": "2026-10-27",
-      "message": "fix(board): fix coastline shoreline to strictly hug land-water boundaries instead of raw hex perimeter"
     }
   ]
 }

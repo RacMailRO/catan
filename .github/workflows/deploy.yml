@@ -1,0 +1,96 @@
+name: Build & Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (simulate build and sync without modifying remote files)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build, Test & Deploy (FTP)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          # fetch-depth: 0 ensures git rev-list --count HEAD and commit logs
+          # generate accurate commit counts and release notes for version.json
+          fetch-depth: 0
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Monorepo Dependencies
+        run: npm ci
+
+      - name: Run Test Suite
+        run: npm test
+
+      - name: Build Standalone Server & Web Frontend
+        run: npm run build
+
+      - name: Prepare Deployment Staging Directory
+        run: |
+          mkdir -p .deploy/dist
+          mkdir -p .deploy/tmp
+
+          # 1. Entry point for cPanel / Phusion Passenger
+          cp apps/server/server-entry.mjs .deploy/server-entry.mjs
+
+          # 2. Standalone bundle (server.mjs, version.json, and public/ static assets)
+          cp -r apps/server/dist/* .deploy/dist/
+
+          # 3. Phusion Passenger reload trigger (touching tmp/restart.txt triggers worker reload)
+          date -u +"%Y-%m-%d %H:%M:%S UTC" > .deploy/tmp/restart.txt
+
+          # 4. Strict safety verification: Ensure local SQLite is NEVER in the payload
+          if [ -f .deploy/catan-local.sqlite ] || [ -f .deploy/dist/catan-local.sqlite ]; then
+            echo "❌ CRITICAL ERROR: Found SQLite database in deployment staging folder! Aborting."
+            exit 1
+          fi
+
+          echo "✅ Deployment payload prepared successfully:"
+          ls -la .deploy
+          ls -la .deploy/dist
+
+      - name: Deploy to Remote Server (FTP / FTPS)
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: ${{ secrets.FTP_PORT || 21 }}
+          protocol: ${{ secrets.FTP_PROTOCOL || 'ftp' }}
+          local-dir: ./.deploy/
+          server-dir: ${{ secrets.FTP_SERVER_DIR || './' }}
+          dry-run: ${{ github.event.inputs.dry_run == 'true' }}
+          dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/*.sqlite*
+            **/*.db*
+            **/node_modules/**
+
+      - name: Verify Live Deployment
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          echo "Waiting 5 seconds for Phusion Passenger to reload..."
+          sleep 5
+          echo "Checking live version at https://catan.d10.ro/api/version"
+          curl -s -f https://catan.d10.ro/api/version || echo "⚠️ Could not reach /api/version immediately. Please check cPanel Node.js App status."

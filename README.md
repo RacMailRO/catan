@@ -176,28 +176,48 @@ Running `npm run build` executes a 5-step automated pipeline:
 
 > **Zero Remote Dependencies**: The bundled `server.mjs` contains all code and packages (`ws`, `zod`, `@catan/core`, `@catan/ai`, `@catan/protocol`). **The remote server does NOT need `node_modules` at all.**
 
-### Remote Deployment Procedure (FTP Upload)
+### CI/CD Deployment via GitHub Actions (Automated)
 
-Because git/SSH is not configured on the shared hosting server, deployment is performed from the local repository via FTP:
+The project includes an automated deployment workflow defined in [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Dev as Developer (Local)
-    participant Build as Local Build Pipeline
-    participant FTP as Remote FTP (catan.d10.ro)
-    participant cPanel as cPanel Node.js App
+    actor Dev as Developer
+    participant GH as GitHub (main branch)
+    participant Action as GitHub Actions Runner
+    participant FTP as Remote cPanel Server (catan.d10.ro)
+    participant Pass as Phusion Passenger (Node.js)
 
-    Dev->>Build: npm run build
-    Build-->>Dev: apps/server/dist/ & server-entry.mjs ready
-    Dev->>FTP: Upload server-entry.mjs
-    Dev->>FTP: Upload apps/server/dist/ -> dist/
-    Note over Dev,FTP: DO NOT upload catan-local.sqlite!
-    Dev->>cPanel: Click "Restart" in Setup Node.js App
-    Dev->>Dev: curl https://catan.d10.ro/api/version
+    Dev->>GH: git push origin main
+    GH->>Action: Trigger deploy.yml workflow
+    Action->>Action: Checkout, npm ci, npm test
+    Action->>Action: npm run build (Vite + standalone server.mjs)
+    Action->>Action: Stage payload & generate tmp/restart.txt
+    Action->>FTP: FTP Sync (server-entry.mjs, dist/, tmp/restart.txt)
+    Note over Action,FTP: Strict safety rule: catan-local.sqlite is never uploaded
+    FTP->>Pass: Detects new tmp/restart.txt mtime
+    Pass->>Pass: Gracefully reloads Node.js worker pool
+    Action->>FTP: Verifies live response at /api/version
 ```
 
-#### Step-by-Step Instructions:
+#### GitHub Secrets Configuration
+To enable the automated deployment workflow, configure the following secrets in GitHub (**Repository Settings → Secrets and variables → Actions**):
+
+| Secret Name | Required | Description | Example |
+|---|---|---|---|
+| `FTP_SERVER` | **Yes** | Remote FTP host / cPanel IP | `ftp.d10.ro` or `catan.d10.ro` |
+| `FTP_USERNAME` | **Yes** | FTP account username | `catan@d10.ro` or cPanel username |
+| `FTP_PASSWORD` | **Yes** | FTP account password | `YourSecretPassword` |
+| `FTP_SERVER_DIR` | No | Target folder on server | `./` or `/public_html/` (default: `./`) |
+| `FTP_PORT` | No | FTP port | `21` (default) |
+| `FTP_PROTOCOL` | No | Protocol (`ftp` or `ftps`) | `ftp` (default) |
+
+> **Automatic Passenger Reload**: The GitHub Action creates `tmp/restart.txt` with a fresh UTC timestamp during each deployment. Phusion Passenger detects this file and automatically reloads the application workers on the next request without needing manual intervention in cPanel!
+
+### Manual Deployment Procedure (Local FTP Upload)
+
+If you need to deploy manually from your development machine:
 
 1. **Build locally**:
    ```bash
@@ -217,7 +237,8 @@ sequenceDiagram
    > The live server's `catan-local.sqlite` holds live player accounts, high scores, and active online games. Overwriting it will destroy production data.
 
 5. **Restart Node.js Application**:
-   - Log into cPanel.
+   - Create or update `tmp/restart.txt` in the app directory, or:
+   - Log into cPanel → **Setup Node.js App** → Select Application → **Restart**.
    - Go to **Setup Node.js App**.
    - Find the application and click **Restart**.
 

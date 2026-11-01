@@ -111,20 +111,21 @@ In `.board-top-banner`:
 
 The live production server is hosted at **`https://catan.d10.ro`** on cPanel with Phusion Passenger (Node.js).
 
-### Deployment Rules:
-1. Git repository exists **locally only** (no git or SSH on remote server).
-2. All builds are performed locally via:
-   ```bash
-   npm run build
-   ```
-3. Upload via FTP to application root:
-   - `apps/server/server-entry.mjs` → `server-entry.mjs`
-   - `apps/server/dist/` → `dist/` (includes bundled `server.mjs`, `version.json`, and static `public/`)
-4. **CRITICAL — Database Safety**:
+### Deployment Workflows:
+1. **Automated CI/CD via GitHub Actions (Primary)**:
+   - Workflow file: `.github/workflows/deploy.yml`
+   - Triggers on `push` to `main` branch or manual `workflow_dispatch`.
+   - Runs `npm ci`, `npm test`, `npm run build`, and stages payload into `.deploy/`.
+   - Uploads via FTP/FTPS using GitHub Secrets (`FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD`, etc.).
+   - Creates `tmp/restart.txt` to trigger Phusion Passenger worker reload automatically.
+   - Verifies deployment via `https://catan.d10.ro/api/version`.
+2. **Manual FTP Deployment (Fallback)**:
+   - Build locally via `npm run build`.
+   - Upload `apps/server/server-entry.mjs` and `apps/server/dist/` to server app root.
+   - Touch `tmp/restart.txt` or click Restart in cPanel.
+3. **CRITICAL — Database Safety**:
    - **NEVER** upload `catan-local.sqlite` to the server. The live database contains real matches and high scores.
-5. **Restart**:
-   - In cPanel → **Setup Node.js App** → Select Application → **Restart**.
-6. **Verify**:
+4. **Verification**:
    ```bash
    curl -s https://catan.d10.ro/api/version
    ```
