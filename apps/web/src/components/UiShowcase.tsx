@@ -34,7 +34,7 @@ import { WaitingRoomPanel } from './game/WaitingRoomPanel';
 import { GameOverDialog } from './game/GameOverDialog';
 import { InGameTerminationDialog } from './game/InGameTerminationDialog';
 import { LobbyState, OnlineSession } from '../online';
-import { Locale } from '../i18n';
+import { Locale, TRANSLATIONS } from '../i18n';
 
 export interface UiShowcaseProps {
   /** Active UI locale, forwarded to every demoed component that takes one. */
@@ -362,7 +362,7 @@ export function UiShowcase({ locale, onExit }: UiShowcaseProps): React.ReactElem
 
       {/* ScoreBank */}
       {openPanel === 'score_bank' && (
-        <AdaptiveSurface open onClose={closePanel} title={`🏆 Leaderboard, Players & Bank (Target: ${midGameState.rules.victoryPointsToWin} VP)`}>
+        <AdaptiveSurface open onClose={closePanel} title={`🏆 ${locale === 'ro' ? 'Clasament, Participanți & Bancă' : 'Leaderboard, Players & Bank'} (Țintă: ${midGameState.rules.victoryPointsToWin} VP)`}>
           <ScoreBank
             locale={locale}
             playerView={playerView}
@@ -382,42 +382,42 @@ export function UiShowcase({ locale, onExit }: UiShowcaseProps): React.ReactElem
 
       {/* EventLog */}
       {openPanel === 'event_log' && (
-        <AdaptiveSurface open onClose={closePanel} title={`📜 Event Log (${replay?.events.length ?? 0} actions)`}>
+        <AdaptiveSurface open onClose={closePanel} title={`📜 ${TRANSLATIONS[locale].eventLogTitle} (${replay?.events.length ?? 0} acțiuni)`}>
           <EventLog locale={locale} gameState={midGameState} events={replay?.events.slice(0, 40) ?? []} />
         </AdaptiveSurface>
       )}
 
       {/* CostsHelp */}
       {openPanel === 'costs_help' && (
-        <AdaptiveSurface open onClose={closePanel} title="📋 Building Costs & Victory Point Table">
+        <AdaptiveSurface open onClose={closePanel} title={locale === 'ro' ? '📋 Tabel Costuri Construcții & Puncte de Victorie' : '📋 Building Costs & Victory Point Table'}>
           <CostsHelp locale={locale} hasShipsInScenario={hasShipsInScenario} />
         </AdaptiveSurface>
       )}
 
       {/* FullRules */}
       {openPanel === 'full_rules' && (
-        <AdaptiveSurface open onClose={closePanel} title="📖 Official Rules">
+        <AdaptiveSurface open onClose={closePanel} title={`📖 ${locale === 'ro' ? 'Regulament Oficial' : 'Official Rules'}`}>
           <FullRules locale={locale} scenario={midGameState.rules.boardScenario} />
         </AdaptiveSurface>
       )}
 
       {/* ReleaseNotes */}
       {openPanel === 'release_notes' && (
-        <AdaptiveSurface open onClose={closePanel} title="📋 Release Notes — v0.0.0-showcase">
+        <AdaptiveSurface open onClose={closePanel} title="📋 Note de Lansare — v0.0.0-showcase">
           <ReleaseNotes commitCount={128} shortHash="abc1234" releaseNotes={sampleReleaseNotes} />
         </AdaptiveSurface>
       )}
 
       {/* StartingOrder */}
       {openPanel === 'starting_order' && midGameState.startingOrderRolls && (
-        <AdaptiveSurface open onClose={closePanel} title="🎲 Who Starts the Game">
+        <AdaptiveSurface open onClose={closePanel} title="🎲 Cine Începe Partida">
           <StartingOrder players={midGameState.players} rolls={midGameState.startingOrderRolls} onClose={closePanel} />
         </AdaptiveSurface>
       )}
 
       {/* TradeOfferBuilder */}
       {openPanel === 'trade' && (
-        <AdaptiveSurface open onClose={closePanel} title="⚓ Maritime (Bank/Port) Trade & Player-to-Player Offer">
+        <AdaptiveSurface open onClose={closePanel} title="⚓ Comerț Maritim (Bancă / Porturi) & Schimb între Jucători">
           <TradeOfferBuilder
             locale={locale}
             gameState={midGameState}
@@ -438,7 +438,7 @@ export function UiShowcase({ locale, onExit }: UiShowcaseProps): React.ReactElem
 
       {/* CounterTradeOffer */}
       {openPanel === 'counter_trade' && sampleOffer && (
-        <AdaptiveSurface open onClose={closePanel} title="🔄 Counter-offer">
+        <AdaptiveSurface open onClose={closePanel} title={`🔄 ${locale === 'ro' ? 'Contra-ofertă către' : 'Counter-offer to'} ${midGameState.players.find((p) => p.id === sampleOffer.fromPlayerId)?.name ?? sampleOffer.fromPlayerId}`}>
           <CounterTradeOffer
             locale={locale}
             originalOffer={sampleOffer}
@@ -454,7 +454,7 @@ export function UiShowcase({ locale, onExit }: UiShowcaseProps): React.ReactElem
 
       {/* DevCardsPanel */}
       {openPanel === 'dev_cards' && (
-        <AdaptiveSurface open onClose={closePanel} title={`🃏 Development Cards — ${viewerPlayer.name} (${unplayedDevCards.length})`}>
+        <AdaptiveSurface open onClose={closePanel} title={`🃏 ${TRANSLATIONS[locale].devCardsTitle} — ${viewerPlayer.name} (${unplayedDevCards.length})`}>
           <DevCardsPanel
             locale={locale}
             gameState={midGameState}
@@ -475,10 +475,10 @@ export function UiShowcase({ locale, onExit }: UiShowcaseProps): React.ReactElem
         <Dialog
           open
           onClose={closePanel}
-          title="👑 Declare Monopoly"
+          title="👑 Declară Monopol"
           footer={
             <button type="button" className="btn btn-primary" onClick={() => { console.info('[showcase] would play_monopoly', trade.monopolyResource); closePanel(); }}>
-              Confiscate all: {trade.monopolyResource.toUpperCase()}
+              👑 Confiscă tot: {trade.monopolyResource.toUpperCase()}
             </button>
           }
         >
@@ -496,10 +496,10 @@ export function UiShowcase({ locale, onExit }: UiShowcaseProps): React.ReactElem
         <Dialog
           open
           onClose={closePanel}
-          title="🎁 Play: Year of Plenty"
+          title="🎁 Joacă: Anul Abundenței"
           footer={
             <button type="button" className="btn btn-primary" onClick={() => { console.info('[showcase] would play_year_of_plenty', trade.yopResources); closePanel(); }}>
-              Take {trade.yopResources[0]} + {trade.yopResources[1]}
+              🎁 Ia {trade.yopResources[0]} + {trade.yopResources[1]}
             </button>
           }
         >
@@ -532,7 +532,7 @@ export function UiShowcase({ locale, onExit }: UiShowcaseProps): React.ReactElem
 
       {/* StealResourceDialog */}
       {openPanel === 'steal_resource' && stealGameState && (
-        <Dialog open onClose={closePanel} title="🥷 Choose the opponent to steal 1 resource from">
+        <Dialog open onClose={closePanel} title="🥷 Alege adversarul de la care furi 1 resursă">
           <StealResourceDialog
             locale={locale}
             gameState={stealGameState}
@@ -547,12 +547,12 @@ export function UiShowcase({ locale, onExit }: UiShowcaseProps): React.ReactElem
         <Dialog
           open
           onClose={closePanel}
-          title={`Trade Offer from ${midGameState.players.find((p) => p.id === sampleOffer.fromPlayerId)?.name ?? sampleOffer.fromPlayerId}`}
+          title={`Ofertă de Schimb de la ${midGameState.players.find((p) => p.id === sampleOffer.fromPlayerId)?.name ?? sampleOffer.fromPlayerId}`}
           footer={
             <div className="flex gap-2">
-              <button type="button" className="btn btn-primary" onClick={() => { console.info('[showcase] would respond_trade accept'); closePanel(); }}>Accept</button>
-              <button type="button" className="btn" onClick={() => { console.info('[showcase] would respond_trade reject'); closePanel(); }}>Reject</button>
-              <button type="button" className="btn" onClick={() => setOpenPanel('counter_trade')}>Counter</button>
+              <button type="button" className="btn btn-primary" onClick={() => { console.info('[showcase] would respond_trade accept'); closePanel(); }}>✅ Acceptă Schimbul</button>
+              <button type="button" className="btn" onClick={() => { console.info('[showcase] would respond_trade reject'); closePanel(); }}>❌ {locale === 'ro' ? 'Refuză' : 'Reject'}</button>
+              <button type="button" className="btn" onClick={() => setOpenPanel('counter_trade')}>↩️ Contra-ofertă</button>
             </div>
           }
         >
@@ -567,7 +567,7 @@ export function UiShowcase({ locale, onExit }: UiShowcaseProps): React.ReactElem
 
       {/* WaitingRoomPanel */}
       {openPanel === 'waiting_room' && (
-        <AdaptiveSurface open onClose={closePanel} title="🌐 Waiting Room">
+        <AdaptiveSurface open onClose={closePanel} title="🌐 Sală de Așteptare">
           <WaitingRoomPanel
             lobby={sampleLobby}
             session={sampleSession}
@@ -589,11 +589,11 @@ export function UiShowcase({ locale, onExit }: UiShowcaseProps): React.ReactElem
         <Dialog
           open
           onClose={closePanel}
-          title="🎉 Game Finished & Auto-Saved!"
+          title="🎉 Partidă Finalizată & Salvată Automat!"
           footer={
             <div className="flex gap-2">
-              <button type="button" className="btn btn-primary" onClick={() => { console.info('[showcase] would open replay'); closePanel(); }}>Open in Replay & Analysis</button>
-              <button type="button" className="btn" onClick={closePanel}>New Game</button>
+              <button type="button" className="btn btn-primary" onClick={() => { console.info('[showcase] would open replay'); closePanel(); }}>🎬 Deschide în Replay & Analiză</button>
+              <button type="button" className="btn" onClick={closePanel}>⚙️ Partidă Nouă</button>
             </div>
           }
         >
@@ -601,16 +601,18 @@ export function UiShowcase({ locale, onExit }: UiShowcaseProps): React.ReactElem
         </Dialog>
       )}
 
-      {/* InGameTerminationDialog */}
+      {/* InGameTerminationDialog — title/footer copied verbatim from App.tsx's real usage
+          (this component is Romanian-only in the real app too, no locale branching there
+          either — matching it here, not inventing an English version the real UI lacks). */}
       {openPanel === 'in_game_termination' && (
         <Dialog
           open
           onClose={closePanel}
-          title="⚠️ Match Termination Request"
+          title="⚠️ Cerere de Închidere a Partidei"
           footer={
             <div className="flex gap-2">
-              <button type="button" className="btn btn-primary" onClick={closePanel}>No, continue the game</button>
-              <button type="button" className="btn btn-danger" onClick={closePanel}>Yes, close it</button>
+              <button type="button" className="btn btn-primary" onClick={closePanel}>🛡️ Nu, continuă partida</button>
+              <button type="button" className="btn btn-danger" onClick={closePanel}>⏹️ Da, închide</button>
             </div>
           }
         >

@@ -1,6 +1,6 @@
 import React from 'react';
 import { ALL_RESOURCES, PlayerState, ResourceCount, TradeOffer, totalResourceCount } from '@catan/core';
-import { ResourceIcon } from '../GameAssets';
+import { ResourceCardSprite, ResourceIcon, amountValueStyle } from '../GameAssets';
 import { Locale, RESOURCE_LABELS } from '../../i18n';
 
 export interface CounterTradeOfferProps {
@@ -66,7 +66,24 @@ export const CounterTradeOffer: React.FC<CounterTradeOfferProps> = ({
           ? 'alege mai jos ce vrei TU să oferi/ceri în loc:'
           : 'pick what YOU want to offer/ask instead below:'}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+      {/* Own hand shown once, ahead of both columns below. */}
+      <div style={{ marginBottom: '0.75rem' }}>
+        <strong style={{ fontSize: '0.85rem' }}>
+          {locale === 'ro' ? 'Resursele tale:' : 'Your resources:'}
+        </strong>
+        <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+          {ALL_RESOURCES.map((r) => (
+            <ResourceCardSprite
+              key={r}
+              resource={r}
+              count={viewerPlayer.resources[r]}
+              locale={locale}
+              size="xs"
+            />
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-1 min-[480px]:grid-cols-2 gap-4">
         <div>
           <strong style={{ fontSize: '0.85rem' }}>
             {locale === 'ro' ? 'Oferi din mână:' : 'You offer:'}
@@ -87,12 +104,7 @@ export const CounterTradeOffer: React.FC<CounterTradeOfferProps> = ({
             >
               <span style={{ fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                 <ResourceIcon resource={r} height={42} />
-                <span>
-                  <strong>{RESOURCE_LABELS[locale][r]}</strong>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 4 }}>
-                    (ai {viewerPlayer.resources[r]})
-                  </span>
-                </span>
+                <strong>{RESOURCE_LABELS[locale][r]}</strong>
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <button
@@ -103,7 +115,7 @@ export const CounterTradeOffer: React.FC<CounterTradeOfferProps> = ({
                 >
                   -
                 </button>
-                <span style={{ minWidth: 24, textAlign: 'center', fontWeight: 900, fontSize: '1.1rem', color: p2pOffer[r] > 0 ? 'var(--accent-gold)' : 'inherit' }}>
+                <span style={{ minWidth: 24, textAlign: 'center', fontWeight: 900, fontSize: '1.1rem', ...amountValueStyle(p2pOffer[r]) }}>
                   {p2pOffer[r]}
                 </span>
                 <button
@@ -154,7 +166,7 @@ export const CounterTradeOffer: React.FC<CounterTradeOfferProps> = ({
                 >
                   -
                 </button>
-                <span style={{ minWidth: 24, textAlign: 'center', fontWeight: 900, fontSize: '1.1rem', color: p2pRequest[r] > 0 ? 'var(--accent-gold)' : 'inherit' }}>
+                <span style={{ minWidth: 24, textAlign: 'center', fontWeight: 900, fontSize: '1.1rem', ...amountValueStyle(p2pRequest[r]) }}>
                   {p2pRequest[r]}
                 </span>
                 <button

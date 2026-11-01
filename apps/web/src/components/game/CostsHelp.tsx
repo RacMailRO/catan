@@ -35,19 +35,25 @@ export const CostsHelp: React.FC<CostsHelpProps> = ({ locale, hasShipsInScenario
           key={row.key}
           style={{
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
+            flexDirection: 'column',
+            gap: 8,
             background: 'var(--bg-inset)',
             border: '1px solid var(--border-color-soft)',
             borderRadius: 10,
             padding: '0.65rem 1rem'
           }}
         >
-          <strong style={{ minWidth: 150, fontSize: '1.05rem', color: 'var(--parchment)' }}>
-            {row.label}
-          </strong>
-          <div style={{ display: 'flex', gap: 12, flex: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <strong style={{ fontSize: '1.05rem', color: 'var(--parchment)' }}>
+              {row.label}
+            </strong>
+            <span style={{ color: 'var(--accent-gold)', fontWeight: 800, fontSize: '1.05rem' }}>
+              {row.vp}
+            </span>
+          </div>
+          {/* Cards flow left-to-right and wrap as a row of their own, not squeezed by the
+              label/VP text sharing the same row - that's what forced one-per-line before. */}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {ALL_RESOURCES.filter((r) => row.cost[r] > 0).map((r) => (
               <div
                 key={r}
@@ -69,9 +75,6 @@ export const CostsHelp: React.FC<CostsHelpProps> = ({ locale, hasShipsInScenario
               </div>
             ))}
           </div>
-          <span style={{ color: 'var(--accent-gold)', fontWeight: 800, fontSize: '1.05rem', minWidth: 80, textAlign: 'right' }}>
-            {row.vp}
-          </span>
         </div>
       ))}
       <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: 6, padding: '0.45rem', background: 'rgba(0, 0, 0, 0.2)', borderRadius: 6 }}>

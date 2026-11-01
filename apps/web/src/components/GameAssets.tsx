@@ -33,6 +33,28 @@ export function playerBadgeStyle(color?: PlayerColor): React.CSSProperties {
     : { fontWeight: 700 };
 }
 
+// Small colored dot instead of a filled badge - for dense lists (the event log) where a full
+// badge per row, per player, reads as too much saturated color at once. Pair with a `title`
+// attribute on the wrapping element for the player's name as a hover tooltip.
+export function playerDotStyle(color?: PlayerColor): React.CSSProperties {
+  return {
+    display: 'inline-block',
+    width: 10,
+    height: 10,
+    borderRadius: '50%',
+    background: color ?? 'var(--text-muted)',
+    border: '1px solid rgba(255,255,255,0.35)',
+    flexShrink: 0
+  };
+}
+
+// Shared "value the player can currently change" rule for every +/- resource stepper: zero
+// (nothing staged yet) is muted, a non-zero/changed value is full-contrast - both theme-aware
+// via the existing --text-muted/--text-main tokens, so it reads correctly in every theme.
+export function amountValueStyle(value: number): React.CSSProperties {
+  return { color: value > 0 ? 'var(--text-main)' : 'var(--text-muted)' };
+}
+
 /**
  * Exact sprite coordinates in /cards.jpg (1612x2000, 5 columns x 4 rows).
  * For a 5x4 grid, CSS background-size is '500% 400%'.

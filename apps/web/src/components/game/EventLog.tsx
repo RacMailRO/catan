@@ -1,6 +1,6 @@
 import React from 'react';
 import { GameEvent, GameState, getPlayerById } from '@catan/core';
-import { playerBadgeStyle, renderResourceTokens } from '../GameAssets';
+import { playerDotStyle, renderResourceTokens } from '../GameAssets';
 import { Locale, formatActionDescription } from '../../i18n';
 
 export interface EventLogProps {
@@ -21,11 +21,8 @@ export const EventLog: React.FC<EventLogProps> = ({ locale, gameState, events })
         const p = getPlayerById(gameState, ev.playerId);
         return (
           <div key={ev.sequence} className="event-item" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderBottom: '1px solid var(--border-color-soft)' }}>
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', minWidth: 42 }}>#{ev.sequence}</span>
-            <span style={{ color: 'var(--accent-gold)', fontSize: '0.78rem', minWidth: 32 }}>T{ev.turn}</span>
-            <span style={playerBadgeStyle(p?.color)}>
-              {p?.name ?? ev.playerId}
-            </span>
+            <span style={{ color: 'var(--accent-gold)', fontSize: '0.78rem', minWidth: 28 }}>T{ev.turn}</span>
+            <span style={playerDotStyle(p?.color)} title={p?.name ?? ev.playerId} />
             <span style={{ flex: 1, fontSize: '0.86rem' }}>
               {renderResourceTokens(formatActionDescription(ev.action, locale, ev.details))}
             </span>

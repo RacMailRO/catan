@@ -1,6 +1,6 @@
 import React from 'react';
 import { ALL_RESOURCES, PlayerState, ResourceCount } from '@catan/core';
-import { ResourceCardSprite } from '../GameAssets';
+import { ResourceCardSprite, amountValueStyle } from '../GameAssets';
 import { Locale } from '../../i18n';
 
 export interface DiscardDialogProps {
@@ -41,7 +41,7 @@ export const DiscardDialog: React.FC<DiscardDialogProps> = ({ locale, player, se
             >
               -
             </button>
-            <strong>{selection[r]}</strong>
+            <strong style={amountValueStyle(selection[r])}>{selection[r]}</strong>
             <button
               type="button"
               className="btn"
