@@ -51,6 +51,12 @@ import {
   ResourceCardSprite,
   playerBadgeStyle
 } from './components/GameAssets';
+import { ScoreBank } from './components/game/ScoreBank';
+import { EventLog } from './components/game/EventLog';
+import { CostsHelp } from './components/game/CostsHelp';
+import { FullRules } from './components/game/FullRules';
+import { ReleaseNotes } from './components/game/ReleaseNotes';
+import { StartingOrder } from './components/game/StartingOrder';
 import { ReplayAndAnalysisView } from './components/ReplayAndAnalysisView';
 import { HallOfFameView } from './components/HallOfFameView';
 import { SandboxMode } from './components/SandboxMode';
@@ -94,13 +100,10 @@ import {
   PHASE_LABELS,
   RESOURCE_LABELS,
   TRANSLATIONS,
-  formatActionDescription,
   DEV_CARD_ICONS,
   DEV_CARD_LABELS,
   DEV_CARD_RULE_TEXT,
-  FULL_RULES,
-  getScenarioRules,
-  SCENARIO_LABELS
+  FULL_RULES
 } from './i18n';
 
 type ActiveTab = 'lobby' | 'game' | 'replay' | 'benchmark' | 'spectate' | 'sandbox' | 'hall_of_fame';
@@ -3903,146 +3906,20 @@ export const App: React.FC = () => {
           onClose={() => setActiveModal('none')}
           title={`🏆 ${locale === 'ro' ? 'Clasament, Participanți & Bancă' : 'Leaderboard, Players & Bank'} (Țintă: ${gameState.rules.victoryPointsToWin} VP)`}
         >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-              {/* Responsive Grid of Players */}
-              <div className="score-bank-grid">
-                {playerView.players.map((p) => {
-                  const isCurrent = playerView.activePlayerId === p.id;
-                  const hasLongestRoad = playerView.longestRoadOwnerId === p.id;
-                  const hasLargestArmy = playerView.largestArmyOwnerId === p.id;
-                  return (
-                    <div
-                      key={p.id}
-                      className={`player-grid-card ${isCurrent ? 'active-turn' : ''}`}
-                    >
-                      {isCurrent && <span className="player-grid-turn-badge">⚡ La rând</span>}
-                      <div className="player-grid-header">
-                        <div className="player-grid-title">
-                          <span
-                            className="color-dot"
-                            style={{ backgroundColor: p.color, width: 12, height: 12 }}
-                          />
-                          <span className="player-grid-name">{p.name}</span>
-                          <span className="player-grid-type">{p.type.toUpperCase()}</span>
-                        </div>
-                        <span className="player-grid-score">
-                          {p.totalScore !== undefined ? `${p.totalScore} VP` : `${p.publicScore} VP`}
-                        </span>
-                      </div>
-
-                      {p.resources ? (
-                        <div style={{ display: 'flex', gap: 3, justifyContent: 'center', marginTop: 2 }}>
-                          {ALL_RESOURCES.map((r) => {
-                            const gain = resourceGainFlash[p.id]?.[r];
-                            return (
-                              <div key={r} style={{ position: 'relative' }}>
-                                <ResourceCardSprite resource={r} count={p.resources![r]} locale={locale} size="xs" />
-                                {gain ? <span className="resource-gain-flash">+{gain}</span> : null}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.2rem 0' }}>
-                          🎴 {p.resourceCount} resurse · 🃏 {p.devCardCount} dezvoltare
-                        </div>
-                      )}
-
-                      <div className="player-grid-stats">
-                        {/* Pieces placed vs the fixed physical supply (5 settlements / 4
-                            cities / 15 roads) — so "why can't I build a settlement" has an
-                            answer right here: 5/5 means none left, not a resource problem. */}
-                        <div className="player-grid-pieces">
-                          {(
-                            [
-                              ['settlements', '🏠', locale === 'ro' ? 'Așezări' : 'Settlements'] as const,
-                              ['cities', '🏰', locale === 'ro' ? 'Orașe' : 'Cities'] as const,
-                              ['roads', '🛣️', locale === 'ro' ? 'Drumuri' : 'Roads'] as const,
-                              ...(hasShipsInScenario && p.remainingPieces.ships !== undefined
-                                ? [['ships', '⛵', locale === 'ro' ? 'Corăbii' : 'Ships'] as const]
-                                : [])
-                            ]
-                          ).map(([key, icon, title]) => {
-                            const total = INITIAL_PLAYER_PIECES[key];
-                            const used = total - (p.remainingPieces[key] ?? 0);
-                            const exhausted = used >= total;
-                            return (
-                              <span
-                                key={key}
-                                className={`piece-count-pill ${exhausted ? 'exhausted' : ''}`}
-                                title={`${title}: ${used}/${total}`}
-                              >
-                                {icon} {used}/{total}
-                              </span>
-                            );
-                          })}
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span>🏆 Drum Lung: {p.longestRoadLength}</span>
-                          <span>⚔️ Cavaleri: {p.knightsPlayed}</span>
-                        </div>
-                        {(hasLongestRoad || hasLargestArmy) && (
-                          <div className="player-grid-badges">
-                            {hasLongestRoad && <span className="achievement-badge">🏅 +2 Drum</span>}
-                            {hasLargestArmy && <span className="achievement-badge">🛡️ +2 Armată</span>}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Bank Stock */}
-              <div style={{ background: '#0d1a29', padding: '0.5rem', borderRadius: 8, border: '1px solid var(--border-color)' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '0.3rem' }}>
-                  🏦 Stoc Bancă & Pachet Cărți
-                </div>
-                <div className="bank-single-row" style={{ margin: 0 }}>
-                  {ALL_RESOURCES.map((r) => (
-                    <span key={r} className="res-badge" title={RESOURCE_LABELS[locale][r]}>
-                      <ResourceIcon resource={r} /> {playerView.bank[r]}
-                    </span>
-                  ))}
-                  <span className="res-badge" title="Cărți de dezvoltare în pachet">
-                    🃏 {playerView.devCardDeckCount}
-                  </span>
-                </div>
-              </div>
-
-              {/* Match Controls */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem' }}>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={executeOneAiStep}
-                  disabled={gameState.phase === 'game_over' || isHumanTurn}
-                >
-                  ⏭ {t.stepAi}
-                </button>
-                <button
-                  type="button"
-                  className={`btn ${autoPlayAi ? 'btn-primary' : ''}`}
-                  onClick={() => setAutoPlayAi((a) => !a)}
-                >
-                  {autoPlayAi ? `⏸ ${t.pauseAi}` : `▶ ${t.autoPlayAi}`}
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setActiveModal('event_log')}
-                >
-                  📜 Jurnal ({recorder?.getEvents().length ?? 0})
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setActiveModal('costs_help')}
-                >
-                  📋 Tabel Costuri
-                </button>
-              </div>
-            </div>
+            <ScoreBank
+              locale={locale}
+              playerView={playerView}
+              resourceGainFlash={resourceGainFlash}
+              hasShipsInScenario={hasShipsInScenario}
+              isGameOver={gameState.phase === 'game_over'}
+              isHumanTurn={isHumanTurn}
+              autoPlayAi={autoPlayAi}
+              onToggleAutoPlayAi={() => setAutoPlayAi((a) => !a)}
+              onStepAi={executeOneAiStep}
+              eventCount={recorder?.getEvents().length ?? 0}
+              onOpenEventLog={() => setActiveModal('event_log')}
+              onOpenCostsHelp={() => setActiveModal('costs_help')}
+            />
         </AdaptiveSurface>
       )}
 
@@ -4315,52 +4192,11 @@ export const App: React.FC = () => {
           {/* MODAL A: STARTING ORDER — each player's opening 2d6 roll, highest goes first */}
           {activeModal === 'starting_order' && gameState?.startingOrderRolls && (
             <AdaptiveSurface open onClose={() => setActiveModal('none')} title="🎲 Cine Începe Partida">
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                    Fiecare jucător a dat cu zarurile; cel mai mare total începe jocul.
-                  </p>
-                  {gameState.startingOrderRolls.map((roll, idx) => {
-                    const p = getPlayerById(gameState, roll.playerId);
-                    if (!p) return null;
-                    return (
-                      <div
-                        key={roll.playerId}
-                        className="candidate-row"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          borderColor: idx === 0 ? 'var(--accent-gold)' : undefined,
-                          background: idx === 0 ? 'rgba(184, 134, 63, 0.14)' : undefined
-                        }}
-                      >
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span
-                            className="color-dot"
-                            style={{ backgroundColor: p.color }}
-                          />
-                          <strong>
-                            {idx + 1}. {p.name}
-                          </strong>
-                          {idx === 0 && (
-                            <span style={{ color: 'var(--accent-gold-bright)', fontWeight: 700, fontSize: '0.78rem' }}>
-                              Începe primul
-                            </span>
-                          )}
-                        </span>
-                        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700 }}>
-                          {roll.die1} + {roll.die2} = {roll.total}
-                        </span>
-                      </div>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    style={{ width: '100%', marginTop: '0.75rem', justifyContent: 'center' }}
-                    onClick={() => setActiveModal('none')}
-                  >
-                    Să Începem!
-                  </button>
+                  <StartingOrder
+                    players={gameState.players}
+                    rolls={gameState.startingOrderRolls}
+                    onClose={() => setActiveModal('none')}
+                  />
             </AdaptiveSurface>
           )}
 
@@ -4871,102 +4707,23 @@ export const App: React.FC = () => {
               onClose={() => setActiveModal('none')}
               title={`📜 ${t.eventLogTitle} (${recorder.getEvents().length} acțiuni)`}
             >
-                  <div className="event-list">
-                    {[...recorder.getEvents()].reverse().map((ev) => {
-                      const p = getPlayerById(gameState, ev.playerId);
-                      return (
-                        <div key={ev.sequence} className="event-item" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderBottom: '1px solid var(--border-color-soft)' }}>
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', minWidth: 42 }}>#{ev.sequence}</span>
-                          <span style={{ color: 'var(--accent-gold)', fontSize: '0.78rem', minWidth: 32 }}>T{ev.turn}</span>
-                          <span style={playerBadgeStyle(p?.color)}>
-                            {p?.name ?? ev.playerId}
-                          </span>
-                          <span style={{ flex: 1, fontSize: '0.86rem' }}>
-                            {renderResourceTokens(formatActionDescription(ev.action, locale, ev.details))}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <EventLog locale={locale} gameState={gameState} events={recorder.getEvents()} />
             </AdaptiveSurface>
           )}
 
           {/* MODAL D: BUILDING COSTS REFERENCE (/cost.jpg) */}
-          {activeModal === 'costs_help' && (() => {
-            // Built from BUILDING_COSTS directly (always matches the real rules, in whatever
-            // language is active) rather than a baked-in reference image - cost.jpg had no
-            // Romanian or English version, only Spanish ("Carretera", "Poblado"...), which a
-            // flat image can't fix per-locale the way every other card in the game already
-            // shows translated text: blank/textless art with the label drawn separately.
-            const rows: { key: string; label: string; cost: ResourceCount; vp: string }[] = [
-              { key: 'road', label: locale === 'ro' ? 'Drum' : 'Road', cost: BUILDING_COSTS.road, vp: '0 VP' },
-              ...(gameState && isScenarioWithShips(gameState.rules.boardScenario)
-                ? [{ key: 'ship', label: locale === 'ro' ? 'Navă' : 'Ship', cost: BUILDING_COSTS.ship, vp: '0 VP' }]
-                : []),
-              { key: 'settlement', label: locale === 'ro' ? 'Așezare' : 'Settlement', cost: BUILDING_COSTS.settlement, vp: '1 VP' },
-              { key: 'city', label: locale === 'ro' ? 'Oraș' : 'City', cost: BUILDING_COSTS.city, vp: '2 VP' },
-              { key: 'dev_card', label: locale === 'ro' ? 'Carte de Dezvoltare' : 'Development Card', cost: BUILDING_COSTS.dev_card, vp: locale === 'ro' ? '? VP (variază)' : '? VP (varies)' }
-            ];
-            return (
-              <AdaptiveSurface
-                open
-                onClose={() => setActiveModal('none')}
-                title={locale === 'ro' ? '📋 Tabel Costuri Construcții & Puncte de Victorie' : '📋 Building Costs & Victory Point Table'}
-              >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {rows.map((row) => (
-                        <div
-                          key={row.key}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: 12,
-                            background: 'var(--bg-inset)',
-                            border: '1px solid var(--border-color-soft)',
-                            borderRadius: 10,
-                            padding: '0.65rem 1rem'
-                          }}
-                        >
-                          <strong style={{ minWidth: 150, fontSize: '1.05rem', color: 'var(--parchment)' }}>
-                            {row.label}
-                          </strong>
-                          <div style={{ display: 'flex', gap: 12, flex: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
-                            {ALL_RESOURCES.filter((r) => row.cost[r] > 0).map((r) => (
-                              <div
-                                key={r}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 6,
-                                  background: 'rgba(0, 0, 0, 0.35)',
-                                  border: '1px solid rgba(255, 255, 255, 0.12)',
-                                  borderRadius: 8,
-                                  padding: '4px 10px',
-                                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.3)'
-                                }}
-                              >
-                                <ResourceIcon resource={r} height={52} />
-                                <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#fff' }}>
-                                  {row.cost[r]}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                          <span style={{ color: 'var(--accent-gold)', fontWeight: 800, fontSize: '1.05rem', minWidth: 80, textAlign: 'right' }}>
-                            {row.vp}
-                          </span>
-                        </div>
-                      ))}
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: 6, padding: '0.45rem', background: 'rgba(0, 0, 0, 0.2)', borderRadius: 6 }}>
-                        {locale === 'ro'
-                          ? '🛣️ Drumul cel mai Lung (min. 5 drumuri): +2 VP  ·  ⚔️ Armata cea mai Mare (min. 3 Cavaleri): +2 VP'
-                          : '🛣️ Longest Road (5+ roads): +2 VP  ·  ⚔️ Largest Army (3+ Knights): +2 VP'}
-                      </div>
-                    </div>
+          {activeModal === 'costs_help' && (
+            <AdaptiveSurface
+              open
+              onClose={() => setActiveModal('none')}
+              title={locale === 'ro' ? '📋 Tabel Costuri Construcții & Puncte de Victorie' : '📋 Building Costs & Victory Point Table'}
+            >
+                  <CostsHelp
+                    locale={locale}
+                    hasShipsInScenario={Boolean(gameState && isScenarioWithShips(gameState.rules.boardScenario))}
+                  />
             </AdaptiveSurface>
-            );
-          })()}
+          )}
 
           {/* AUTOMATIC MODAL E: DISCARD CARDS ON 7 ROLL (>7 cards) */}
           {gameState.phase === 'discard_resources' &&
@@ -6261,27 +6018,11 @@ export const App: React.FC = () => {
           onClose={() => setShowReleaseNotes(false)}
           title={`📋 Note de Lansare — ${versionInfo.version}`}
         >
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: 0 }}>
-                {versionInfo.commitCount} commit-uri · HEAD <code>{versionInfo.shortHash}</code>
-              </p>
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {versionInfo.releaseNotes.map((note) => (
-                  <li
-                    key={note.hash}
-                    style={{
-                      borderBottom: '1px solid var(--border-color)',
-                      paddingBottom: '0.5rem',
-                      fontSize: '0.84rem'
-                    }}
-                  >
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'baseline' }}>
-                      <code style={{ color: 'var(--accent-gold)', fontSize: '0.74rem' }}>{note.hash}</code>
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>{note.date}</span>
-                    </div>
-                    <div>{note.message}</div>
-                  </li>
-                ))}
-              </ul>
+              <ReleaseNotes
+                commitCount={versionInfo.commitCount}
+                shortHash={versionInfo.shortHash}
+                releaseNotes={versionInfo.releaseNotes}
+              />
         </AdaptiveSurface>
       )}
 
@@ -6289,8 +6030,6 @@ export const App: React.FC = () => {
           never played Catan and want to learn the game before (or during) their first game. */}
       {activeModal === 'full_rules' && (() => {
         const activeScenario = gameState?.rules?.boardScenario ?? rules.boardScenario ?? 'classic';
-        const scenarioLabel = SCENARIO_LABELS[activeScenario]?.[locale] ?? activeScenario;
-        const scenarioSections = getScenarioRules(activeScenario, locale);
 
         return (
           <AdaptiveSurface
@@ -6298,19 +6037,7 @@ export const App: React.FC = () => {
             onClose={() => setActiveModal('none')}
             title={`📖 ${locale === 'ro' ? 'Regulament Oficial' : 'Official Rules'}`}
           >
-                <small style={{ color: 'var(--accent-gold)', fontSize: '0.8rem', display: 'block', marginBottom: '0.75rem' }}>
-                  {scenarioLabel}
-                </small>
-                {scenarioSections.map((section) => (
-                  <div key={section.title} className="rules-section" style={{ marginBottom: '1.25rem' }}>
-                    <h4 style={{ color: 'var(--accent-gold)', marginBottom: '0.4rem', fontSize: '0.95rem' }}>{section.title}</h4>
-                    <ul style={{ margin: 0, paddingLeft: '1.2rem', lineHeight: '1.5', fontSize: '0.85rem' }}>
-                      {section.body.map((line, idx) => (
-                        <li key={idx} style={{ marginBottom: '0.35rem' }}>{line}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
+                <FullRules locale={locale} scenario={activeScenario} />
           </AdaptiveSurface>
         );
       })()}
