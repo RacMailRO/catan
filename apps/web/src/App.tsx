@@ -24,6 +24,7 @@ import {
   canPlayDevCardType,
   createEmptyResources,
   createRulesConfig,
+  expireStaleTradesInPlace,
   getEligibleRobberTargetsOnHex,
   getLegalActions,
   getPlayerBankTradeRatio,
@@ -458,6 +459,15 @@ export const App: React.FC = () => {
   // anywhere before, so the event_log surface was gated on `recorder` (always null online —
   // see Phase 0's "local hot-seat is dead code" finding) and silently never opened.
   const [onlineEvents, setOnlineEvents] = useState<GameEvent[]>([]);
+
+  const mergeOnlineEvents = useCallback((prev: GameEvent[], incoming?: GameEvent[]): GameEvent[] => {
+    if (!incoming || incoming.length === 0) return prev;
+    const bySeq = new Map<number, GameEvent>();
+    for (const ev of prev) bySeq.set(ev.sequence, ev);
+    for (const ev of incoming) bySeq.set(ev.sequence, ev);
+    const merged = Array.from(bySeq.values()).sort((a, b) => a.sequence - b.sequence);
+    return merged.length > 500 ? merged.slice(-500) : merged;
+  }, []);
   const [onlineError, setOnlineError] = useState<string | null>(null);
   const [onlineBusy, setOnlineBusy] = useState<boolean>(false);
   const onlineWsRef = useRef<WebSocket | null>(null);
@@ -903,7 +913,7 @@ export const App: React.FC = () => {
     setOnlineSession({ lobbyId, gameId, sessionToken, playerId });
     setOnlinePlayerView(data.playerView);
     setOnlineLegalActions(data.legalActions as GameAction[]);
-    if (data.recentEvents) setOnlineEvents(data.recentEvents);
+    setOnlineEvents(mergeOnlineEvents([], data.recentEvents));
     setOnlineLobby(null);
     setActiveTab('game');
   };
@@ -1033,6 +1043,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (!onlineSession?.gameId) {
       setWsConnected(false);
+      setOnlineEvents([]);
       return;
     }
     const gameId = onlineSession.gameId;
@@ -1071,7 +1082,7 @@ export const App: React.FC = () => {
               setOnlineLegalActions(msg.legalActions);
 
               const incomingEvents = (msg.recentEvents ?? []) as GameEvent[];
-              setOnlineEvents(incomingEvents);
+              setOnlineEvents((prev) => mergeOnlineEvents(prev, incomingEvents));
               if (lastSeenEventSeqRef.current === -1) {
                 // First sync of this connection: adopt its latest sequence as the baseline
                 // without narrating anything older than "now".
@@ -1155,6 +1166,9 @@ export const App: React.FC = () => {
   // socket above disconnected with no retry. This guarantees opponents' moves still show up
   // everywhere, just on a ~3s cadence instead of instantly; harmless where WS does work too,
   // since a stale response (compared by sequence number) is just discarded.
+  const isAllAiPoll = Boolean(
+    onlinePlayerView?.players?.length && onlinePlayerView.players.every((p) => p.type !== 'human')
+  );
   useEffect(() => {
     if (!onlineSession?.gameId) return;
     const gameId = onlineSession.gameId;
@@ -1164,8 +1178,20 @@ export const App: React.FC = () => {
       try {
         const data = await fetchGameState(gameId, sessionToken);
         if (cancelled) return;
-        setOnlinePlayerView((prev) => (prev && prev.sequence >= data.playerView.sequence ? prev : data.playerView));
+        setOnlinePlayerView((prev) => {
+          if (!prev) return data.playerView;
+          if (prev.sequence > data.playerView.sequence) return prev;
+          if (prev.sequence === data.playerView.sequence) {
+            const prevOffers = prev.activeTradeOffers.map((o) => `${o.id}:${o.status}`).join(',');
+            const nextOffers = data.playerView.activeTradeOffers.map((o) => `${o.id}:${o.status}`).join(',');
+            if (prevOffers === nextOffers) return prev;
+          }
+          return data.playerView;
+        });
         setOnlineLegalActions(data.legalActions);
+        if (data.recentEvents) {
+          setOnlineEvents((prev) => mergeOnlineEvents(prev, data.recentEvents));
+        }
         if (data.pendingTermination) {
           setInGameTermination(data.pendingTermination);
         } else {
@@ -1178,23 +1204,32 @@ export const App: React.FC = () => {
         // Transient network hiccup — the next tick will retry.
       }
     };
-    const isAllAi = Boolean(onlinePlayerView?.players && onlinePlayerView.players.every((p) => p.type !== 'human'));
-    const interval = setInterval(poll, isAllAi ? 1200 : 3000);
+    const interval = setInterval(poll, isAllAiPoll ? 1200 : 3000);
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [onlineSession?.gameId, onlineSession?.sessionToken]);
+  }, [onlineSession?.gameId, onlineSession?.sessionToken, isAllAiPoll]);
 
   const lastSavedGameIdRef = useRef<string | null>(null);
 
   // Replay Viewer State
   const [activeReplay, setActiveReplay] = useState<ReplayFile | null>(null);
-  const openGameReplay = async (targetGameId?: string) => {
+  const [openReplayReportSignal, setOpenReplayReportSignal] = useState<number>(0);
+  const openGameReplay = async (
+    targetGameId?: string,
+    options?: { openStrategicReport?: boolean }
+  ) => {
+    const triggerReport = () => {
+      if (options?.openStrategicReport) {
+        setOpenReplayReportSignal((n) => n + 1);
+      }
+    };
     if (recorder) {
       const rep = recorder.toReplayFile();
       saveReplayToHistory(rep, true);
       setActiveReplay(rep);
+      triggerReport();
       setActiveTab('replay');
       return;
     }
@@ -1207,6 +1242,7 @@ export const App: React.FC = () => {
           if (data.replay) {
             saveReplayToHistory(data.replay, true);
             setActiveReplay(data.replay);
+            triggerReport();
             setActiveTab('replay');
             return;
           }
@@ -1215,6 +1251,7 @@ export const App: React.FC = () => {
         console.error('Eroare la încărcarea replay-ului:', err);
       }
     }
+    triggerReport();
     setActiveTab('replay');
   };
 
@@ -1509,7 +1546,7 @@ export const App: React.FC = () => {
     const newView = data.playerView;
     setOnlinePlayerView(newView);
     setOnlineLegalActions(data.legalActions);
-    if (data.recentEvents) setOnlineEvents(data.recentEvents);
+    if (data.recentEvents) setOnlineEvents((prev) => mergeOnlineEvents(prev, data.recentEvents));
 
     // Our own action's effects (and anything the server stepped for us, like bot turns) are
     // about to be narrated below via the action/actingPlayerId branch - mark every event up to
@@ -1692,7 +1729,7 @@ export const App: React.FC = () => {
     } catch (err: any) {
       if (err?.statusCode === 409 && err?.data?.playerView) {
         applyOnlineSync(err.data as GameSyncPayload, action, playerId, prevView);
-        if (action.type === 'respond_trade' || action.type === 'cancel_trade') {
+        if (action.type === 'respond_trade' || action.type === 'cancel_trade' || action.type === 'counter_trade') {
           try {
             const nextSeq = err.data.currentSequence ?? err.data.playerView?.sequence;
             const retryData = await submitOnlineAction({
@@ -1712,7 +1749,7 @@ export const App: React.FC = () => {
       } else {
         // If an offer rejection/cancellation failed with 400 because the offer is already closed,
         // silently refresh the online game state so the client seamlessly catches up with the server.
-        if (action.type === 'respond_trade' || action.type === 'cancel_trade') {
+        if (action.type === 'respond_trade' || action.type === 'cancel_trade' || action.type === 'counter_trade') {
           try {
             const fresh = await fetchGameState(onlineSession.gameId, onlineSession.sessionToken);
             setOnlinePlayerView(fresh.playerView);
@@ -1927,18 +1964,29 @@ export const App: React.FC = () => {
     setDiscardSelection,
     visibleTradeOffers,
     dismissTradeOffer,
+    hideTradeBanner,
     cancelMyTradeOffer
   } = trade;
 
-  // Step one AI move
+  // Step one AI move (or unstick full bot batch in Human + AI online games)
   const executeOneAiStep = async () => {
     if (onlineSession?.gameId) {
       setPendingActionSince(Date.now());
       try {
-        const data = await stepOnlineAi(onlineSession.gameId, 1, onlineSession.playerId);
+        const isAllAi = Boolean(
+          onlinePlayerView?.players?.length && onlinePlayerView.players.every((p) => p.type !== 'human')
+        );
+        const stepsToRun = isAllAi ? 1 : 80;
+        const data = await stepOnlineAi(onlineSession.gameId, stepsToRun, onlineSession.playerId);
         setOnlinePlayerView(data.playerView);
         setOnlineLegalActions(data.legalActions as GameAction[]);
-        if (data.recentEvents) setOnlineEvents(data.recentEvents);
+        if (data.recentEvents) setOnlineEvents((prev) => mergeOnlineEvents(prev, data.recentEvents));
+        if (data.pendingTermination !== undefined) {
+          setInGameTermination(data.pendingTermination ?? null);
+        }
+        if (data.terminationDismissed !== undefined) {
+          setInGameTerminationDismissed(Boolean(data.terminationDismissed));
+        }
       } catch (err) {
         console.error('Failed to step AI online:', err);
       } finally {
@@ -1949,6 +1997,7 @@ export const App: React.FC = () => {
     if (!recorder) return;
     const st = recorder.getState();
     if (st.phase === 'game_over') return;
+    const expiredLocal = expireStaleTradesInPlace(st);
 
     let actorId = st.activePlayerId;
     if (st.phase === 'discard_resources') {
@@ -2000,7 +2049,10 @@ export const App: React.FC = () => {
     }
 
     const actor = getPlayerById(st, actorId);
-    if (!actor || actor.type === 'human') return;
+    if (!actor || actor.type === 'human') {
+      if (expiredLocal) setGameVersionTick((v) => v + 1);
+      return;
+    }
 
     const decision = chooseAIAction(st, actorId);
     const { event } = recorder.recordAndApply(actorId, decision.action, {
@@ -2022,7 +2074,10 @@ export const App: React.FC = () => {
     const st = recorder.getState();
     if (st.phase === 'game_over') return;
 
+    const expiredLocal = expireStaleTradesInPlace(st);
+
     let needsBotMove = false;
+    let pendingHumanExpiryMs: number | null = null;
     if (st.phase === 'discard_resources') {
       needsBotMove = Object.keys(st.pendingDiscards).some((id) => {
         const p = getPlayerById(st, id);
@@ -2052,6 +2107,9 @@ export const App: React.FC = () => {
           // A pendingHuman who can't afford the offer gets auto-rejected inside
           // executeOneAiStep rather than silently stalling - run that step for them too.
           needsBotMove = !pendingHuman || !hasResources(pendingHuman.resources, openOffer.requesting);
+          if (!needsBotMove && openOffer.expiresAtMs) {
+            pendingHumanExpiryMs = openOffer.expiresAtMs;
+          }
         }
       } else {
         const active = getPlayerById(st, st.activePlayerId);
@@ -2059,7 +2117,20 @@ export const App: React.FC = () => {
       }
     }
 
-    if (!needsBotMove) return;
+    if (!needsBotMove) {
+      if (expiredLocal) {
+        setGameVersionTick((v) => v + 1);
+        return;
+      }
+      if (pendingHumanExpiryMs) {
+        const expiryDelay = Math.max(100, pendingHumanExpiryMs - Date.now() + 100);
+        const expiryTimer = setTimeout(() => {
+          setGameVersionTick((v) => v + 1);
+        }, expiryDelay);
+        return () => clearTimeout(expiryTimer);
+      }
+      return;
+    }
 
     // Main-actions steps (build/trade/steal/dev-card) are slower than roll/setup so the
     // action-feedback banner reportRemoteEventFeedback shows for each one actually has time to
@@ -2147,7 +2218,7 @@ export const App: React.FC = () => {
     }
 
     return { highlightedVertices: vSet, highlightedEdges: eSet, highlightedHexes: hSet };
-  }, [gameState, legalActionsForActive, buildMode, gameVersionTick]);
+  }, [gameState, legalActionsForActive, buildMode, selectedShipEdgeId, gameVersionTick]);
 
   const handleRunBenchmark = () => {
     const { report, replays } = runBenchmarkSuite({
@@ -2218,12 +2289,15 @@ export const App: React.FC = () => {
     if (!gameState || !isHumanTurn) return;
     const pId = gameState.activePlayerId;
     if (gameState.phase === 'setup_road_1' || gameState.phase === 'setup_road_2') {
+      const hasInitialRoad = legalActionsForActive.some(
+        (a) => a.type === 'place_initial_road' && a.edgeId === edgeId
+      );
       const hasInitialShip = legalActionsForActive.some(
         (a) => a.type === 'place_initial_ship' && a.edgeId === edgeId
       );
-      if (hasInitialShip && buildMode === 'ship') {
+      if (hasInitialShip && (buildMode === 'ship' || !hasInitialRoad)) {
         executeAction(pId, { type: 'place_initial_ship', edgeId });
-      } else {
+      } else if (hasInitialRoad) {
         executeAction(pId, { type: 'place_initial_road', edgeId });
       }
     } else if (gameState.phase === 'road_building_card') {
@@ -2343,6 +2417,42 @@ export const App: React.FC = () => {
       prevTradeStatusRef.current[offer.id] = offer.status;
     }
   }, [gameState?.activeTradeOffers]);
+
+  const incomingOffer = useMemo(() => {
+    if (!gameState) return undefined;
+    return gameState.activeTradeOffers.find(
+      (o) =>
+        o.status === 'open' &&
+        o.fromPlayerId !== viewerId &&
+        (!o.toPlayerId || o.toPlayerId === viewerId) &&
+        !o.rejectedByPlayerIds.includes(viewerId) &&
+        !dismissedTradeOfferIds.has(o.id)
+    );
+  }, [gameState, viewerId, dismissedTradeOfferIds]);
+
+  const canAffordIncomingOffer = Boolean(
+    incomingOffer && hasResources(viewerPlayerObj?.resources ?? createEmptyResources(), incomingOffer.requesting)
+  );
+
+  useEffect(() => {
+    if (!gameState || !incomingOffer || canAffordIncomingOffer) return;
+    const proposer = getPlayerById(gameState, incomingOffer.fromPlayerId);
+    dismissTradeOffer(
+      incomingOffer.id,
+      locale === 'ro' ? 'Nu am resursa cerută' : 'Missing requested resource'
+    );
+    const reqText = ALL_RESOURCES.filter((r) => incomingOffer.requesting[r] > 0)
+      .map((r) => `${incomingOffer.requesting[r]}x ${RESOURCE_LABELS[locale][r]}`)
+      .join(', ');
+    const offText = ALL_RESOURCES.filter((r) => incomingOffer.offering[r] > 0)
+      .map((r) => `${incomingOffer.offering[r]}x ${RESOURCE_LABELS[locale][r]}`)
+      .join(', ');
+    showActionFeedback(
+      locale === 'ro'
+        ? `📢 ${proposer?.name ?? incomingOffer.fromPlayerId} a cerut ${reqText} pentru ${offText}. Refuzat automat (nu ai resursele cerute).`
+        : `📢 ${proposer?.name ?? incomingOffer.fromPlayerId} requested ${reqText} for ${offText}. Auto-declined (insufficient resources).`
+    );
+  }, [gameState, incomingOffer, canAffordIncomingOffer, locale, dismissTradeOffer, showActionFeedback]);
 
   // Count unplayed development cards by type for the viewer/active player
   const unplayedDevCards = (viewerPlayerObj ?? activePlayerObj)?.devCards.filter((c) => !c.played) ?? [];
@@ -2994,6 +3104,28 @@ export const App: React.FC = () => {
 
                 {/* Actions Row: Underneath the cards, ZERO SCROLL */}
                 <div className="dock-actions-row">
+                  {(gameState.phase === 'setup_road_1' || gameState.phase === 'setup_road_2') &&
+                    isHumanTurn &&
+                    hasShipsInScenario &&
+                    legalActionsForActive.some((a) => a.type === 'place_initial_ship') &&
+                    legalActionsForActive.some((a) => a.type === 'place_initial_road') && (
+                      <>
+                        <button
+                          type="button"
+                          className={`btn ${buildMode !== 'ship' ? 'btn-primary' : ''}`}
+                          onClick={() => setBuildMode('none')}
+                        >
+                          🛣️ {locale === 'ro' ? 'Drum inițial' : 'Initial Road'}
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn ${buildMode === 'ship' ? 'btn-primary' : ''}`}
+                          onClick={() => setBuildMode('ship')}
+                        >
+                          ⛵ {locale === 'ro' ? 'Corabie inițială' : 'Initial Ship'}
+                        </button>
+                      </>
+                    )}
                   {gameState.phase === 'turn_start' && isHumanTurn && activePlayerObj && (
                     <button
                       type="button"
@@ -3335,6 +3467,7 @@ export const App: React.FC = () => {
                       onP2pOfferChange={setP2pOffer}
                       onP2pRequestChange={setP2pRequest}
                       onSendCounterOffer={() => {
+                        setDismissedTradeOfferIds((prev) => new Set(prev).add(originalOffer.id));
                         executeAction(viewerId, {
                           type: 'counter_trade',
                           offerId: originalOffer.id,
@@ -3358,7 +3491,12 @@ export const App: React.FC = () => {
               onClose={() => setActiveModal('none')}
               title={`📜 ${t.eventLogTitle} (${currentEvents.length} acțiuni)`}
             >
-                  <EventLog locale={locale} gameState={gameState} events={currentEvents} />
+                  <EventLog
+                    locale={locale}
+                    gameState={gameState}
+                    events={currentEvents}
+                    viewerId={viewerId}
+                  />
             </AdaptiveSurface>
           )}
 
@@ -3487,47 +3625,16 @@ export const App: React.FC = () => {
           )}
 
           {/* INCOMING TRADE OFFER FOR HUMAN PLAYER (Allows Accept, Reject, Counter-Offer) */}
-          {(() => {
-            const incomingOffer = gameState.activeTradeOffers.find(
-              (o) =>
-                o.status === 'open' &&
-                o.fromPlayerId !== viewerId &&
-                (!o.toPlayerId || o.toPlayerId === viewerId) &&
-                !o.rejectedByPlayerIds.includes(viewerId) &&
-                !dismissedTradeOfferIds.has(o.id)
-            );
-            if (!incomingOffer) return null;
-            // The counter-offer modal (below) is answering this exact offer - don't stack both.
-            if (activeModal === 'counter_trade' && counterOfferOriginalId === incomingOffer.id) return null;
-            const proposer = getPlayerById(gameState, incomingOffer.fromPlayerId);
-            const myRes = viewerPlayerObj?.resources ?? createEmptyResources();
-            const canAfford = hasResources(myRes, incomingOffer.requesting);
-            // Requirement 1: If viewer cannot afford, auto-reject immediately and notify user!
-            if (!canAfford) {
-              dismissTradeOffer(incomingOffer.id, locale === 'ro' ? 'Nu am resursa cerută' : 'Missing requested resource');
-              const reqText = ALL_RESOURCES.filter((r) => incomingOffer.requesting[r] > 0)
-                .map((r) => `${incomingOffer.requesting[r]}x ${RESOURCE_LABELS[locale][r]}`)
-                .join(', ');
-              const offText = ALL_RESOURCES.filter((r) => incomingOffer.offering[r] > 0)
-                .map((r) => `${incomingOffer.offering[r]}x ${RESOURCE_LABELS[locale][r]}`)
-                .join(', ');
-              showActionFeedback(
-                locale === 'ro'
-                  ? `📢 ${proposer?.name ?? incomingOffer.fromPlayerId} a cerut ${reqText} pentru ${offText}. Refuzat automat (nu ai resursele cerute).`
-                  : `📢 ${proposer?.name ?? incomingOffer.fromPlayerId} requested ${reqText} for ${offText}. Auto-declined (insufficient resources).`
-              );
-              return null;
-            }
-
-            // Requirements 2, 3, 4, 5: Viewer has resources -> 30s countdown modal, non-dismissible on backdrop, auto-rejects at 0s!
-            return (
+          {incomingOffer &&
+            canAffordIncomingOffer &&
+            !(activeModal === 'counter_trade' && counterOfferOriginalId === incomingOffer.id) && (
               <IncomingTradeOfferModal
                 key={incomingOffer.id}
                 incomingOffer={incomingOffer}
-                proposerName={proposer?.name ?? incomingOffer.fromPlayerId}
+                proposerName={getPlayerById(gameState, incomingOffer.fromPlayerId)?.name ?? incomingOffer.fromPlayerId}
                 locale={locale}
-                viewerResources={myRes}
-                canAfford={canAfford}
+                viewerResources={viewerPlayerObj?.resources ?? createEmptyResources()}
+                canAfford={canAffordIncomingOffer}
                 onAccept={() => {
                   setDismissedTradeOfferIds((prev) => new Set(prev).add(incomingOffer.id));
                   executeAction(viewerId, {
@@ -3546,8 +3653,7 @@ export const App: React.FC = () => {
                   setActiveModal('counter_trade');
                 }}
               />
-            );
-          })()}
+            )}
 
           {/* TRADE NEGOTIATION BANNER - shows every player (proposer, an unaffordable or
               uninvolved responder, or any onlooker) who's negotiating, what's offered/wanted,
@@ -3603,7 +3709,7 @@ export const App: React.FC = () => {
               statusNode = <span style={{ color: 'var(--text-muted)' }}>⌛ {offer.status === 'cancelled' ? 'Retrasă' : 'Expirată'}</span>;
             }
 
-            const dismiss = () => setDismissedTradeOfferIds((prev) => new Set(prev).add(offer.id));
+            const dismiss = () => hideTradeBanner(offer.id);
 
             return (
               <div
@@ -3717,20 +3823,27 @@ export const App: React.FC = () => {
               onClose={() => {}}
               title="🎉 Partidă Finalizată & Salvată Automat!"
               footer={
-                  <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center' }}>
+                  <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                     <button
                       type="button"
                       className="btn btn-primary"
+                      onClick={() => openGameReplay(gameState.gameId, { openStrategicReport: true })}
+                    >
+                      📊 {locale === 'ro' ? 'Vezi Statistici & Grafice' : 'View Stats & Charts'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
                       onClick={() => openGameReplay(gameState.gameId)}
                     >
-                      🎬 Deschide în Replay & Analiză
+                      🎬 {locale === 'ro' ? 'Replay & Analiză' : 'Replay & Analysis'}
                     </button>
                     <button
                       type="button"
                       className="btn"
                       onClick={() => setActiveTab('lobby')}
                     >
-                      ⚙️ Partidă Nouă
+                      ⚙️ {locale === 'ro' ? 'Partidă Nouă' : 'New Game'}
                     </button>
                   </div>
               }
@@ -3938,6 +4051,7 @@ export const App: React.FC = () => {
           replay={activeReplay ?? (recorder ? recorder.toReplayFile() : null)}
           onSelectReplay={(rep) => setActiveReplay(rep)}
           locale={locale}
+          openStrategicReportSignal={openReplayReportSignal}
         />
       )}
 

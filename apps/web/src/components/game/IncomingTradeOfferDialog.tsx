@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ALL_RESOURCES, ResourceCount, TradeOffer } from '@catan/core';
 import { ResourceCardSprite, ResourceIcon } from '../GameAssets';
 import { Locale, RESOURCE_LABELS } from '../../i18n';
@@ -303,21 +303,25 @@ export const IncomingTradeOfferModal: React.FC<IncomingTradeOfferModalProps> = (
     return TOTAL_SECONDS;
   });
   const [rejectDropdownOpen, setRejectDropdownOpen] = useState(false);
+  const onRejectRef = useRef(onReject);
+  onRejectRef.current = onReject;
+  const hasTimedOutRef = useRef(false);
 
   useEffect(() => {
+    hasTimedOutRef.current = false;
     const timer = setInterval(() => {
-      setSecondsRemaining((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          onReject(locale === 'ro' ? 'Timp expirat (30s)' : 'Time expired (30s)');
-          return 0;
-        }
-        return prev - 1;
-      });
+      setSecondsRemaining((prev) => Math.max(0, prev - 1));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [incomingOffer.id, locale, onReject]);
+  }, [incomingOffer.id]);
+
+  useEffect(() => {
+    if (secondsRemaining <= 0 && !hasTimedOutRef.current) {
+      hasTimedOutRef.current = true;
+      onRejectRef.current(locale === 'ro' ? 'Timp expirat (30s)' : 'Time expired (30s)');
+    }
+  }, [secondsRemaining, incomingOffer.id, locale]);
 
   return (
     <Dialog

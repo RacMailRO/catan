@@ -61,6 +61,10 @@ export const GameActionSchema = z.discriminatedUnion('type', [
     edgeId: z.string().min(2).max(10)
   }),
   z.object({
+    type: z.literal('place_initial_ship'),
+    edgeId: z.string().min(2).max(10)
+  }),
+  z.object({
     type: z.literal('roll_dice')
   }),
   z.object({
@@ -87,6 +91,18 @@ export const GameActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('build_city'),
     vertexId: z.string().min(2).max(10)
+  }),
+  z.object({
+    type: z.literal('build_ship'),
+    edgeId: z.string().min(2).max(10)
+  }),
+  z.object({
+    type: z.literal('move_ship'),
+    fromEdgeId: z.string().min(2).max(10),
+    toEdgeId: z.string().min(2).max(10)
+  }),
+  z.object({
+    type: z.literal('pass_special_building')
   }),
   z.object({
     type: z.literal('buy_dev_card')
@@ -130,6 +146,12 @@ export const GameActionSchema = z.discriminatedUnion('type', [
     reason: z.string().optional()
   }),
   z.object({
+    type: z.literal('counter_trade'),
+    offerId: z.string().min(1),
+    offering: PartialResourceCountSchema,
+    requesting: PartialResourceCountSchema
+  }),
+  z.object({
     type: z.literal('cancel_trade'),
     offerId: z.string().min(1)
   }),
@@ -137,6 +159,20 @@ export const GameActionSchema = z.discriminatedUnion('type', [
     type: z.literal('end_turn')
   })
 ]);
+
+type _SchemaGameAction = z.infer<typeof GameActionSchema>;
+type _AssertSchemaMatchesCore =
+  [Exclude<GameAction['type'], _SchemaGameAction['type']>] extends [never]
+    ? [Exclude<_SchemaGameAction['type'], GameAction['type']>] extends [never]
+      ? [_SchemaGameAction] extends [GameAction]
+        ? [GameAction] extends [_SchemaGameAction]
+          ? true
+          : never
+        : never
+      : never
+    : never;
+const _assertGameActionSchemaExhaustive: _AssertSchemaMatchesCore = true;
+void _assertGameActionSchemaExhaustive;
 
 export const LobbySeatConfigSchema = z.object({
   seatIndex: z.number().int().min(0).max(5),

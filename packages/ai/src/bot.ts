@@ -68,6 +68,7 @@ export function choosePassiveBotAction(
     // During normal turns: roll dice, reject trades, move robber to desert/empty hex, or end turn immediately
     const roll = legal.find((a) => a.type === 'roll_dice');
     const endTurn = legal.find((a) => a.type === 'end_turn');
+    const passSpecial = legal.find((a) => a.type === 'pass_special_building');
     const rejectTrade = legal.find(
       (a): a is Extract<GameAction, { type: 'respond_trade' }> =>
         a.type === 'respond_trade' && a.response === 'reject'
@@ -79,6 +80,9 @@ export function choosePassiveBotAction(
     } else if (rejectTrade) {
       chosenAction = { ...rejectTrade, reason: 'Botul neutru nu participă la schimburi' };
       chosenReason = 'Botul neutru refuză schimburile';
+    } else if (passSpecial) {
+      chosenAction = passSpecial;
+      chosenReason = 'Botul neutru sare faza specială de construcție';
     } else if (endTurn) {
       chosenAction = endTurn;
       chosenReason = 'Botul neutru încheie tura pasiv';
@@ -174,10 +178,12 @@ export function chooseAIAction(
   if (difficulty === 'beginner') {
     // F: Rapid heuristics with deterministic suboptimal selection among top 3 viable moves
     if (evaluatedCandidates.length > 1 && state.phase !== 'turn_start') {
-      const topPoolSize = Math.min(3, evaluatedCandidates.length);
+      const pool = evaluatedCandidates.filter((c) => c.action.type !== 'counter_trade');
+      const sourcePool = pool.length > 0 ? pool : evaluatedCandidates;
+      const topPoolSize = Math.min(3, sourcePool.length);
       const localSeed = hashSeedToUint32(`${state.seed}-beg-${state.sequence}-${playerId}`);
       const pick = nextPrngInt(localSeed, 0, topPoolSize - 1);
-      chosenCandidate = evaluatedCandidates[pick.value]!;
+      chosenCandidate = sourcePool[pick.value]!;
     }
   } else if (difficulty === 'medium') {
     // G: Multi-factor evaluation (picks top heuristic candidate directly)

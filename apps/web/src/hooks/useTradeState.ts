@@ -85,6 +85,9 @@ export interface UseTradeStateResult {
   /** Declines an incoming offer on the viewer's behalf (respond_trade/reject when it's still
    *  open), marks it dismissed, closes the reject-reason dropdown, and shows a feedback toast. */
   dismissTradeOffer: (offerId: string, reason?: string) => void;
+  /** Hides the floating trade negotiation banner for an offer without dismissing/unmounting the
+   *  blocking IncomingTradeOfferModal. */
+  hideTradeBanner: (offerId: string) => void;
   /** Cancels an offer the viewer proposed (cancel_trade) and marks it dismissed. */
   cancelMyTradeOffer: (offerId: string) => void;
 }
@@ -120,6 +123,7 @@ export function useTradeState({
   // reuse the main trade modal's "propose_trade as activePlayerObj" flow.
   const [counterOfferOriginalId, setCounterOfferOriginalId] = useState<string | null>(null);
   const [dismissedTradeOfferIds, setDismissedTradeOfferIds] = useState<Set<string>>(new Set());
+  const [hiddenBannerOfferIds, setHiddenBannerOfferIds] = useState<Set<string>>(new Set());
 
   const [minimizedDiscard, setMinimizedDiscard] = useState<boolean>(false);
   const [rejectDropdownOfferId, setRejectDropdownOfferId] = useState<string | null>(null);
@@ -167,6 +171,15 @@ export function useTradeState({
   // nobody has to react instantly to see what happened.
   const [visibleTradeOffers, setVisibleTradeOffers] = useState<Record<string, TradeBannerEntry>>({});
 
+  const hideTradeBanner = (offerId: string) => {
+    setHiddenBannerOfferIds((prev) => (prev.has(offerId) ? prev : new Set(prev).add(offerId)));
+    setVisibleTradeOffers((prev) => {
+      if (!(offerId in prev)) return prev;
+      const { [offerId]: _drop, ...rest } = prev;
+      return rest;
+    });
+  };
+
   // Track every active trade offer for the negotiation banner(s), keyed by offer id so a
   // resolved one keeps its last known snapshot (status, who accepted...) after it's cleared from
   // gameState - the pruning effect right after this one is what actually removes it, once it's
@@ -175,11 +188,11 @@ export function useTradeState({
   // A resolved offer stays in gameState.activeTradeOffers (status 'accepted'/'rejected'/...)
   // until end_turn clears the whole array - it is NOT removed just because it resolved. Once
   // the pruning effect below drops it from visibleTradeOffers, it's still sitting right there
-  // in activeTradeOffers for the rest of that turn, so without the dismissedTradeOfferIds check
+  // in activeTradeOffers for the rest of that turn, so without the dismissed/hidden check
   // below, the very next unrelated action (e.g. building something) recreates gameState, this
   // effect sees "an offer not currently tracked" again, and the banner pops back up out of
-  // nowhere. Skipping anything already dismissed - manually or via that same prune - is what
-  // makes a resolved offer actually stay gone for the rest of the turn.
+  // nowhere. Skipping anything already dismissed or hidden is what makes a banner stay gone
+  // without interfering with IncomingTradeOfferModal's own lifecycle.
   useEffect(() => {
     if (!gameState) return;
     const now = Date.now();
@@ -187,7 +200,7 @@ export function useTradeState({
       let changed = false;
       const next = { ...prev };
       for (const offer of gameState.activeTradeOffers) {
-        if (dismissedTradeOfferIds.has(offer.id)) continue;
+        if (dismissedTradeOfferIds.has(offer.id) || hiddenBannerOfferIds.has(offer.id)) continue;
         const existing = next[offer.id];
         const isResolved = offer.status !== 'open';
         const resolvedAt = isResolved ? (existing?.resolvedAtMs ?? now) : undefined;
@@ -202,26 +215,21 @@ export function useTradeState({
       }
       return changed ? next : prev;
     });
-  }, [gameState?.activeTradeOffers, dismissedTradeOfferIds]);
+  }, [gameState?.activeTradeOffers, dismissedTradeOfferIds, hiddenBannerOfferIds]);
 
   useEffect(() => {
     const timers = Object.entries(visibleTradeOffers).map(([id, entry]) => {
       const now = Date.now();
-      // Auto-dismiss open offers after 7 seconds (within the 5-8s requested by the user).
+      // Auto-dismiss open offer banner after 7 seconds (within the 5-8s requested by the user).
       // If resolved (accepted/rejected/cancelled), stay visible for 4.5 seconds after resolution.
       const remaining = entry.offer.status === 'open'
         ? Math.max(0, 7000 - (now - entry.firstShownAtMs))
         : Math.max(0, 4500 - (now - (entry.resolvedAtMs ?? entry.firstShownAtMs)));
 
       return setTimeout(() => {
-        // Marking it dismissed (not just dropping it from visibleTradeOffers) is what stops the
-        // tracking effect above from reviving it the next time gameState changes.
-        setDismissedTradeOfferIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
-        setVisibleTradeOffers((prev) => {
-          if (!(id in prev)) return prev;
-          const { [id]: _drop, ...rest } = prev;
-          return rest;
-        });
+        // Only hide the floating banner (do NOT mark the offer dismissed for IncomingTradeOfferModal),
+        // otherwise an unanswered modal would silently unmount after 7s without dispatching reject.
+        hideTradeBanner(id);
       }, remaining);
     });
     return () => {
@@ -254,6 +262,7 @@ export function useTradeState({
     setDiscardSelection,
     visibleTradeOffers,
     dismissTradeOffer,
+    hideTradeBanner,
     cancelMyTradeOffer
   };
 }

@@ -35,6 +35,8 @@ export interface ReplayAndAnalysisViewProps {
   replay: ReplayFile | null;
   onSelectReplay: (replay: ReplayFile) => void;
   locale: Locale;
+  /** Incrementing signal that opens the strategic report modal as soon as the replay is loaded. */
+  openStrategicReportSignal?: number;
 }
 
 type ReplayModalType = 'none' | 'saved_games' | 'strategic_report' | 'event_log' | 'ai_decision';
@@ -105,7 +107,8 @@ function actionBoardTarget(action: GameAction): { vertexId?: string; edgeId?: st
 export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
   replay,
   onSelectReplay,
-  locale
+  locale,
+  openStrategicReportSignal
 }) => {
   const t = TRANSLATIONS[locale];
   const [currentSeq, setCurrentSeq] = useState<number>(0);
@@ -144,6 +147,19 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
   useEffect(() => {
     setGhostCandidateIdx(null);
   }, [currentSeq]);
+
+  const lastHandledReportSignalRef = useRef<number>(0);
+  useEffect(() => {
+    if (
+      openStrategicReportSignal &&
+      openStrategicReportSignal > lastHandledReportSignalRef.current &&
+      replay
+    ) {
+      lastHandledReportSignalRef.current = openStrategicReportSignal;
+      setActiveModal('strategic_report');
+      setReportTab('overview');
+    }
+  }, [openStrategicReportSignal, replay]);
 
   useEffect(() => {
     if (replay) {
@@ -352,6 +368,9 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
   for (const p of reconstructedState.players) {
     playerColors[p.id] = p.color;
   }
+
+  const resolveReplayPlayerName = (id: string) =>
+    replay?.initialState.players.find((p) => p.id === id)?.name ?? id;
 
   const filteredEvents = replay.events.filter((ev) => {
     if (filterPlayerId !== 'all' && ev.playerId !== filterPlayerId) return false;
@@ -562,7 +581,16 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                       {stepComparison.playerName}
                     </span>
                     :{' '}
-                    {formatActionDescription(stepComparison.actualAction, locale, replay?.events[currentSeq - 1]?.details)}
+                    {formatActionDescription(
+                      stepComparison.actualAction,
+                      locale,
+                      replay?.events[currentSeq - 1]?.details,
+                      {
+                        getPlayerName: resolveReplayPlayerName,
+                        revealPrivate: true,
+                        actorId: stepComparison.playerId
+                      }
+                    )}
                   </strong>
                   <span
                     style={{
@@ -699,7 +727,11 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                 >
                   <strong>#{ev.sequence}</strong> [T{ev.turn}]{' '}
                   <span style={playerBadgeStyle(evPlayer?.color)}>{evPlayer?.name ?? ev.playerId}</span>:{' '}
-                  {formatActionDescription(ev.action, locale, ev.details)}
+                  {formatActionDescription(ev.action, locale, ev.details, {
+                    getPlayerName: resolveReplayPlayerName,
+                    revealPrivate: true,
+                    actorId: ev.playerId
+                  })}
                 </div>
               );
             })}
@@ -777,6 +809,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
           blue: '#3b82f6',
           orange: '#f97316',
           green: '#10b981',
+          brown: '#a16207',
           white: '#f1f5f9'
         };
         const profiles = Object.values(strategicReport.playerProfiles);
@@ -810,12 +843,16 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
           <AdaptiveSurface
             open
             onClose={() => setActiveModal('none')}
+            desktopVariant="modal"
+            scrollable={false}
             title={`📊 Raport Strategic & Analiză Partidă (${replay.gameId})`}
           >
               {winner && (
                 <span
                   style={{
                     display: 'inline-block',
+                    alignSelf: 'flex-start',
+                    flexShrink: 0,
                     marginBottom: '0.6rem',
                     background: 'rgba(245, 158, 11, 0.15)',
                     border: '1px solid var(--accent-gold)',
@@ -862,7 +899,7 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                 ))}
               </div>
 
-              <div style={{ flex: 1, overflowY: 'auto', padding: '0.85rem' }}>
+              <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0.85rem' }}>
                 {/* TAB 1: PARCURS & REPERE (DEVELOPMENT CURVE CHART + MILESTONES) */}
                 {reportTab === 'overview' && (
                   <div>
@@ -1683,7 +1720,11 @@ export const ReplayAndAnalysisView: React.FC<ReplayAndAnalysisViewProps> = ({
                     >
                       <strong>#{ev.sequence}</strong> [T{ev.turn}]{' '}
                       <span style={playerBadgeStyle(evPlayer?.color)}>{evPlayer?.name ?? ev.playerId}</span>:{' '}
-                      {formatActionDescription(ev.action, locale, ev.details)}
+                      {formatActionDescription(ev.action, locale, ev.details, {
+                    getPlayerName: resolveReplayPlayerName,
+                    revealPrivate: true,
+                    actorId: ev.playerId
+                  })}
                     </div>
                   );
                 })}

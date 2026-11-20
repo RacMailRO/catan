@@ -6,6 +6,7 @@ import {
   DevCardType,
   GameAction,
   ParticipantType,
+  ResourceCount,
   ResourceType,
   TerrainType,
   TurnPhase
@@ -429,121 +430,282 @@ export const AI_STYLE_LABELS: Record<Locale, Record<AIStrategyStyle, string>> = 
   }
 };
 
+export interface FormatActionOptions {
+  getPlayerName?: (playerId: string) => string;
+  revealPrivate?: boolean;
+  viewerId?: string;
+  actorId?: string;
+}
+
 export function formatActionDescription(
   action: GameAction,
   locale: Locale = 'ro',
-  details?: Record<string, unknown>
+  details?: Record<string, unknown>,
+  options?: FormatActionOptions
 ): string {
+  const isRo = locale === 'ro';
   const rLabel = RESOURCE_LABELS[locale];
+  const resolveName = (id: string) => (options?.getPlayerName ? options.getPlayerName(id) : id);
+  const revealPrivate = options?.revealPrivate ?? true;
+
+  const formatResourceList = (counts?: Partial<ResourceCount>): string => {
+    if (!counts) return '';
+    return ALL_RESOURCES.filter((r) => (counts[r] ?? 0) > 0)
+      .map((r) => `${counts[r]} ${rLabel[r]}`)
+      .join(', ');
+  };
+
+  const canSeeStealResource = (victimId: string): boolean =>
+    revealPrivate ||
+    (options?.viewerId !== undefined &&
+      (options.viewerId === options.actorId || options.viewerId === victimId));
+
+  const formatStealEntry = (victimId: string, stolenRes: ResourceType | null | undefined): string => {
+    const vName = resolveName(victimId);
+    if (stolenRes && canSeeStealResource(victimId)) {
+      return isRo
+        ? `fură 1 ${rLabel[stolenRes]} de la ${vName}`
+        : `steals 1 ${rLabel[stolenRes]} from ${vName}`;
+    }
+    if (stolenRes === null) {
+      return isRo
+        ? `(fără resurse de furat de la ${vName})`
+        : `(no resources to steal from ${vName})`;
+    }
+    return isRo ? `fură 1 carte de la ${vName}` : `steals 1 card from ${vName}`;
+  };
+
+  const formatStealSuffix = (
+    evDetails?: Record<string, unknown>,
+    fallbackTargetId?: string
+  ): string => {
+    const stolenFrom = evDetails?.stolenFrom as string | undefined;
+    const stolenResource = evDetails?.stolenResource as ResourceType | null | undefined;
+    if (stolenFrom) {
+      return ` — ${formatStealEntry(stolenFrom, stolenResource)}`;
+    }
+    if (Array.isArray(evDetails?.stolen)) {
+      const entries = evDetails.stolen as Array<{
+        fromPlayerId: string;
+        resource: ResourceType | null;
+      }>;
+      if (entries.length === 0) {
+        return isRo ? ' (nimeni de prădat)' : ' (no targets to steal from)';
+      }
+      return ` — ${entries.map((e) => formatStealEntry(e.fromPlayerId, e.resource)).join('; ')}`;
+    }
+    if (fallbackTargetId) {
+      return isRo
+        ? ` (țintă ${resolveName(fallbackTargetId)})`
+        : ` (target ${resolveName(fallbackTargetId)})`;
+    }
+    return '';
+  };
+
   switch (action.type) {
-    case 'place_initial_settlement':
-      return locale === 'ro'
-        ? `Așezare inițială pe ${action.vertexId}`
-        : `Initial settlement at ${action.vertexId}`;
+    case 'place_initial_settlement': {
+      const startRes = formatResourceList(details?.startingResources as Partial<ResourceCount> | undefined);
+      const base = isRo
+        ? `🏠 Așezare inițială pe ${action.vertexId}`
+        : `🏠 Initial settlement at ${action.vertexId}`;
+      return startRes ? `${base} (+${startRes})` : base;
+    }
     case 'place_initial_road':
-      return locale === 'ro'
-        ? `Drum inițial pe ${action.edgeId}`
-        : `Initial road on ${action.edgeId}`;
+      return isRo
+        ? `🛣️ Drum inițial pe ${action.edgeId}`
+        : `🛣️ Initial road on ${action.edgeId}`;
     case 'place_initial_ship':
-      return locale === 'ro'
-        ? `Navă inițială pe ${action.edgeId}`
-        : `Initial ship on ${action.edgeId}`;
+      return isRo
+        ? `⛵ Navă inițială pe ${action.edgeId}`
+        : `⛵ Initial ship on ${action.edgeId}`;
     case 'build_ship':
-      return locale === 'ro' ? `Construiește navă pe ${action.edgeId}` : `Build ship on ${action.edgeId}`;
+      return isRo
+        ? `⛵ Construiește navă pe ${action.edgeId}`
+        : `⛵ Builds ship on ${action.edgeId}`;
     case 'move_ship':
-      return locale === 'ro'
-        ? `Mută nava de pe ${action.fromEdgeId} pe ${action.toEdgeId}`
-        : `Move ship from ${action.fromEdgeId} to ${action.toEdgeId}`;
+      return isRo
+        ? `🧭 Mută nava de pe ${action.fromEdgeId} pe ${action.toEdgeId}`
+        : `🧭 Moves ship from ${action.fromEdgeId} to ${action.toEdgeId}`;
     case 'pass_special_building':
-      return locale === 'ro' ? 'Pasează construcția specială' : 'Pass special building';
-    case 'roll_dice':
-      return locale === 'ro' ? 'Aruncare zaruri' : 'Roll dice';
-    case 'discard_cards':
-      return locale === 'ro' ? 'Decartare resurse (la 7)' : 'Discard resources (on 7)';
-    case 'move_robber':
-      return locale === 'ro'
-        ? `Mută hoțul pe ${action.hexId}${action.targetPlayerId ? ` (țintă ${action.targetPlayerId})` : ''}`
-        : `Move robber to ${action.hexId}`;
-    case 'steal_from_player':
-      return locale === 'ro'
-        ? `Fură resursă de la ${action.targetPlayerId}`
-        : `Steal resource from ${action.targetPlayerId}`;
+      return isRo ? '⏭️ Pasează faza specială de construcție' : '⏭️ Passes special building';
+    case 'roll_dice': {
+      const dice = details?.dice as { die1?: number; die2?: number; total?: number } | undefined;
+      if (dice && typeof dice.die1 === 'number' && typeof dice.die2 === 'number' && typeof dice.total === 'number') {
+        const base = isRo
+          ? `🎲 Zar: ${dice.die1} + ${dice.die2} = ${dice.total}`
+          : `🎲 Dice: ${dice.die1} + ${dice.die2} = ${dice.total}`;
+        if (dice.total === 7) {
+          return isRo ? `${base} (Hoțul / Piratul se mută!)` : `${base} (Robber / Pirate moves!)`;
+        }
+        const prod = details?.production as Record<string, Partial<ResourceCount>> | undefined;
+        if (prod && typeof prod === 'object') {
+          const prodParts = Object.entries(prod)
+            .map(([pId, counts]) => {
+              const resStr = ALL_RESOURCES.filter((r) => (counts[r] ?? 0) > 0)
+                .map((r) => `+${counts[r]} ${rLabel[r]}`)
+                .join(', ');
+              return resStr ? `${resolveName(pId)}: ${resStr}` : '';
+            })
+            .filter(Boolean);
+          if (prodParts.length > 0) {
+            return isRo
+              ? `${base} — Producție: ${prodParts.join(' | ')}`
+              : `${base} — Produced: ${prodParts.join(' | ')}`;
+          }
+          return isRo ? `${base} (fără producție)` : `${base} (no production)`;
+        }
+        return base;
+      }
+      return isRo ? '🎲 Aruncare zaruri' : '🎲 Roll dice';
+    }
+    case 'discard_cards': {
+      const resMap = (details?.discarded as Partial<ResourceCount> | undefined) ?? action.resources;
+      const total = ALL_RESOURCES.reduce((sum, r) => sum + (resMap?.[r] ?? 0), 0);
+      const list = formatResourceList(resMap);
+      if (total > 0 && list) {
+        return isRo
+          ? `🗑️ Decartează ${total} ${total === 1 ? 'carte' : 'cărți'} (${list})`
+          : `🗑️ Discards ${total} ${total === 1 ? 'card' : 'cards'} (${list})`;
+      }
+      return isRo ? '🗑️ Decartare resurse (la 7)' : '🗑️ Discard resources (on 7)';
+    }
+    case 'move_robber': {
+      const isPirate = details?.movedPiece === 'pirate';
+      const piece = isRo ? (isPirate ? 'piratul' : 'hoțul') : (isPirate ? 'pirate' : 'robber');
+      const stealSuffix = formatStealSuffix(details, action.targetPlayerId);
+      return isRo
+        ? `🥷 Mută ${piece} pe ${action.hexId}${stealSuffix}`
+        : `🥷 Moves ${piece} to ${action.hexId}${stealSuffix}`;
+    }
+    case 'steal_from_player': {
+      const victim = resolveName(action.targetPlayerId);
+      const res = details?.stolenResource as ResourceType | null | undefined;
+      if (res && canSeeStealResource(action.targetPlayerId)) {
+        return isRo
+          ? `🥷 Fură 1 ${rLabel[res]} de la ${victim}`
+          : `🥷 Steals 1 ${rLabel[res]} from ${victim}`;
+      }
+      if (res === null) {
+        return isRo
+          ? `🥷 Încearcă să fure de la ${victim} (fără resurse)`
+          : `🥷 Attempts steal from ${victim} (no resources)`;
+      }
+      return isRo
+        ? `🥷 Fură 1 carte de la ${victim}`
+        : `🥷 Steals 1 card from ${victim}`;
+    }
     case 'build_road':
-      return locale === 'ro' ? `Construiește drum pe ${action.edgeId}` : `Build road on ${action.edgeId}`;
-    case 'build_settlement':
-      return locale === 'ro'
-        ? `Construiește așezare pe ${action.vertexId}`
-        : `Build settlement on ${action.vertexId}`;
+      return isRo ? `🛣️ Construiește drum pe ${action.edgeId}` : `🛣️ Builds road on ${action.edgeId}`;
+    case 'build_settlement': {
+      const bonusVp = Number(details?.specialVictoryPointsAwarded ?? 0);
+      const base = isRo
+        ? `🏠 Construiește așezare pe ${action.vertexId}`
+        : `🏠 Builds settlement on ${action.vertexId}`;
+      return bonusVp > 0
+        ? (isRo ? `${base} (+${bonusVp} VP Insulă!)` : `${base} (+${bonusVp} Island VP!)`)
+        : base;
+    }
     case 'build_city':
-      return locale === 'ro'
-        ? `Modernizează la oraș pe ${action.vertexId}`
-        : `Upgrade to city on ${action.vertexId}`;
+      return isRo
+        ? `🏰 Modernizează la oraș pe ${action.vertexId}`
+        : `🏰 Upgrades to city on ${action.vertexId}`;
     case 'buy_dev_card': {
       const drawn = details?.drawnType as DevCardType | undefined;
-      if (drawn && DEV_CARD_LABELS[locale]?.[drawn]) {
+      const canSeeDrawn = Boolean(
+        drawn &&
+          DEV_CARD_LABELS[locale]?.[drawn] &&
+          (revealPrivate ||
+            (options?.viewerId !== undefined && options.viewerId === options.actorId))
+      );
+      if (canSeeDrawn && drawn) {
         const icon = DEV_CARD_ICONS[drawn] ?? '🃏';
         const cardName = DEV_CARD_LABELS[locale][drawn];
-        return locale === 'ro'
-          ? `Cumpără carte de dezvoltare (${icon} ${cardName})`
-          : `Buy development card (${icon} ${cardName})`;
+        return isRo
+          ? `🃏 Cumpără carte de dezvoltare (${icon} ${cardName})`
+          : `🃏 Buys development card (${icon} ${cardName})`;
       }
-      return locale === 'ro' ? 'Cumpără carte de dezvoltare' : 'Buy development card';
+      return isRo ? '🃏 Cumpără o carte de dezvoltare' : '🃏 Buys a development card';
     }
-    case 'play_knight':
-      return locale === 'ro'
-        ? `Joacă Cavaler -> hoț pe ${action.hexId}`
-        : `Play Knight -> robber to ${action.hexId}`;
+    case 'play_knight': {
+      const isPirate = details?.movedPiece === 'pirate';
+      const piece = isRo ? (isPirate ? 'piratul' : 'hoțul') : (isPirate ? 'pirate' : 'robber');
+      const stealSuffix = formatStealSuffix(details, action.targetPlayerId);
+      return isRo
+        ? `⚔️ Joacă carte de dezvoltare: Cavaler → mută ${piece} pe ${action.hexId}${stealSuffix}`
+        : `⚔️ Plays dev card: Knight → moves ${piece} to ${action.hexId}${stealSuffix}`;
+    }
     case 'play_road_building':
-      return locale === 'ro' ? 'Joacă Progres: 2 Drumuri Gratuite' : 'Play Road Building';
+      return isRo
+        ? '🛣️ Joacă carte de dezvoltare: Construcție de Drumuri (2 drumuri gratuite)'
+        : '🛣️ Plays dev card: Road Building (2 free roads)';
     case 'place_free_road':
-      return locale === 'ro'
-        ? `Drum gratuit pe ${action.edgeId}`
-        : `Free road on ${action.edgeId}`;
+      return isRo
+        ? `🛣️ Drum gratuit pe ${action.edgeId}`
+        : `🛣️ Free road on ${action.edgeId}`;
     case 'play_year_of_plenty':
-      return locale === 'ro'
-        ? `Anul Abundenței (${rLabel[action.resources[0]]} + ${rLabel[action.resources[1]]})`
-        : `Year of Plenty (${rLabel[action.resources[0]]} + ${rLabel[action.resources[1]]})`;
+      return isRo
+        ? `🎁 Joacă carte de dezvoltare: Anul Abundenței (+1 ${rLabel[action.resources[0]]}, +1 ${rLabel[action.resources[1]]})`
+        : `🎁 Plays dev card: Year of Plenty (+1 ${rLabel[action.resources[0]]}, +1 ${rLabel[action.resources[1]]})`;
     case 'play_monopoly': {
       const totalTaken = details?.totalTaken as number | undefined;
+      const takenByPlayer = details?.takenByPlayer as Record<string, number> | undefined;
       const resName = rLabel[action.resource];
       if (totalTaken !== undefined) {
         if (totalTaken > 0) {
-          return locale === 'ro'
-            ? `Monopol pe ${resName} (+${totalTaken} cărți confiscate)`
-            : `Monopoly on ${resName} (+${totalTaken} cards taken)`;
+          const breakdown = takenByPlayer
+            ? Object.entries(takenByPlayer)
+                .filter(([, n]) => n > 0)
+                .map(([pId, n]) =>
+                  isRo ? `${n} de la ${resolveName(pId)}` : `${n} from ${resolveName(pId)}`
+                )
+                .join(', ')
+            : '';
+          return isRo
+            ? `👑 Joacă carte de dezvoltare: Monopol pe ${resName} (+${totalTaken} cărți confiscate${breakdown ? `: ${breakdown}` : ''})`
+            : `👑 Plays dev card: Monopoly on ${resName} (+${totalTaken} cards taken${breakdown ? `: ${breakdown}` : ''})`;
         } else {
-          return locale === 'ro'
-            ? `Monopol pe ${resName} (0 cărți confiscate - adversarii nu aveau ${resName})`
-            : `Monopoly on ${resName} (0 cards taken - opponents had no ${resName})`;
+          return isRo
+            ? `👑 Joacă carte de dezvoltare: Monopol pe ${resName} (0 cărți confiscate)`
+            : `👑 Plays dev card: Monopoly on ${resName} (0 cards taken)`;
         }
       }
-      return locale === 'ro'
-        ? `Monopol pe ${resName}`
-        : `Monopoly on ${resName}`;
+      return isRo
+        ? `👑 Joacă carte de dezvoltare: Monopol pe ${resName}`
+        : `👑 Plays dev card: Monopoly on ${resName}`;
     }
     case 'trade_bank':
-      return locale === 'ro'
-        ? `Schimb ${action.giveAmount} ${rLabel[action.give]} -> 1 ${rLabel[action.receive]}`
-        : `Trade ${action.giveAmount} ${rLabel[action.give]} -> 1 ${rLabel[action.receive]}`;
-    case 'propose_trade':
-      return locale === 'ro' ? 'Propune ofertă de schimb' : 'Propose trade offer';
-    case 'respond_trade':
-      if (action.response === 'reject' && action.reason) {
-        return locale === 'ro'
-          ? `Refuză oferta (${action.reason})`
-          : `Decline trade (${action.reason})`;
+      return isRo
+        ? `⚓ Schimb cu banca/portul: ${action.giveAmount} ${rLabel[action.give]} → 1 ${rLabel[action.receive]}`
+        : `⚓ Bank/harbor trade: ${action.giveAmount} ${rLabel[action.give]} → 1 ${rLabel[action.receive]}`;
+    case 'propose_trade': {
+      const offStr = formatResourceList(action.offering);
+      const reqStr = formatResourceList(action.requesting);
+      const target = action.toPlayerId ? resolveName(action.toPlayerId) : null;
+      if (offStr && reqStr) {
+        return isRo
+          ? `🤝 Propune schimb${target ? ` către ${target}` : ''}: oferă ${offStr} pentru ${reqStr}`
+          : `🤝 Proposes trade${target ? ` to ${target}` : ''}: offers ${offStr} for ${reqStr}`;
       }
-      return locale === 'ro'
-        ? `Răspuns ofertă (${action.response === 'accept' ? 'Acceptă' : 'Refuză'})`
-        : `Trade response (${action.response})`;
-    case 'counter_trade':
-      return locale === 'ro'
-        ? `Contra-ofertă: oferă ${ALL_RESOURCES.filter((r) => (action.offering[r] ?? 0) > 0).map((r) => rLabel[r]).join(', ')}, cere ${ALL_RESOURCES.filter((r) => (action.requesting[r] ?? 0) > 0).map((r) => rLabel[r]).join(', ')}`
-        : `Counter-offer: offers ${ALL_RESOURCES.filter((r) => (action.offering[r] ?? 0) > 0).map((r) => rLabel[r]).join(', ')}, asks ${ALL_RESOURCES.filter((r) => (action.requesting[r] ?? 0) > 0).map((r) => rLabel[r]).join(', ')}`;
+      return isRo ? '🤝 Propune ofertă de schimb' : '🤝 Proposes trade offer';
+    }
+    case 'respond_trade':
+      if (action.response === 'accept') {
+        return isRo ? '✅ Acceptă schimbul' : '✅ Accepts trade';
+      }
+      return isRo
+        ? `❌ Refuză schimbul${action.reason ? ` (${action.reason})` : ''}`
+        : `❌ Declines trade${action.reason ? ` (${action.reason})` : ''}`;
+    case 'counter_trade': {
+      const offStr = formatResourceList(action.offering);
+      const reqStr = formatResourceList(action.requesting);
+      return isRo
+        ? `🔄 Contra-ofertă: oferă ${offStr} pentru ${reqStr}`
+        : `🔄 Counter-offer: offers ${offStr} for ${reqStr}`;
+    }
     case 'cancel_trade':
-      return locale === 'ro' ? 'Anulează oferta de schimb' : 'Cancel trade offer';
+      return isRo ? '🚫 Anulează oferta de schimb' : '🚫 Cancels trade offer';
     case 'end_turn':
-      return locale === 'ro' ? 'Încheie tura' : 'End turn';
+      return isRo ? '⏭️ Încheie tura' : '⏭️ Ends turn';
   }
 }
 

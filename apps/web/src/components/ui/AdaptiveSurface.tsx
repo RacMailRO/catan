@@ -43,11 +43,14 @@ export interface AdaptiveSurfaceProps {
   children: React.ReactNode;
   /** Whether the body content is vertically scrollable. Defaults to true. When false, avoids scrollbars. */
   scrollable?: boolean;
+  /** Desktop presentation mode: 'drawer' (default right slide-over) or 'modal' (large centered modal for charts/stats). */
+  desktopVariant?: 'drawer' | 'modal';
 }
 
 /**
  * Content surface for trade/dev-cards/event-log/rules/etc. Presents as a right-side slide-over
- * drawer above the ~960px breakpoint, and as a bottom sheet (with a drag-handle visual) below it.
+ * drawer (or large centered modal when `desktopVariant="modal"`) above the ~960px breakpoint, and
+ * as a bottom sheet (with a drag-handle visual) below it.
  * The breakpoint is tracked via matchMedia rather than CSS alone, since the two presentations
  * need different DOM/animation treatment.
  */
@@ -56,25 +59,44 @@ export function AdaptiveSurface({
   onClose,
   title,
   children,
-  scrollable = true
+  scrollable = true,
+  desktopVariant = 'drawer'
 }: AdaptiveSurfaceProps): React.ReactElement | null {
   const isCompact = useIsCompactViewport();
   const titleId = useId();
 
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, onClose]);
+
   if (!open) return null;
 
+  const isDesktopModal = !isCompact && desktopVariant === 'modal';
+
+  const backdropClassName = isDesktopModal
+    ? 'fixed inset-0 z-[150] flex items-center justify-center bg-black/65 p-4 sm:p-6'
+    : 'fixed inset-0 z-[150] bg-black/60';
+
   const panelPositionClasses = isCompact
-    ? 'inset-x-0 bottom-0 max-h-[90vh] rounded-t-2xl animate-[slideUp_0.2s_ease-out]'
-    : 'inset-y-0 right-0 h-full w-full max-w-md animate-[slideIn_0.2s_ease-out]';
+    ? 'absolute inset-x-0 bottom-0 max-h-[90vh] rounded-t-2xl animate-[slideUp_0.2s_ease-out]'
+    : isDesktopModal
+      ? 'relative h-[88vh] max-h-[920px] w-full max-w-5xl rounded-xl animate-[modalIn_0.18s_ease-out]'
+      : 'absolute inset-y-0 right-0 h-full w-full max-w-md animate-[slideIn_0.2s_ease-out]';
 
   return (
-    <div className="fixed inset-0 z-[150] bg-black/60" onClick={onClose} role="presentation">
+    <div className={backdropClassName} onClick={onClose} role="presentation">
       <style>{`
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes modalIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
       `}</style>
       <div
-        className={`absolute flex flex-col border border-line bg-surface text-ink shadow-xl ${panelPositionClasses}`}
+        className={`flex flex-col border border-line bg-surface text-ink shadow-2xl ${panelPositionClasses}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -110,7 +132,7 @@ export function AdaptiveSurface({
             <span className="text-lg leading-none">✕</span>
           </button>
         </div>
-        <div className={`flex-1 ${scrollable ? 'overflow-y-auto' : 'overflow-hidden'} px-5 py-4`}>
+        <div className={`flex-1 min-h-0 ${scrollable ? 'overflow-y-auto' : 'flex flex-col overflow-hidden'} px-5 py-4`}>
           {children}
         </div>
       </div>

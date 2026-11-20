@@ -596,6 +596,33 @@ export function evaluateCandidateAction(
       };
     }
 
+    case 'counter_trade': {
+      let gainScore = 0;
+      let lossScore = 0;
+      for (const r of ALL_RESOURCES) {
+        const req = action.requesting[r] ?? 0;
+        const off = action.offering[r] ?? 0;
+        if (req > 0) {
+          gainScore += evaluateResourceNeed(inv, r, style) * req;
+        }
+        if (off > 0) {
+          lossScore += evaluateResourceNeed(inv, r, style) * off;
+        }
+      }
+      const rawNet = gainScore * 1.15 - lossScore * 1.0 - 6.0;
+      const score = Number(Math.min(-1.5, rawNet).toFixed(3));
+      return {
+        action,
+        score,
+        factors: {
+          gain: Number(gainScore.toFixed(2)),
+          cost: Number((-lossScore).toFixed(2)),
+          tradeUtility: score
+        },
+        explanation: 'Propune o contra-ofertă de schimb'
+      };
+    }
+
     case 'roll_dice': {
       return {
         action,

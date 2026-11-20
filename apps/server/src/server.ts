@@ -63,6 +63,7 @@ interface ActiveGameRuntime {
   replay: ReplayFile;
   pendingTermination?: TerminationRequest;
   terminationDismissed?: boolean;
+  tradeExpiryTimer?: NodeJS.Timeout;
 }
 
 function serializePendingTermination(req?: TerminationRequest) {
@@ -338,13 +339,101 @@ export function createCatanServer(options?: {
     }
   }
 
+  function clearRuntimeTimers(runtime: ActiveGameRuntime): void {
+    if (runtime.tradeExpiryTimer) {
+      clearTimeout(runtime.tradeExpiryTimer);
+      runtime.tradeExpiryTimer = undefined;
+    }
+    if (runtime.pendingTermination?.timer) {
+      clearTimeout(runtime.pendingTermination.timer);
+    }
+  }
+
+  function scheduleTradeExpiryWakeup(runtime: ActiveGameRuntime): void {
+    if (runtime.tradeExpiryTimer) {
+      clearTimeout(runtime.tradeExpiryTimer);
+      runtime.tradeExpiryTimer = undefined;
+    }
+    if (runtime.state.phase === 'game_over' || activeGames.get(runtime.gameId) !== runtime) {
+      return;
+    }
+    const openOffers = runtime.state.activeTradeOffers.filter((o) => o.status === 'open');
+    if (openOffers.length === 0) return;
+
+    let earliestExpiresAtMs = Infinity;
+    for (const offer of openOffers) {
+      if (offer.expiresAtMs < earliestExpiresAtMs) {
+        earliestExpiresAtMs = offer.expiresAtMs;
+      }
+    }
+    if (!Number.isFinite(earliestExpiresAtMs)) return;
+
+    const delayMs = Math.max(50, earliestExpiresAtMs - Date.now() + 50);
+    const timer = setTimeout(() => {
+      runtime.tradeExpiryTimer = undefined;
+      try {
+        if (activeGames.get(runtime.gameId) !== runtime || runtime.state.phase === 'game_over') {
+          return;
+        }
+        const expired = expireStaleTradesInPlace(runtime.state);
+        const steps = executeBotStepsUntilHumanNeeded(runtime);
+        if (expired && steps === 0) {
+          persistRuntime(runtime);
+        }
+        if (expired || steps > 0) {
+          broadcastGameSync(runtime);
+        }
+      } catch (err) {
+        console.error('Trade expiry wakeup failed:', err);
+      }
+    }, delayMs);
+    timer.unref?.();
+    runtime.tradeExpiryTimer = timer;
+  }
+
   function executeBotStepsUntilHumanNeeded(
     runtime: ActiveGameRuntime,
     maxSteps = autoStepAiMaxBatch
-  ): void {
+  ): number {
     let steps = 0;
+    let actionsInTurn = 0;
+    let lastTurnSeen = runtime.state.turn;
+    let lastActiveSeen = runtime.state.activePlayerId;
     while (runtime.state.phase !== 'game_over' && steps < maxSteps) {
       expireStaleTradesInPlace(runtime.state);
+      if (
+        runtime.state.turn !== lastTurnSeen ||
+        runtime.state.activePlayerId !== lastActiveSeen
+      ) {
+        lastTurnSeen = runtime.state.turn;
+        lastActiveSeen = runtime.state.activePlayerId;
+        actionsInTurn = 0;
+      }
+
+      if (
+        actionsInTurn >= 25 &&
+        (runtime.state.phase === 'main_actions' || runtime.state.phase === 'special_building')
+      ) {
+        const activePlayer = getPlayerById(runtime.state, runtime.state.activePlayerId);
+        if (activePlayer && activePlayer.type !== 'human') {
+          const forcedAction: GameAction =
+            runtime.state.phase === 'special_building'
+              ? { type: 'pass_special_building' }
+              : { type: 'end_turn' };
+          const { state: nextState, event } = applyAction(
+            runtime.state,
+            activePlayer.id,
+            forcedAction,
+            { nowMs: Date.now() }
+          );
+          runtime.state = nextState;
+          runtime.events.push(event);
+          steps++;
+          actionsInTurn = 0;
+          continue;
+        }
+      }
+
       // Determine which player needs to act right now
       let nextActorId: string | undefined;
 
@@ -401,6 +490,7 @@ export function createCatanServer(options?: {
                   runtime.state = nextState;
                   runtime.events.push(event);
                   steps++;
+                  actionsInTurn++;
                   continue;
                 }
                 break;
@@ -435,11 +525,14 @@ export function createCatanServer(options?: {
       runtime.state = nextState;
       runtime.events.push(event);
       steps++;
+      actionsInTurn++;
     }
 
     if (steps > 0) {
       persistRuntime(runtime);
     }
+    scheduleTradeExpiryWakeup(runtime);
+    return steps;
   }
 
   function broadcastGameSync(runtime: ActiveGameRuntime): void {
@@ -452,7 +545,7 @@ export function createCatanServer(options?: {
         gameId: runtime.gameId,
         playerView: getPlayerView(runtime.state, client.playerId),
         legalActions: getLegalActions(runtime.state, client.playerId),
-        recentEvents: runtime.events.slice(-25),
+        recentEvents: runtime.events.slice(-60),
         aiDecisions: runtime.aiDecisions.slice(-15),
         pendingTermination: serializePendingTermination(runtime.pendingTermination),
         terminationDismissed: Boolean(runtime.terminationDismissed)
@@ -1077,7 +1170,7 @@ export function createCatanServer(options?: {
           gameId,
           playerView: getPlayerView(runtime.state, lobby.hostPlayerId),
           legalActions: getLegalActions(runtime.state, lobby.hostPlayerId),
-          recentEvents: runtime.events.slice(-25),
+          recentEvents: runtime.events.slice(-60),
           aiDecisions: runtime.aiDecisions.slice(-15)
         });
         return;
@@ -1093,12 +1186,19 @@ export function createCatanServer(options?: {
           return;
         }
 
-        expireStaleTradesInPlace(runtime.state);
+        const expired = expireStaleTradesInPlace(runtime.state);
 
         const hasAnyHuman = runtime.state.players.some((p) => p.type === 'human');
-        if (!hasAnyHuman && runtime.state.phase !== 'game_over') {
-          executeBotStepsUntilHumanNeeded(runtime, 4);
+        let steps = 0;
+        if (runtime.state.phase !== 'game_over') {
+          steps = hasAnyHuman
+            ? executeBotStepsUntilHumanNeeded(runtime)
+            : executeBotStepsUntilHumanNeeded(runtime, 4);
+        }
+        if (expired && steps === 0) {
           persistRuntime(runtime);
+        }
+        if (expired || steps > 0) {
           broadcastGameSync(runtime);
         }
 
@@ -1117,7 +1217,7 @@ export function createCatanServer(options?: {
           gameId,
           playerView: getPlayerView(runtime.state, viewerId),
           legalActions: getLegalActions(runtime.state, viewerId),
-          recentEvents: runtime.events.slice(-30),
+          recentEvents: runtime.events.slice(-60),
           aiDecisions: runtime.aiDecisions.slice(-20),
           pendingTermination: serializePendingTermination(runtime.pendingTermination),
           terminationDismissed: Boolean(runtime.terminationDismissed)
@@ -1166,7 +1266,10 @@ export function createCatanServer(options?: {
           expectedSequence !== runtime.state.sequence
         ) {
           expireStaleTradesInPlace(runtime.state);
-          const isTradeResponse = action.type === 'respond_trade' || action.type === 'cancel_trade';
+          const isTradeResponse =
+            action.type === 'respond_trade' ||
+            action.type === 'cancel_trade' ||
+            action.type === 'counter_trade';
           if (!isTradeResponse || !validateAction(runtime.state, playerId, action).valid) {
             sendJson(res, 409, {
               error: 'Secvență desincronizată (acțiune duplicată sau întârziată)',
@@ -1204,7 +1307,7 @@ export function createCatanServer(options?: {
           gameId,
           playerView: getPlayerView(runtime.state, playerId),
           legalActions: getLegalActions(runtime.state, playerId),
-          recentEvents: runtime.events.slice(-30),
+          recentEvents: runtime.events.slice(-60),
           aiDecisions: runtime.aiDecisions.slice(-20)
         });
         return;
@@ -1230,7 +1333,7 @@ export function createCatanServer(options?: {
           gameId,
           playerView: getPlayerView(runtime.state, viewerId),
           legalActions: getLegalActions(runtime.state, viewerId),
-          recentEvents: runtime.events.slice(-30),
+          recentEvents: runtime.events.slice(-60),
           aiDecisions: runtime.aiDecisions.slice(-20),
           pendingTermination: serializePendingTermination(runtime.pendingTermination),
           terminationDismissed: Boolean(runtime.terminationDismissed)
@@ -1294,6 +1397,7 @@ export function createCatanServer(options?: {
           if (allConfirmed || runtime.pendingTermination.humanPlayerIds.length <= 1) {
             clearTimeout(runtime.pendingTermination.timer);
             runtime.pendingTermination = undefined;
+            clearRuntimeTimers(runtime);
             runtime.state.phase = 'game_over';
             persistRuntime(runtime);
             if (runtime.lobbyId) storage.markLobbyFinished(runtime.lobbyId);
@@ -1349,6 +1453,7 @@ export function createCatanServer(options?: {
             const timer = setTimeout(() => {
               if (runtime.pendingTermination && runtime.pendingTermination.denials.size === 0) {
                 runtime.pendingTermination = undefined;
+                clearRuntimeTimers(runtime);
                 runtime.state.phase = 'game_over';
                 persistRuntime(runtime);
                 if (runtime.lobbyId) storage.markLobbyFinished(runtime.lobbyId);
@@ -1384,6 +1489,7 @@ export function createCatanServer(options?: {
           clearTimeout(runtime.pendingTermination.timer);
           runtime.pendingTermination = undefined;
         }
+        clearRuntimeTimers(runtime);
 
         runtime.state.phase = 'game_over';
         persistRuntime(runtime);
@@ -1655,8 +1761,15 @@ export function createCatanServer(options?: {
     let clientRecord: WsClientConnection | undefined;
 
     ws.on('message', (raw) => {
+      let parsedJson: unknown;
       try {
-        const parsedJson = JSON.parse(String(raw));
+        parsedJson = JSON.parse(String(raw));
+      } catch {
+        // Ignore malformed JSON frames
+        return;
+      }
+
+      try {
         const validated = ClientToServerWsMessageSchema.safeParse(parsedJson);
         if (!validated.success) {
           ws.send(
@@ -1716,7 +1829,7 @@ export function createCatanServer(options?: {
               gameId: runtime.gameId,
               playerView: getPlayerView(runtime.state, session.playerId),
               legalActions: getLegalActions(runtime.state, session.playerId),
-              recentEvents: runtime.events.slice(-25),
+              recentEvents: runtime.events.slice(-60),
               aiDecisions: runtime.aiDecisions.slice(-15)
             } satisfies ServerToClientWsMessage)
           );
@@ -1755,6 +1868,7 @@ export function createCatanServer(options?: {
             return;
           }
 
+          expireStaleTradesInPlace(runtime.state);
           const check = validateAction(runtime.state, session.playerId, msg.action);
           if (!check.valid) {
             ws.send(
@@ -1777,8 +1891,28 @@ export function createCatanServer(options?: {
           executeBotStepsUntilHumanNeeded(runtime);
           broadcastGameSync(runtime);
         }
-      } catch {
-        // Ignore malformed packets
+      } catch (err) {
+        console.error('WebSocket message handling failed:', err);
+        const gameId =
+          parsedJson &&
+          typeof parsedJson === 'object' &&
+          'gameId' in parsedJson &&
+          typeof (parsedJson as { gameId?: unknown }).gameId === 'string'
+            ? (parsedJson as { gameId: string }).gameId
+            : 'unknown';
+        try {
+          ws.send(
+            JSON.stringify({
+              type: 'action_rejected',
+              gameId,
+              code: 'WS_INTERNAL_ERROR',
+              reason: err instanceof Error ? err.message : 'Eroare internă la procesarea mesajului.',
+              currentSequence: 0
+            } satisfies ServerToClientWsMessage)
+          );
+        } catch {
+          // Ignore send failure on closed socket
+        }
       }
     });
 
@@ -1806,6 +1940,9 @@ export function createCatanServer(options?: {
     },
     close() {
       return new Promise((resolve) => {
+        for (const rt of activeGames.values()) {
+          clearRuntimeTimers(rt);
+        }
         for (const c of wsClients) {
           c.ws.close();
         }

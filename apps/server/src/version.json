@@ -1,9 +1,19 @@
 {
-  "version": "v1.193",
-  "commitCount": 193,
-  "shortHash": "d42b745",
-  "buildDate": "2026-11-01T22:22:34.362Z",
+  "version": "v1.195",
+  "commitCount": 195,
+  "shortHash": "54df8c2",
+  "buildDate": "2026-11-20T19:46:46.194Z",
   "releaseNotes": [
+    {
+      "hash": "54df8c2",
+      "date": "2026-11-02",
+      "message": "docs: update architecture, project rules, deployment, and trade negotiation standards"
+    },
+    {
+      "hash": "e5cea20",
+      "date": "2026-11-02",
+      "message": "feat(trade): auto-decline unaffordable offers with banner, add 30s countdown timer with auto-refusal, and lock modal against accidental backdrop dismiss"
+    },
     {
       "hash": "d42b745",
       "date": "2026-11-02",
@@ -243,16 +253,6 @@
       "hash": "2b5054a",
       "date": "2026-10-28",
       "message": "Fix mobile replay layout: keep transport controls above board, add player stats grid, and sliding AI drawer"
-    },
-    {
-      "hash": "d654763",
-      "date": "2026-10-28",
-      "message": "Update version stamps v1.144"
-    },
-    {
-      "hash": "496a0d7",
-      "date": "2026-10-28",
-      "message": "Fix mobile hamburger dropdown clipping and allow tolerant replay reconstruction for legacy ship actions"
     }
   ]
 }

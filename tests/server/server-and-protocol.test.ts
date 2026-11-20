@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import { CatanServerInstance, createCatanServer, resolveAllowedOrigin } from '../../apps/server/src/server';
-import { ServerToClientWsMessage } from '@catan/protocol';
+import { GameActionSchema, ServerToClientWsMessage } from '@catan/protocol';
+import { ReplayRecorder, createGame, createRulesConfig } from '@catan/core';
 
 describe('Authoritative LAN/Online Server, Protocol Validation & WebSocket Sync', () => {
   let server: CatanServerInstance;
@@ -487,5 +488,274 @@ describe('Authoritative LAN/Online Server, Protocol Validation & WebSocket Sync'
     } finally {
       await customServer.close();
     }
+  });
+
+  it('validates Seafarers and counter-trade actions in GameActionSchema and lets a human build_ship in world_map', async () => {
+    const schemaSamples = [
+      { type: 'build_ship', edgeId: 'E12' },
+      { type: 'place_initial_ship', edgeId: 'E14' },
+      { type: 'move_ship', fromEdgeId: 'E12', toEdgeId: 'E18' },
+      { type: 'pass_special_building' },
+      { type: 'counter_trade', offerId: 'TR_5', offering: { wood: 1 }, requesting: { sheep: 1 } }
+    ];
+    for (const sample of schemaSamples) {
+      expect(GameActionSchema.safeParse(sample).success).toBe(true);
+    }
+
+    const createRes = await fetch(`${baseUrl}/api/lobbies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'World Map Ship E2E',
+        hostName: 'Navigator',
+        mode: 'online',
+        seed: 'world-map-ship-e2e',
+        rules: {
+          boardScenario: 'world_map',
+          boardLayout: 'beginner_fixed',
+          startingResourcesRule: 'both_settlements'
+        },
+        seats: [
+          { seatIndex: 0, name: 'Navigator', type: 'human', color: 'red' },
+          { seatIndex: 1, name: 'AI Mariner', type: 'ai', color: 'blue', aiDifficulty: 'medium', aiStyle: 'expansion' }
+        ]
+      })
+    });
+    expect(createRes.status).toBe(201);
+    const { lobby, sessionToken } = (await createRes.json()) as {
+      lobby: { lobbyId: string };
+      sessionToken: string;
+    };
+
+    const startRes = await fetch(`${baseUrl}/api/lobbies/${lobby.lobbyId}/start`, {
+      method: 'POST'
+    });
+    expect(startRes.status).toBe(200);
+    let sync = (await startRes.json()) as {
+      gameId: string;
+      playerView: {
+        sequence: number;
+        phase: string;
+        activePlayerId: string;
+        board: {
+          pirateHexId?: string;
+          hexes: Record<string, { terrain: string }>;
+          vertices: Record<string, { id: string; adjacentHexIds: string[]; adjacentVertexIds: string[]; adjacentEdgeIds: string[] }>;
+          edges: Record<string, { adjacentHexIds: string[] }>;
+          ships?: Record<string, { ownerId: string }>;
+        };
+      };
+      legalActions: Array<{ type: string; vertexId?: string; edgeId?: string; hexId?: string }>;
+    };
+    const gameId = sync.gameId;
+
+    const submit = async (action: unknown) => {
+      const res = await fetch(`${baseUrl}/api/games/${gameId}/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionToken,
+          playerId: 'p1',
+          expectedSequence: sync.playerView.sequence,
+          action
+        })
+      });
+      const body = await res.json();
+      expect(res.status, JSON.stringify(body)).toBe(200);
+      sync = body as typeof sync;
+    };
+
+    // Helper to check if a vertex has a non-pirate adjacent sea edge
+    const hasLegalSeaEdge = (vId: string) => {
+      const v = sync.playerView.board.vertices[vId]!;
+      return v.adjacentEdgeIds.some((eId) => {
+        const edge = sync.playerView.board.edges[eId]!;
+        return (
+          edge.adjacentHexIds.some((hId) => sync.playerView.board.hexes[hId]?.terrain === 'sea') &&
+          (!sync.playerView.board.pirateHexId || !edge.adjacentHexIds.includes(sync.playerView.board.pirateHexId))
+        );
+      });
+    };
+
+    // Complete setup phases for p1: pick forest on 1st settlement and pasture+sea on 2nd settlement
+    for (let guard = 0; guard < 8 && sync.playerView.phase.startsWith('setup_'); guard++) {
+      if (sync.playerView.phase === 'setup_settlement_1') {
+        const forestVertex =
+          sync.legalActions.find(
+            (a) =>
+              a.type === 'place_initial_settlement' &&
+              sync.playerView.board.vertices[a.vertexId!]!.adjacentHexIds.some(
+                (hId) => sync.playerView.board.hexes[hId]?.terrain === 'forest'
+              )
+          ) ?? sync.legalActions.find((a) => a.type === 'place_initial_settlement')!;
+        await submit(forestVertex);
+      } else if (sync.playerView.phase === 'setup_settlement_2') {
+        const pastureSeaVertex =
+          sync.legalActions.find(
+            (a) =>
+              a.type === 'place_initial_settlement' &&
+              hasLegalSeaEdge(a.vertexId!) &&
+              sync.playerView.board.vertices[a.vertexId!]!.adjacentHexIds.some(
+                (hId) => sync.playerView.board.hexes[hId]?.terrain === 'pasture'
+              )
+          ) ??
+          sync.legalActions.find(
+            (a) => a.type === 'place_initial_settlement' && hasLegalSeaEdge(a.vertexId!)
+          )!;
+        expect(pastureSeaVertex).toBeDefined();
+        await submit(pastureSeaVertex);
+      } else {
+        const roadAct = sync.legalActions.find((a) => a.type === 'place_initial_road') ?? sync.legalActions[0]!;
+        await submit(roadAct);
+      }
+    }
+
+    expect(sync.playerView.phase).toBe('turn_start');
+    expect(sync.playerView.activePlayerId).toBe('p1');
+
+    // Roll dice to enter main_actions (handling robber if 7 was rolled)
+    await submit({ type: 'roll_dice' });
+    if (sync.playerView.phase === 'move_robber') {
+      const moveRobberAct = sync.legalActions.find((a) => a.type === 'move_robber')!;
+      await submit(moveRobberAct);
+    }
+    expect(sync.playerView.phase).toBe('main_actions');
+
+    const buildShipAct = sync.legalActions.find((a) => a.type === 'build_ship');
+    expect(buildShipAct).toBeDefined();
+    await submit(buildShipAct!);
+
+    expect(sync.playerView.board.ships?.[buildShipAct!.edgeId!]?.ownerId).toBe('p1');
+  });
+
+  it('expires stale open trade offers via GET /state and timer wakeup without manual step-ai clicks', async () => {
+    // Obtain a valid sessionToken for p1 via a lobby
+    const lobRes = await fetch(`${baseUrl}/api/lobbies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Trade Expiry Test',
+        hostName: 'HumanP1',
+        mode: 'online',
+        seats: [
+          { seatIndex: 0, name: 'HumanP1', type: 'human', color: 'red' },
+          { seatIndex: 1, name: 'BotP2', type: 'ai', color: 'blue' }
+        ]
+      })
+    });
+    const { sessionToken } = (await lobRes.json()) as { sessionToken: string };
+
+    const makeBaseState = (gameId: string) => {
+      const base = createGame({
+        gameId,
+        seed: 'trade-expiry-seed',
+        rules: createRulesConfig({ tradeOfferTimeoutSec: 5, autoFillPassiveBotsMinPlayers: 2 }),
+        participants: [
+          { id: 'p1', name: 'HumanP1', type: 'human' },
+          { id: 'p2', name: 'BotP2', type: 'ai', aiDifficulty: 'medium', aiStyle: 'balanced' }
+        ]
+      });
+      base.phase = 'main_actions';
+      base.turn = 2;
+      base.activePlayerId = 'p2';
+      base.playerOrder = ['p1', 'p2'];
+      base.players[0]!.resources = { wood: 0, brick: 2, sheep: 0, wheat: 0, ore: 0 };
+      base.players[1]!.resources = { wood: 2, brick: 0, sheep: 0, wheat: 0, ore: 0 };
+      base.activeTradeOffers = [
+        {
+          id: 'TR_PREV',
+          fromPlayerId: 'p2',
+          toPlayerId: 'p1',
+          offering: { wood: 1, brick: 0, sheep: 0, wheat: 0, ore: 0 },
+          requesting: { wood: 0, brick: 1, sheep: 0, wheat: 0, ore: 0 },
+          createdAtMs: 1,
+          expiresAtMs: 2,
+          rejectedByPlayerIds: [],
+          status: 'cancelled'
+        }
+      ];
+      return base;
+    };
+
+    // Case A: Already-expired open offer -> GET /api/games/:id/state expires it & finishes p2 AI turn
+    const gameA = makeBaseState('game_expired_poll');
+    const recA = new ReplayRecorder(gameA, 1);
+    recA.recordAndApply(
+      'p2',
+      {
+        type: 'propose_trade',
+        toPlayerId: 'p1',
+        offering: { wood: 1 },
+        requesting: { brick: 1 }
+      },
+      { nowMs: Date.now() - 6000 }
+    );
+    const impARes = await fetch(`${baseUrl}/api/replays/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(recA.toReplayFile())
+    });
+    expect(impARes.status).toBe(200);
+
+    const stateARes = await fetch(`${baseUrl}/api/games/game_expired_poll/state?sessionToken=${sessionToken}`);
+    expect(stateARes.status).toBe(200);
+    const stateA = (await stateARes.json()) as {
+      playerView: { activePlayerId: string; phase: string; activeTradeOffers: unknown[] };
+    };
+    expect(stateA.playerView.activePlayerId).toBe('p1');
+    expect(stateA.playerView.phase).toBe('turn_start');
+
+    // Case B: Offer expiring in ~450ms -> timer wakes up, finishes p2 AI turn, and pushes state_sync over WS
+    const gameB = makeBaseState('game_timer_wakeup');
+    const recB = new ReplayRecorder(gameB, 1);
+    recB.recordAndApply(
+      'p2',
+      {
+        type: 'propose_trade',
+        toPlayerId: 'p1',
+        offering: { wood: 1 },
+        requesting: { brick: 1 }
+      },
+      { nowMs: Date.now() - 4550 }
+    );
+    const impBRes = await fetch(`${baseUrl}/api/replays/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(recB.toReplayFile())
+    });
+    expect(impBRes.status).toBe(200);
+
+    const ws = new WebSocket(wsUrl);
+    const resumedPromise = new Promise<ServerToClientWsMessage>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Timed out waiting for trade expiry state_sync')), 4000);
+      ws.on('open', () => {
+        ws.send(JSON.stringify({ type: 'authenticate', gameId: 'game_timer_wakeup', sessionToken }));
+      });
+      ws.on('message', (raw) => {
+        const msg = JSON.parse(String(raw)) as ServerToClientWsMessage;
+        if (msg.type === 'state_sync' && msg.playerView.activePlayerId === 'p1') {
+          clearTimeout(timeout);
+          resolve(msg);
+        }
+      });
+      ws.on('error', (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      });
+    });
+
+    // Trigger initial GET /state to schedule the trade expiry wakeup while offer is still open
+    const stateBRes = await fetch(`${baseUrl}/api/games/game_timer_wakeup/state?sessionToken=${sessionToken}`);
+    expect(stateBRes.status).toBe(200);
+    const stateB = (await stateBRes.json()) as { playerView: { activePlayerId: string } };
+    expect(stateB.playerView.activePlayerId).toBe('p2');
+
+    const pushed = await resumedPromise;
+    expect(pushed.type).toBe('state_sync');
+    if (pushed.type === 'state_sync') {
+      expect(pushed.playerView.activePlayerId).toBe('p1');
+      expect(pushed.playerView.phase).toBe('turn_start');
+    }
+    ws.close();
   });
 });

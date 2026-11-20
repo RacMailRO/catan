@@ -60,6 +60,9 @@ export const GameOverDialog: React.FC<GameOverDialogProps> = ({ locale, gameStat
             <div>🏰 {cityCount}x Orașe: <strong>+{cityCount * 2} VP</strong></div>
             {hasLongestRoad && <div>🛣️ Drumul cel mai lung: <strong>+2 VP</strong></div>}
             {hasLargestArmy && <div>⚔️ Armata cea mai mare: <strong>+2 VP</strong></div>}
+            {(winner?.specialVictoryPoints ?? 0) > 0 && (
+              <div>🏝️ Bonus Insule: <strong>+{winner!.specialVictoryPoints} VP</strong></div>
+            )}
             {scoreInfo.hiddenVictoryPoints > 0 && (
               <div style={{ color: '#4ade80', fontWeight: 600 }}>
                 🏆 {scoreInfo.hiddenVictoryPoints}x Punct de Victorie: <strong>+{scoreInfo.hiddenVictoryPoints} VP</strong>

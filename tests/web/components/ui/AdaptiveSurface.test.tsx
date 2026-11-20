@@ -80,4 +80,33 @@ describe('AdaptiveSurface', () => {
     await user.click(screen.getByRole('presentation'));
     expect(onClose).toHaveBeenCalledTimes(3);
   });
+
+  it('renders as a large centered modal on desktop when desktopVariant="modal", keeps bottom sheet on mobile, and closes on Escape', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    mockMatchMedia(false);
+    render(
+      <AdaptiveSurface open onClose={onClose} title="Stats" desktopVariant="modal" scrollable={false}>
+        <div>Chart body</div>
+      </AdaptiveSurface>
+    );
+    const desktopDialog = screen.getByRole('dialog', { name: 'Stats' });
+    expect(desktopDialog).toHaveClass('max-w-5xl');
+    expect(desktopDialog).not.toHaveClass('max-w-md');
+
+    await user.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    cleanup();
+    mockMatchMedia(true);
+    render(
+      <AdaptiveSurface open onClose={onClose} title="Stats Mobile" desktopVariant="modal" scrollable={false}>
+        <div>Chart body</div>
+      </AdaptiveSurface>
+    );
+    const mobileDialog = screen.getByRole('dialog', { name: 'Stats Mobile' });
+    expect(mobileDialog).toHaveClass('bottom-0');
+    expect(mobileDialog).not.toHaveClass('max-w-5xl');
+  });
 });

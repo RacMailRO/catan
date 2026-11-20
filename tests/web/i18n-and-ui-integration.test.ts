@@ -55,6 +55,103 @@ describe('Web UI Localization, Assets & Replay Persistence Integration', () => {
     ).toContain('V10');
   });
 
+  it('formats detailed event descriptions (dice, production, robber/pirate steals, dev cards, trades) with privacy rules', () => {
+    const names: Record<string, string> = { p1: 'Andrei', p2: 'Bot Elena', p3: 'Bot Radu' };
+    const getPlayerName = (id: string) => names[id] ?? id;
+
+    // 1. Dice roll + production + 7
+    const rollText = formatActionDescription(
+      { type: 'roll_dice' },
+      'ro',
+      {
+        dice: { die1: 4, die2: 2, total: 6 },
+        production: {
+          p1: { wood: 2, sheep: 1 },
+          p2: {}
+        }
+      },
+      { getPlayerName, actorId: 'p1' }
+    );
+    expect(rollText).toContain('4 + 2 = 6');
+    expect(rollText).toContain('Andrei: +2 Lemn, +1 Oaie');
+
+    const rollSevenText = formatActionDescription(
+      { type: 'roll_dice' },
+      'ro',
+      { dice: { die1: 3, die2: 4, total: 7 } },
+      { getPlayerName, actorId: 'p1' }
+    );
+    expect(rollSevenText).toContain('3 + 4 = 7');
+    expect(rollSevenText).toContain('Hoțul / Piratul se mută');
+
+    // 2. Move robber / pirate & steal privacy
+    const stealThirdParty = formatActionDescription(
+      { type: 'move_robber', hexId: 'H5', targetPlayerId: 'p2' },
+      'ro',
+      { movedPiece: 'robber', stolenFrom: 'p2', stolenResource: 'ore' },
+      { getPlayerName, revealPrivate: false, viewerId: 'p3', actorId: 'p1' }
+    );
+    expect(stealThirdParty).toContain('hoțul pe H5');
+    expect(stealThirdParty).toContain('Bot Elena');
+    expect(stealThirdParty).not.toContain('Piatră');
+
+    const stealVictimView = formatActionDescription(
+      { type: 'play_knight', hexId: 'H12', targetPlayerId: 'p2' },
+      'ro',
+      { movedPiece: 'pirate', stolenFrom: 'p2', stolenResource: 'ore' },
+      { getPlayerName, revealPrivate: false, viewerId: 'p2', actorId: 'p1' }
+    );
+    expect(stealVictimView).toContain('Cavaler');
+    expect(stealVictimView).toContain('piratul pe H12');
+    expect(stealVictimView).toContain('1 Piatră de la Bot Elena');
+
+    // 3. Buy dev card privacy
+    const devHidden = formatActionDescription(
+      { type: 'buy_dev_card' },
+      'ro',
+      { drawnType: 'victory_point' },
+      { getPlayerName, revealPrivate: false, viewerId: 'p3', actorId: 'p1' }
+    );
+    expect(devHidden).toBe('🃏 Cumpără o carte de dezvoltare');
+
+    const devSelf = formatActionDescription(
+      { type: 'buy_dev_card' },
+      'ro',
+      { drawnType: 'victory_point' },
+      { getPlayerName, revealPrivate: false, viewerId: 'p1', actorId: 'p1' }
+    );
+    expect(devSelf).toContain('Punct de Victorie');
+
+    // 4. Discard cards, trade proposal, and Monopoly breakdown
+    const discardText = formatActionDescription(
+      { type: 'discard_cards', resources: { wood: 2, brick: 1 } },
+      'ro',
+      { discarded: { wood: 2, brick: 1 } },
+      { getPlayerName, actorId: 'p2' }
+    );
+    expect(discardText).toContain('3 cărți');
+    expect(discardText).toContain('2 Lemn, 1 Cărămidă');
+
+    const proposeText = formatActionDescription(
+      { type: 'propose_trade', toPlayerId: 'p2', offering: { wood: 1 }, requesting: { sheep: 1 } },
+      'ro',
+      undefined,
+      { getPlayerName, actorId: 'p1' }
+    );
+    expect(proposeText).toContain('către Bot Elena');
+    expect(proposeText).toContain('1 Lemn');
+    expect(proposeText).toContain('1 Oaie');
+
+    const monopolyText = formatActionDescription(
+      { type: 'play_monopoly', resource: 'wheat' },
+      'ro',
+      { totalTaken: 3, takenByPlayer: { p2: 2, p3: 1 } },
+      { getPlayerName, actorId: 'p1' }
+    );
+    expect(monopolyText).toContain('Monopol pe Grâu');
+    expect(monopolyText).toContain('+3 cărți confiscate: 2 de la Bot Elena, 1 de la Bot Radu');
+  });
+
   it('integrates ReplayRecorder with UI action formatting and replay summary persistence', () => {
     const state = createGame({
       gameId: 'ui-flow-1',

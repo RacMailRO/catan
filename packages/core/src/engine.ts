@@ -341,6 +341,18 @@ export function isEdgeLegalForPlayerShip(
   return false;
 }
 
+export function isAllSeaOrFogEdge(board: BoardState, edgeId: string): boolean {
+  const edge = board.edges[edgeId];
+  if (!edge) return false;
+  return (
+    edge.adjacentHexIds.length > 1 &&
+    edge.adjacentHexIds.every((hId) => {
+      const t = board.hexes[hId]?.terrain;
+      return t === 'sea' || t === 'fog';
+    })
+  );
+}
+
 export function isEdgeLegalForPlayerRoad(
   board: BoardState,
   edgeId: string,
@@ -350,13 +362,7 @@ export function isEdgeLegalForPlayerRoad(
   if (!edge) return false;
   if (board.roads[edgeId] || board.ships?.[edgeId]) return false;
 
-  const allSea =
-    edge.adjacentHexIds.length > 1 &&
-    edge.adjacentHexIds.every((hId) => {
-      const t = board.hexes[hId]?.terrain;
-      return t === 'sea' || t === 'fog';
-    });
-  if (allSea) return false;
+  if (isAllSeaOrFogEdge(board, edgeId)) return false;
 
   for (const vId of [edge.v1, edge.v2]) {
     const b = board.buildings[vId];
@@ -869,16 +875,18 @@ export function getLegalActions(state: GameState, playerId: string): GameAction[
       // Counter with different terms instead of a flat accept/reject of what was asked -
       // enumerated the same way propose_trade below is (every 1-for-1 swap the player can
       // actually afford), scoped to this specific offer.
-      for (const give of ALL_RESOURCES) {
-        if (player.resources[give] < 1) continue;
-        for (const receive of ALL_RESOURCES) {
-          if (receive === give) continue;
-          actions.push({
-            type: 'counter_trade',
-            offerId: offer.id,
-            offering: { ...createEmptyResources(), [give]: 1 },
-            requesting: { ...createEmptyResources(), [receive]: 1 }
-          });
+      if (offer.fromPlayerId === state.activePlayerId && state.activeTradeOffers.length < 6) {
+        for (const give of ALL_RESOURCES) {
+          if (player.resources[give] < 1) continue;
+          for (const receive of ALL_RESOURCES) {
+            if (receive === give) continue;
+            actions.push({
+              type: 'counter_trade',
+              offerId: offer.id,
+              offering: { ...createEmptyResources(), [give]: 1 },
+              requesting: { ...createEmptyResources(), [receive]: 1 }
+            });
+          }
         }
       }
     }
@@ -905,9 +913,19 @@ export function getLegalActions(state: GameState, playerId: string): GameAction[
       if (!lastV) return [];
       const vert = state.board.vertices[lastV];
       if (!vert) return [];
+      const allowShips =
+        isScenarioWithShips(state.rules.boardScenario) &&
+        (player.remainingPieces.ships ?? 0) > 0;
       for (const eId of vert.adjacentEdgeIds) {
-        if (!state.board.roads[eId]) {
+        if (
+          !state.board.roads[eId] &&
+          !state.board.ships?.[eId] &&
+          !isAllSeaOrFogEdge(state.board, eId)
+        ) {
           actions.push({ type: 'place_initial_road', edgeId: eId });
+        }
+        if (allowShips && isEdgeLegalForPlayerShip(state.board, eId, playerId)) {
+          actions.push({ type: 'place_initial_ship', edgeId: eId });
         }
       }
       return actions;
@@ -1126,6 +1144,19 @@ export function getLegalActions(state: GameState, playerId: string): GameAction[
         }
       }
 
+      // Respond to incoming open trade offers (e.g., counter_trade offers directed back to the active player)
+      for (const offer of state.activeTradeOffers) {
+        if (offer.status !== 'open') continue;
+        if (offer.fromPlayerId === playerId) continue;
+        if (offer.toPlayerId && offer.toPlayerId !== playerId) continue;
+        if (offer.rejectedByPlayerIds.includes(playerId)) continue;
+
+        actions.push({ type: 'respond_trade', offerId: offer.id, response: 'reject' });
+        if (hasResources(player.resources, offer.requesting)) {
+          actions.push({ type: 'respond_trade', offerId: offer.id, response: 'accept' });
+        }
+      }
+
       // Play Dev Cards
       appendLegalDevCardActions(state, player, actions);
 
@@ -1161,7 +1192,13 @@ function appendLegalDevCardActions(
   if (canPlayDevCardType(state, player, 'knight')) {
     const stealRule = state.rules.knightStealRule;
     for (const hexId of Object.keys(state.board.hexes)) {
-      if (hexId === state.board.robberHexId) continue;
+      const hex = state.board.hexes[hexId]!;
+      const isSea = hex.terrain === 'sea';
+      if (isSea) {
+        if (hexId === state.board.pirateHexId) continue;
+      } else {
+        if (hexId === state.board.robberHexId) continue;
+      }
       const targets = getEligibleRobberTargetsOnHex(state, hexId, player.id);
       if (stealRule === 'single' && targets.length > 0) {
         for (const tId of targets) {
@@ -1395,7 +1432,13 @@ export function validateAction(
         return { valid: false, code: 'NO_SETTLEMENT', reason: 'Așezarea inițială nu a fost plasată.' };
       }
       const vert = state.board.vertices[lastV];
-      if (!vert || !vert.adjacentEdgeIds.includes(action.edgeId) || state.board.roads[action.edgeId]) {
+      if (
+        !vert ||
+        !vert.adjacentEdgeIds.includes(action.edgeId) ||
+        state.board.roads[action.edgeId] ||
+        state.board.ships?.[action.edgeId] ||
+        isAllSeaOrFogEdge(state.board, action.edgeId)
+      ) {
         return {
           valid: false,
           code: 'INVALID_INITIAL_ROAD',
@@ -1769,6 +1812,30 @@ export function validateAction(
 }
 
 /**
+ * Advances snake-draft setup turn order after placing an initial road or ship.
+ */
+function advanceSetupAfterInitialPiece(nextState: GameState): void {
+  const numPlayers = nextState.playerOrder.length;
+  nextState.setupStepIndex += 1;
+
+  if (nextState.setupStepIndex < numPlayers) {
+    // First round of snake draft: 0 .. numPlayers - 1
+    nextState.activePlayerId = nextState.playerOrder[nextState.setupStepIndex]!;
+    nextState.phase = 'setup_settlement_1';
+  } else if (nextState.setupStepIndex < numPlayers * 2) {
+    // Second round of snake draft: reverse order
+    const reverseIdx = numPlayers * 2 - 1 - nextState.setupStepIndex;
+    nextState.activePlayerId = nextState.playerOrder[reverseIdx]!;
+    nextState.phase = 'setup_settlement_2';
+  } else {
+    // Setup complete -> start Turn 1
+    nextState.turn = 1;
+    nextState.activePlayerId = nextState.playerOrder[0]!;
+    nextState.phase = 'turn_start';
+  }
+}
+
+/**
  * Applies a validated action to a deep clone of `state`, returning the new state and the recorded GameEvent.
  */
 export function applyAction(
@@ -1849,25 +1916,7 @@ export function applyAction(
       nextState.lastPlacedSettlementVertexId = undefined;
       updateLongestRoadState(nextState);
       exploreFogHexesAroundEdge(nextState, action.edgeId, playerId);
-
-      const numPlayers = nextState.playerOrder.length;
-      nextState.setupStepIndex += 1;
-
-      if (nextState.setupStepIndex < numPlayers) {
-        // First round of snake draft: 0 .. numPlayers - 1
-        nextState.activePlayerId = nextState.playerOrder[nextState.setupStepIndex]!;
-        nextState.phase = 'setup_settlement_1';
-      } else if (nextState.setupStepIndex < numPlayers * 2) {
-        // Second round of snake draft: reverse order
-        const reverseIdx = numPlayers * 2 - 1 - nextState.setupStepIndex;
-        nextState.activePlayerId = nextState.playerOrder[reverseIdx]!;
-        nextState.phase = 'setup_settlement_2';
-      } else {
-        // Setup complete -> start Turn 1
-        nextState.turn = 1;
-        nextState.activePlayerId = nextState.playerOrder[0]!;
-        nextState.phase = 'turn_start';
-      }
+      advanceSetupAfterInitialPiece(nextState);
       break;
     }
 
@@ -1995,31 +2044,7 @@ export function applyAction(
       nextState.lastPlacedSettlementVertexId = undefined;
       updateLongestRoadState(nextState);
       exploreFogHexesAroundEdge(nextState, action.edgeId, playerId);
-
-      const totalPlayers = nextState.players.length;
-      if (nextState.phase === 'setup_road_1') {
-        const isLastInForward = nextState.setupStepIndex === totalPlayers - 1;
-        if (isLastInForward) {
-          nextState.phase = 'setup_settlement_2';
-        } else {
-          nextState.setupStepIndex += 1;
-          nextState.activePlayerId = nextState.playerOrder[nextState.setupStepIndex]!;
-          nextState.phase = 'setup_settlement_1';
-        }
-      } else {
-        const isLastInReverse = nextState.setupStepIndex === totalPlayers * 2 - 1;
-        if (isLastInReverse) {
-          nextState.phase = 'turn_start';
-          nextState.setupStepIndex = totalPlayers * 2;
-          nextState.activePlayerId = nextState.playerOrder[0]!;
-          nextState.turn = 1;
-        } else {
-          nextState.setupStepIndex += 1;
-          const revIdx = totalPlayers * 2 - 1 - nextState.setupStepIndex;
-          nextState.activePlayerId = nextState.playerOrder[revIdx]!;
-          nextState.phase = 'setup_settlement_2';
-        }
-      }
+      advanceSetupAfterInitialPiece(nextState);
       break;
     }
     case 'build_road': {

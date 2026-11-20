@@ -6,9 +6,12 @@ import {
   createGame,
   createRulesConfig,
   getLegalActions,
+  getPlayerView,
+  isAllSeaOrFogEdge,
   isEdgeLegalForPlayerShip,
   validateAction
 } from '@catan/core';
+import { evaluateCandidateAction } from '@catan/ai';
 
 describe('Catan Seafarers (Navigatori) & Custom Map Scenarios', () => {
   it('generates Heading to New Shores scenario with islands, sea hexes, and gold fields', () => {
@@ -451,5 +454,206 @@ describe('Catan Seafarers (Navigatori) & Custom Map Scenarios', () => {
     // The fog hex was revealed!
     expect(res.state.board.hexes[fogHex.id]!.terrain).not.toBe('fog');
     expect(res.state.fogHexesRemaining!.length).toBe(initialFogCount - 1);
+  });
+
+  it('never emits pirateHexId for play_knight on world_map and ensures all legalActions pass validateAction', () => {
+    const game = createGame({
+      gameId: 'test-knight-pirate',
+      seed: 'seed-knight-pirate',
+      rules: createRulesConfig({ boardScenario: 'world_map' }),
+      participants: [
+        { id: 'p1', name: 'Alice', type: 'human' },
+        { id: 'p2', name: 'Bob', type: 'ai' }
+      ]
+    });
+
+    expect(game.board.pirateHexId).toBeDefined();
+    game.phase = 'turn_start';
+    game.turn = 2;
+    game.activePlayerId = 'p1';
+    game.players[0]!.devCards.push({
+      id: 'dc-knight-1',
+      type: 'knight',
+      boughtAtTurn: 1,
+      played: false
+    });
+
+    const legal = getLegalActions(game, 'p1');
+    const knightActions = legal.filter(
+      (a): a is Extract<typeof a, { type: 'play_knight' }> => a.type === 'play_knight'
+    );
+    expect(knightActions.length).toBeGreaterThan(0);
+    expect(knightActions.some((a) => a.hexId === game.board.pirateHexId)).toBe(false);
+    expect(knightActions.some((a) => a.hexId === game.board.robberHexId)).toBe(false);
+
+    for (const act of legal) {
+      const check = validateAction(game, 'p1', act);
+      expect(check.valid).toBe(true);
+    }
+  });
+
+  it('emits place_initial_ship during setup on world_map, rejects all-sea initial roads, and advances snake draft properly', () => {
+    const game = createGame({
+      gameId: 'test-initial-ship-snake',
+      seed: 'seed-initial-ship-snake',
+      rules: createRulesConfig({ boardScenario: 'world_map', autoFillPassiveBotsMinPlayers: 2 }),
+      participants: [
+        { id: 'p1', name: 'Alice', type: 'human' },
+        { id: 'p2', name: 'Bob', type: 'human' }
+      ]
+    });
+
+    const firstId = game.playerOrder[0]!;
+    const secondId = game.playerOrder[1]!;
+
+    // Find a coastal vertex touching a sea hex and not touching pirateHexId on all edges
+    const coastalV = Object.values(game.board.vertices).find((v) => {
+      const touchesLand = v.adjacentHexIds.some((hId) => {
+        const t = game.board.hexes[hId]?.terrain;
+        return t && t !== 'sea' && t !== 'fog';
+      });
+      const touchesSea = v.adjacentHexIds.some((hId) => game.board.hexes[hId]?.terrain === 'sea');
+      return (
+        touchesLand &&
+        touchesSea &&
+        v.adjacentEdgeIds.some((eId) => !eId.startsWith('none') && isAllSeaOrFogEdge(game.board, eId))
+      );
+    });
+
+    const anyCoastalV =
+      coastalV ??
+      Object.values(game.board.vertices).find((v) =>
+        v.adjacentEdgeIds.some((eId) => {
+          const edge = game.board.edges[eId]!;
+          return edge.adjacentHexIds.some((hId) => game.board.hexes[hId]?.terrain === 'sea') &&
+            (!game.board.pirateHexId || !edge.adjacentHexIds.includes(game.board.pirateHexId));
+        })
+      )!;
+
+    // Player 1 places settlement + road
+    const s1 = applyAction(game, firstId, { type: 'place_initial_settlement', vertexId: anyCoastalV.id }).state;
+    const legal1 = getLegalActions(s1, firstId);
+    const road1 = legal1.find((a) => a.type === 'place_initial_road')!;
+    const afterP1 = applyAction(s1, firstId, road1).state;
+    expect(afterP1.activePlayerId).toBe(secondId);
+    expect(afterP1.setupStepIndex).toBe(1);
+
+    // Find a coastal vertex far enough from anyCoastalV for second player (last player of round 1)
+    const legalP2Settle = getLegalActions(afterP1, secondId).filter(
+      (a): a is Extract<typeof a, { type: 'place_initial_settlement' }> =>
+        a.type === 'place_initial_settlement'
+    );
+    const p2CoastalAct = legalP2Settle.find((act) => {
+      const v = afterP1.board.vertices[act.vertexId]!;
+      return v.adjacentEdgeIds.some((eId) => {
+        const edge = afterP1.board.edges[eId]!;
+        return (
+          edge.adjacentHexIds.some((hId) => afterP1.board.hexes[hId]?.terrain === 'sea') &&
+          (!afterP1.board.pirateHexId || !edge.adjacentHexIds.includes(afterP1.board.pirateHexId))
+        );
+      });
+    })!;
+    expect(p2CoastalAct).toBeDefined();
+
+    const s2 = applyAction(afterP1, secondId, p2CoastalAct).state;
+    const legal2 = getLegalActions(s2, secondId);
+    const ship2 = legal2.find(
+      (a): a is Extract<typeof a, { type: 'place_initial_ship' }> => a.type === 'place_initial_ship'
+    );
+    expect(ship2).toBeDefined();
+
+    // All-sea edges must never be emitted or accepted as place_initial_road
+    const p2Vert = s2.board.vertices[p2CoastalAct.vertexId]!;
+    for (const eId of p2Vert.adjacentEdgeIds) {
+      if (isAllSeaOrFogEdge(s2.board, eId)) {
+        expect(legal2.some((a) => a.type === 'place_initial_road' && a.edgeId === eId)).toBe(false);
+        expect(validateAction(s2, secondId, { type: 'place_initial_road', edgeId: eId }).valid).toBe(false);
+      }
+    }
+
+    // Last player of round 1 places initial ship -> setupStepIndex MUST increment to 2 and stay on secondId for setup_settlement_2
+    const afterP2Ship = applyAction(s2, secondId, ship2!).state;
+    expect(afterP2Ship.phase).toBe('setup_settlement_2');
+    expect(afterP2Ship.activePlayerId).toBe(secondId);
+    expect(afterP2Ship.setupStepIndex).toBe(2);
+
+    // Complete second round of snake draft to verify clean transition to turn 1
+    const p2Settle2 = getLegalActions(afterP2Ship, secondId).find(
+      (a) => a.type === 'place_initial_settlement'
+    )!;
+    const s2b = applyAction(afterP2Ship, secondId, p2Settle2).state;
+    const p2Edge2 = getLegalActions(s2b, secondId).find(
+      (a) => a.type === 'place_initial_road' || a.type === 'place_initial_ship'
+    )!;
+    const afterP2Second = applyAction(s2b, secondId, p2Edge2).state;
+    expect(afterP2Second.phase).toBe('setup_settlement_2');
+    expect(afterP2Second.activePlayerId).toBe(firstId);
+    expect(afterP2Second.setupStepIndex).toBe(3);
+  });
+
+  it('allows active player to respond to incoming counter_trade offers and scores marginal counter_trade below reject', () => {
+    const game = createGame({
+      gameId: 'test-counter-trade',
+      seed: 'seed-counter-trade',
+      rules: createRulesConfig({ boardScenario: 'classic' }),
+      participants: [
+        { id: 'p1', name: 'Alice', type: 'ai' },
+        { id: 'p2', name: 'Bob', type: 'ai' }
+      ]
+    });
+
+    game.phase = 'main_actions';
+    game.turn = 2;
+    game.activePlayerId = 'p1';
+    game.players[0]!.resources = { wood: 1, brick: 0, sheep: 0, wheat: 1, ore: 0 };
+    game.players[1]!.resources = { wood: 0, brick: 1, sheep: 1, wheat: 0, ore: 0 };
+
+    const proposed = applyAction(game, 'p1', {
+      type: 'propose_trade',
+      offering: { wood: 1 },
+      requesting: { brick: 1 }
+    }).state;
+    const offerId = proposed.activeTradeOffers[0]!.id;
+
+    // p2 (non-active) counters with sheep -> wheat
+    const countered = applyAction(proposed, 'p2', {
+      type: 'counter_trade',
+      offerId,
+      offering: { sheep: 1 },
+      requesting: { wheat: 1 }
+    }).state;
+
+    // Active player p1 must receive respond_trade legal actions for p2's counter_trade offer
+    const p1Legal = getLegalActions(countered, 'p1');
+    const counterOffer = countered.activeTradeOffers.find((o) => o.fromPlayerId === 'p2' && o.status === 'open')!;
+    expect(counterOffer).toBeDefined();
+    expect(
+      p1Legal.some((a) => a.type === 'respond_trade' && a.offerId === counterOffer.id && a.response === 'accept')
+    ).toBe(true);
+    expect(
+      p1Legal.some((a) => a.type === 'respond_trade' && a.offerId === counterOffer.id && a.response === 'reject')
+    ).toBe(true);
+
+    // Marginal counter_trade (swapping wood for sheep when player already has balanced/plenty) should score below reject (0)
+    const view = getPlayerView(proposed, 'p2');
+    const rejectEv = evaluateCandidateAction(
+      view,
+      'p2',
+      { type: 'respond_trade', offerId, response: 'reject' },
+      'balanced'
+    );
+    const marginalCounterEv = evaluateCandidateAction(
+      view,
+      'p2',
+      {
+        type: 'counter_trade',
+        offerId,
+        offering: { brick: 1 },
+        requesting: { sheep: 1 }
+      },
+      'balanced'
+    );
+    expect(rejectEv.score).toBe(0);
+    expect(marginalCounterEv.score).toBeLessThan(rejectEv.score);
   });
 });
