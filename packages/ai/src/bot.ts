@@ -206,25 +206,36 @@ export function chooseAIAction(
     chosenCandidate = evaluatedCandidates[0]!;
   } else if (difficulty === 'expert') {
     // H: Search & Monte Carlo rollouts over top candidates
-    const topK = evaluatedCandidates.slice(0, Math.min(5, evaluatedCandidates.length));
-    const rolloutsPerCandidate = options?.maxRollouts ?? 4;
+    const topK = evaluatedCandidates.slice(0, Math.min(4, evaluatedCandidates.length));
+    const rolloutsPerCandidate = options?.maxRollouts ?? 3;
+    const isTradeResponseOnly = topK.every(
+      (c) =>
+        c.action.type === 'respond_trade' ||
+        c.action.type === 'counter_trade' ||
+        c.action.type === 'cancel_trade'
+    );
+    const skipRollouts = state.phase === 'discard_resources' || isTradeResponseOnly;
 
     if (topK.length > 1) {
       let bestExpertScore = -Infinity;
       for (const cand of topK) {
         const lookahead = computeTacticalLookaheadBonus(state, playerId, cand.action, style);
-        const mcEstimate = runMonteCarloRollouts(
-          state,
-          playerId,
-          cand.action,
-          style,
-          rolloutsPerCandidate
-        );
-        simulationsRun += rolloutsPerCandidate;
-
-        const expertScore = Number((cand.score + lookahead + mcEstimate * 0.35).toFixed(3));
         cand.factors.tacticalLookahead = Number(lookahead.toFixed(2));
-        cand.factors.monteCarloRollout = Number((mcEstimate * 0.35).toFixed(2));
+        let expertScore: number;
+        if (skipRollouts) {
+          expertScore = Number((cand.score + lookahead).toFixed(3));
+        } else {
+          const mcEstimate = runMonteCarloRollouts(
+            state,
+            playerId,
+            cand.action,
+            style,
+            rolloutsPerCandidate
+          );
+          simulationsRun += rolloutsPerCandidate;
+          expertScore = Number((cand.score + lookahead + mcEstimate * 0.35).toFixed(3));
+          cand.factors.monteCarloRollout = Number((mcEstimate * 0.35).toFixed(2));
+        }
         cand.score = expertScore;
 
         if (expertScore > bestExpertScore) {
@@ -314,7 +325,7 @@ function computeTacticalLookaheadBonus(
   }
 
   try {
-    const { state: nextState } = applyAction(state, playerId, action);
+    const { state: nextState } = applyAction(state, playerId, action, { skipValidation: true });
     if (nextState.winnerId === playerId) {
       return 500;
     }
@@ -357,14 +368,16 @@ function runMonteCarloRollouts(
 
   for (let r = 0; r < numRollouts; r++) {
     try {
-      const simState = structuredClone(state);
-      // Perturb PRNG state per rollout so dice rolls vary across simulations
-      simState.prngState = hashSeedToUint32(
-        `${state.seed}-mc-${state.sequence}-${r}-${JSON.stringify(firstAction)}`
-      );
+      // Perturb PRNG state per rollout so dice rolls vary across simulations; applyAction clones state
+      const simState: GameState = {
+        ...state,
+        prngState: hashSeedToUint32(
+          `${state.seed}-mc-${state.sequence}-${r}-${JSON.stringify(firstAction)}`
+        )
+      };
 
-      let cur = applyAction(simState, playerId, firstAction).state;
-      const depthSteps = 6;
+      let cur = applyAction(simState, playerId, firstAction, { skipValidation: true }).state;
+      const depthSteps = 4;
 
       for (let step = 0; step < depthSteps; step++) {
         if (cur.phase === 'game_over') break;
@@ -387,7 +400,7 @@ function runMonteCarloRollouts(
             bestAct = candAct;
           }
         }
-        cur = applyAction(cur, actorId, bestAct).state;
+        cur = applyAction(cur, actorId, bestAct, { skipValidation: true }).state;
       }
 
       const finalView = getPlayerView(cur, playerId);

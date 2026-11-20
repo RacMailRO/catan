@@ -47,7 +47,7 @@ import { AdaptiveSurface } from './components/ui/AdaptiveSurface';
 import { AppNav } from './components/ui/AppNav';
 import { ThemeToggle } from './components/ui/ThemeToggle';
 import { useTheme } from './hooks/useTheme';
-import { AiThinkingIndicator } from './components/game/AiThinkingIndicator';
+import { AiThinkingIndicator, AiThinkingVariant } from './components/game/AiThinkingIndicator';
 import {
   AnimatedDiceWidget,
   ResourceIcon,
@@ -285,10 +285,14 @@ export const App: React.FC = () => {
   // Called here (always-mounted) rather than inside ThemeToggle itself, so the theme applies
   // to the whole app from first paint — ThemeToggle only mounts once the nav drawer is opened.
   const { theme, setTheme } = useTheme();
-  // Timestamp a server request started that may process several AI turns in one batch (apps/
-  // server can take up to ~a minute for a multi-bot trade negotiation) — null while idle. Drives
-  // AiThinkingIndicator so that wait never looks like the game is stuck.
-  const [pendingActionSince, setPendingActionSince] = useState<number | null>(null);
+  // Tracks the active online request so AiThinkingIndicator can display an honest status
+  // (syncing vs ai_turn vs negotiating) only if a wait exceeds its grace delay.
+  const [pendingAction, setPendingAction] = useState<{
+    since: number;
+    variant: AiThinkingVariant;
+    delayMs: number;
+    actionType?: GameAction['type'];
+  } | null>(null);
 
   // App version badge + release notes — read live from the server's /api/version endpoint
   // (derived from git commit count/log), so it reflects whatever is currently checked out
@@ -472,6 +476,9 @@ export const App: React.FC = () => {
   const [onlineBusy, setOnlineBusy] = useState<boolean>(false);
   const onlineWsRef = useRef<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState<boolean>(false);
+  const actionInFlightRef = useRef<boolean>(false);
+  const latestOnlineSeqRef = useRef<number>(-1);
+  const latestOnlineOfferSigRef = useRef<string>('');
 
   // Active Game & Replay Recorder State
   const [recorder, setRecorder] = useState<ReplayRecorder | null>(null);
@@ -677,6 +684,125 @@ export const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [inGameTermination]);
 
+  const classifyOnlineActionPending = useCallback((
+    view: PlayerView | null,
+    action: GameAction
+  ): { variant: AiThinkingVariant; delayMs: number } => {
+    const hasAi = Boolean(view?.players.some((p) => p.type !== 'human'));
+    if (!hasAi) return { variant: 'syncing', delayMs: 1200 };
+
+    if (action.type === 'propose_trade' || action.type === 'counter_trade') {
+      return { variant: 'negotiating', delayMs: 350 };
+    }
+
+    if (action.type === 'end_turn') {
+      const order = view?.playerOrder ?? [];
+      const idx = view ? order.indexOf(view.activePlayerId) : -1;
+      const nextId = idx >= 0 && order.length > 0 ? order[(idx + 1) % order.length] : undefined;
+      const nextPlayer = nextId ? view?.players.find((p) => p.id === nextId) : undefined;
+      if (nextPlayer && nextPlayer.type !== 'human') {
+        return { variant: 'ai_turn', delayMs: 350 };
+      }
+      return { variant: 'syncing', delayMs: 1200 };
+    }
+
+    if (action.type === 'pass_special_building') {
+      const remainingQueue = (view?.specialBuildingQueue ?? []).slice(1);
+      const order = view?.playerOrder ?? [];
+      const curIdx = view ? order.indexOf(view.activePlayerId) : -1;
+      const fallbackNextId = curIdx >= 0 && order.length > 0 ? order[(curIdx + 1) % order.length] : undefined;
+      const nextId = remainingQueue[0] ?? fallbackNextId;
+      const nextPlayer = nextId ? view?.players.find((p) => p.id === nextId) : undefined;
+      if (nextPlayer && nextPlayer.type !== 'human') {
+        return { variant: 'ai_turn', delayMs: 350 };
+      }
+      return { variant: 'syncing', delayMs: 1200 };
+    }
+
+    if (action.type === 'place_initial_road' || action.type === 'place_initial_ship') {
+      return { variant: 'ai_turn', delayMs: 350 };
+    }
+
+    if (action.type === 'respond_trade' || action.type === 'cancel_trade') {
+      const activeP = view?.players.find((p) => p.id === view.activePlayerId);
+      if (activeP && activeP.type !== 'human') {
+        return { variant: 'ai_turn', delayMs: 350 };
+      }
+      return { variant: 'syncing', delayMs: 1200 };
+    }
+
+    if (action.type === 'discard_cards') {
+      const otherHumanDiscarding = Object.keys(view?.pendingDiscards ?? {}).some((id) => {
+        if (id === view?.viewerId) return false;
+        const pl = view?.players.find((p) => p.id === id);
+        return pl?.type === 'human';
+      });
+      const activeP = view?.players.find((p) => p.id === view.activePlayerId);
+      if (!otherHumanDiscarding && activeP && activeP.type !== 'human') {
+        return { variant: 'ai_turn', delayMs: 350 };
+      }
+      return { variant: 'syncing', delayMs: 1200 };
+    }
+
+    return { variant: 'syncing', delayMs: 1200 };
+  }, []);
+
+  // Atomically commits an incoming GameSyncPayload if it is strictly newer (or updates trade offer
+  // statuses at the same sequence), keeping onlinePlayerView and onlineLegalActions in lockstep so
+  // stale REST poll / WS responses can never overwrite legal actions from a newer state.
+  const commitOnlineState = useCallback((
+    data: {
+      playerView: PlayerView;
+      legalActions?: GameAction[];
+      recentEvents?: GameEvent[];
+      pendingTermination?: GameSyncPayload['pendingTermination'];
+      terminationDismissed?: boolean;
+    },
+    options?: { force?: boolean }
+  ): boolean => {
+    const offerSig = data.playerView.activeTradeOffers
+      .map((o) => `${o.id}:${o.status}:${o.rejectedByPlayerIds.length}`)
+      .join(',');
+
+    if (!options?.force) {
+      if (data.playerView.sequence < latestOnlineSeqRef.current) {
+        return false;
+      }
+      if (
+        data.playerView.sequence === latestOnlineSeqRef.current &&
+        offerSig === latestOnlineOfferSigRef.current
+      ) {
+        if (data.recentEvents) {
+          setOnlineEvents((prev) => mergeOnlineEvents(prev, data.recentEvents));
+        }
+        if (data.pendingTermination !== undefined) {
+          setInGameTermination(data.pendingTermination ?? null);
+        }
+        if (data.terminationDismissed !== undefined) {
+          setInGameTerminationDismissed(Boolean(data.terminationDismissed));
+        }
+        return false;
+      }
+    }
+
+    latestOnlineSeqRef.current = data.playerView.sequence;
+    latestOnlineOfferSigRef.current = offerSig;
+    setOnlinePlayerView(data.playerView);
+    if (data.legalActions !== undefined) {
+      setOnlineLegalActions(data.legalActions);
+    }
+    if (data.recentEvents) {
+      setOnlineEvents((prev) => mergeOnlineEvents(prev, data.recentEvents));
+    }
+    if (data.pendingTermination !== undefined) {
+      setInGameTermination(data.pendingTermination ?? null);
+    }
+    if (data.terminationDismissed !== undefined) {
+      setInGameTerminationDismissed(Boolean(data.terminationDismissed));
+    }
+    return true;
+  }, [mergeOnlineEvents]);
+
   // Auto-restore online game or lobby on startup / page refresh
   useEffect(() => {
     const saved = loadSavedOnlineSession();
@@ -687,13 +813,14 @@ export const App: React.FC = () => {
       fetchGameState(saved.gameId, saved.sessionToken)
         .then((data) => {
           if (cancelled) return;
-          setOnlinePlayerView(data.playerView);
-          setOnlineLegalActions(data.legalActions as GameAction[]);
+          commitOnlineState(data, { force: true });
           setOnlineLobby(null);
           setActiveTab('game');
         })
         .catch(() => {
           if (cancelled) return;
+          latestOnlineSeqRef.current = -1;
+          latestOnlineOfferSigRef.current = '';
           setOnlineSession(null);
           saveOnlineSession(null);
         });
@@ -710,6 +837,8 @@ export const App: React.FC = () => {
         })
         .catch(() => {
           if (cancelled) return;
+          latestOnlineSeqRef.current = -1;
+          latestOnlineOfferSigRef.current = '';
           setOnlineSession(null);
           saveOnlineSession(null);
         });
@@ -835,7 +964,8 @@ export const App: React.FC = () => {
         });
         if (res.ok) {
           showActionFeedback(locale === 'ro' ? `Numele a fost schimbat în: ${clean}` : `Name changed to: ${clean}`);
-          const d = await fetchGameState(onlineSession.gameId, onlineSession.sessionToken); setOnlinePlayerView(d.playerView);
+          const d = await fetchGameState(onlineSession.gameId, onlineSession.sessionToken);
+          commitOnlineState(d);
         }
       } catch (err) {
         console.error('Error renaming player in game:', err);
@@ -909,11 +1039,11 @@ export const App: React.FC = () => {
   // Fetches this player's own game state and switches into live online play, driven from here
   // on by the server (REST submit + WebSocket push) rather than the local ReplayRecorder.
   const enterOnlineGame = async (gameId: string, sessionToken: string, playerId: string, lobbyId: string) => {
+    latestOnlineSeqRef.current = -1;
+    latestOnlineOfferSigRef.current = '';
     const data = await fetchGameState(gameId, sessionToken);
     setOnlineSession({ lobbyId, gameId, sessionToken, playerId });
-    setOnlinePlayerView(data.playerView);
-    setOnlineLegalActions(data.legalActions as GameAction[]);
-    setOnlineEvents(mergeOnlineEvents([], data.recentEvents));
+    commitOnlineState(data, { force: true });
     setOnlineLobby(null);
     setActiveTab('game');
   };
@@ -998,9 +1128,12 @@ export const App: React.FC = () => {
     if (!onlineSession) return;
     setOnlineBusy(true);
     setOnlineError(null);
-    // The server advances AI turns (uncapped batch) until a human is needed before this
-    // responds, so with AI opponents this can take a while — same indicator as mid-game waits.
-    setPendingActionSince(Date.now());
+    const lobbyHasAi = Boolean(onlineLobby?.seats.some((s) => s.type !== 'human' && s.type !== 'open'));
+    setPendingAction({
+      since: Date.now(),
+      variant: lobbyHasAi ? 'ai_turn' : 'syncing',
+      delayMs: 350
+    });
     try {
       const data = await startOnlineLobby(onlineSession.lobbyId);
       await enterOnlineGame(data.gameId, onlineSession.sessionToken, onlineSession.playerId, onlineSession.lobbyId);
@@ -1008,7 +1141,7 @@ export const App: React.FC = () => {
       setOnlineError(err instanceof Error ? err.message : 'Nu s-a putut porni partida.');
     } finally {
       setOnlineBusy(false);
-      setPendingActionSince(null);
+      setPendingAction(null);
     }
   };
 
@@ -1048,6 +1181,7 @@ export const App: React.FC = () => {
     }
     const gameId = onlineSession.gameId;
     const sessionToken = onlineSession.sessionToken;
+    const playerId = onlineSession.playerId;
     // -1 = "not yet baselined": the first state_sync of a session can carry up to 25 events that
     // already happened before we connected (or reconnected) - those get silently absorbed into
     // the baseline instead of narrated, so joining/reloading mid-game doesn't replay old steals.
@@ -1078,11 +1212,9 @@ export const App: React.FC = () => {
           try {
             const msg = JSON.parse(ev.data as string);
             if (msg.type === 'state_sync') {
-              setOnlinePlayerView(msg.playerView);
-              setOnlineLegalActions(msg.legalActions);
+              commitOnlineState(msg);
 
               const incomingEvents = (msg.recentEvents ?? []) as GameEvent[];
-              setOnlineEvents((prev) => mergeOnlineEvents(prev, incomingEvents));
               if (lastSeenEventSeqRef.current === -1) {
                 // First sync of this connection: adopt its latest sequence as the baseline
                 // without narrating anything older than "now".
@@ -1092,8 +1224,11 @@ export const App: React.FC = () => {
                 // covers every OTHER player's move (including bot turns the server stepped
                 // through on its own), which previously updated state here silently with no
                 // banner or animation at all for anyone but the player who acted.
+                // Skip narrating our own in-flight action because applyOnlineSync handles it
+                // as soon as the REST response resolves (preventing double banners).
                 const newEvents = incomingEvents
                   .filter((e) => e.sequence > lastSeenEventSeqRef.current)
+                  .filter((e) => !(actionInFlightRef.current && e.playerId === playerId))
                   .sort((a, b) => a.sequence - b.sequence);
                 if (newEvents.length > 0) {
                   // The server steps a bot's whole turn before broadcasting once, so several
@@ -1108,15 +1243,6 @@ export const App: React.FC = () => {
                   });
                   lastSeenEventSeqRef.current = newEvents[newEvents.length - 1]!.sequence;
                 }
-              }
-
-              if (msg.pendingTermination) {
-                setInGameTermination(msg.pendingTermination);
-              } else {
-                setInGameTermination(null);
-              }
-              if (msg.terminationDismissed !== undefined) {
-                setInGameTerminationDismissed(Boolean(msg.terminationDismissed));
               }
             } else if (msg.type === 'action_rejected') {
               setOnlineError(msg.reason ?? 'Mutare respinsă de server.');
@@ -1175,31 +1301,11 @@ export const App: React.FC = () => {
     const sessionToken = onlineSession.sessionToken;
     let cancelled = false;
     const poll = async () => {
+      if (actionInFlightRef.current) return;
       try {
         const data = await fetchGameState(gameId, sessionToken);
-        if (cancelled) return;
-        setOnlinePlayerView((prev) => {
-          if (!prev) return data.playerView;
-          if (prev.sequence > data.playerView.sequence) return prev;
-          if (prev.sequence === data.playerView.sequence) {
-            const prevOffers = prev.activeTradeOffers.map((o) => `${o.id}:${o.status}`).join(',');
-            const nextOffers = data.playerView.activeTradeOffers.map((o) => `${o.id}:${o.status}`).join(',');
-            if (prevOffers === nextOffers) return prev;
-          }
-          return data.playerView;
-        });
-        setOnlineLegalActions(data.legalActions);
-        if (data.recentEvents) {
-          setOnlineEvents((prev) => mergeOnlineEvents(prev, data.recentEvents));
-        }
-        if (data.pendingTermination) {
-          setInGameTermination(data.pendingTermination);
-        } else {
-          setInGameTermination(null);
-        }
-        if (data.terminationDismissed !== undefined) {
-          setInGameTerminationDismissed(Boolean(data.terminationDismissed));
-        }
+        if (cancelled || actionInFlightRef.current) return;
+        commitOnlineState(data);
       } catch {
         // Transient network hiccup — the next tick will retry.
       }
@@ -1209,7 +1315,7 @@ export const App: React.FC = () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [onlineSession?.gameId, onlineSession?.sessionToken, isAllAiPoll]);
+  }, [onlineSession?.gameId, onlineSession?.sessionToken, isAllAiPoll, commitOnlineState]);
 
   const lastSavedGameIdRef = useRef<string | null>(null);
 
@@ -1544,9 +1650,7 @@ export const App: React.FC = () => {
     prevView?: PlayerView | null
   ) => {
     const newView = data.playerView;
-    setOnlinePlayerView(newView);
-    setOnlineLegalActions(data.legalActions);
-    if (data.recentEvents) setOnlineEvents((prev) => mergeOnlineEvents(prev, data.recentEvents));
+    commitOnlineState(data);
 
     // Our own action's effects (and anything the server stepped for us, like bot turns) are
     // about to be narrated below via the action/actingPlayerId branch - mark every event up to
@@ -1558,11 +1662,16 @@ export const App: React.FC = () => {
     const myId = onlineSession?.playerId;
 
     if (action && actingPlayerId) {
+      const ownEvent = [...(data.recentEvents ?? [])]
+        .reverse()
+        .find((e) => e.playerId === actingPlayerId && e.action.type === action.type);
       if (action.type === 'roll_dice') {
         setDiceRollAnimKey(`roll-${Date.now()}-${Math.random()}`);
-        if (newView.lastDiceRoll) {
+        const rollDetails = ownEvent?.details?.dice as { die1: number; die2: number; total: number } | undefined;
+        const roll = rollDetails ?? newView.lastDiceRoll;
+        if (roll) {
           showActionFeedback(
-            `🎲 ${newView.lastDiceRoll.die1} + ${newView.lastDiceRoll.die2} = ${newView.lastDiceRoll.total}`
+            `🎲 ${roll.die1} + ${roll.die2} = ${roll.total}`
           );
         }
       } else if (action.type === 'respond_trade') {
@@ -1584,9 +1693,8 @@ export const App: React.FC = () => {
       } else if (action.type === 'end_turn') {
         showActionFeedback('⏭️ Tură încheiată');
       } else if (action.type === 'steal_from_player' || action.type === 'move_robber') {
-        const lastEvent = data.recentEvents?.[data.recentEvents.length - 1];
-        const stolenResource = lastEvent?.details?.stolenResource as ResourceType | undefined;
-        const stolenFrom = (lastEvent?.details?.stolenFrom ?? (action.type === 'steal_from_player' ? action.targetPlayerId : undefined)) as string | undefined;
+        const stolenResource = ownEvent?.details?.stolenResource as ResourceType | undefined;
+        const stolenFrom = (ownEvent?.details?.stolenFrom ?? (action.type === 'steal_from_player' ? action.targetPlayerId : undefined)) as string | undefined;
         const thief = newView.players.find((p) => p.id === actingPlayerId);
         const victim = stolenFrom ? newView.players.find((p) => p.id === stolenFrom) : undefined;
         if (stolenResource && victim) {
@@ -1621,11 +1729,10 @@ export const App: React.FC = () => {
           );
         }
       } else if (action.type === 'play_monopoly') {
-        const lastEv = data.recentEvents?.[data.recentEvents.length - 1];
         const res = action.resource;
         const resText = `{{res:${res}}} ${RESOURCE_LABELS[locale][res]}`;
-        const totalTaken = Number(lastEv?.details?.totalTaken ?? 0);
-        const takenByPlayer = (lastEv?.details?.takenByPlayer ?? {}) as Record<string, number>;
+        const totalTaken = Number(ownEvent?.details?.totalTaken ?? 0);
+        const takenByPlayer = (ownEvent?.details?.takenByPlayer ?? {}) as Record<string, number>;
         const actingPlayer = newView.players.find((p) => p.id === actingPlayerId);
 
         if (actingPlayerId === myId) {
@@ -1651,8 +1758,7 @@ export const App: React.FC = () => {
         const actingPlayer = newView.players.find((p) => p.id === actingPlayerId);
         showActionFeedback(`🎁 ${actingPlayer?.name ?? actingPlayerId} a jucat Anul Abundenței (+1 {{res:${r1}}} ${RESOURCE_LABELS[locale][r1]}, +1 {{res:${r2}}} ${RESOURCE_LABELS[locale][r2]})`);
       } else if (action.type === 'buy_dev_card') {
-        const lastEv = data.recentEvents?.[data.recentEvents.length - 1];
-        const drawnType = lastEv?.details?.drawnType as DevCardType | undefined;
+        const drawnType = ownEvent?.details?.drawnType as DevCardType | undefined;
         const buyer = newView.players.find((p) => p.id === actingPlayerId);
         const buyerName = buyer?.name ?? actingPlayerId;
         if (drawnType) {
@@ -1710,19 +1816,27 @@ export const App: React.FC = () => {
 
     setBuildMode('none');
     setDiscardSelection(createEmptyResources());
-  }, [onlineSession, locale, showActionFeedback, launchFlyingCards]);
+  }, [onlineSession, locale, showActionFeedback, launchFlyingCards, commitOnlineState]);
 
   const executeOnlineAction = useCallback(async (playerId: string, action: GameAction) => {
-    if (!onlineSession?.gameId) return;
+    if (!onlineSession?.gameId || actionInFlightRef.current) return;
+    actionInFlightRef.current = true;
     setActionError(null);
     const prevView = onlinePlayerView;
-    setPendingActionSince(Date.now());
+    const expectedSeq = latestOnlineSeqRef.current >= 0 ? latestOnlineSeqRef.current : prevView?.sequence;
+    const pendingCfg = classifyOnlineActionPending(prevView, action);
+    setPendingAction({
+      since: Date.now(),
+      variant: pendingCfg.variant,
+      delayMs: pendingCfg.delayMs,
+      actionType: action.type
+    });
     try {
       const data = await submitOnlineAction({
         gameId: onlineSession.gameId,
         sessionToken: onlineSession.sessionToken,
         playerId,
-        expectedSequence: prevView?.sequence,
+        expectedSequence: expectedSeq,
         action
       });
       applyOnlineSync(data, action, playerId, prevView);
@@ -1752,8 +1866,7 @@ export const App: React.FC = () => {
         if (action.type === 'respond_trade' || action.type === 'cancel_trade' || action.type === 'counter_trade') {
           try {
             const fresh = await fetchGameState(onlineSession.gameId, onlineSession.sessionToken);
-            setOnlinePlayerView(fresh.playerView);
-            setOnlineLegalActions(fresh.legalActions);
+            commitOnlineState(fresh);
             return;
           } catch {
             // ignore
@@ -1762,9 +1875,10 @@ export const App: React.FC = () => {
         setActionError(err instanceof Error ? err.message : 'Mutare invalidă.');
       }
     } finally {
-      setPendingActionSince(null);
+      actionInFlightRef.current = false;
+      setPendingAction(null);
     }
-  }, [onlineSession, onlinePlayerView, applyOnlineSync]);
+  }, [onlineSession, onlinePlayerView, applyOnlineSync, commitOnlineState, classifyOnlineActionPending]);
 
   const executeAction = useCallback((playerId: string, action: GameAction) => {
     if (onlineSession) {
@@ -1971,26 +2085,18 @@ export const App: React.FC = () => {
   // Step one AI move (or unstick full bot batch in Human + AI online games)
   const executeOneAiStep = async () => {
     if (onlineSession?.gameId) {
-      setPendingActionSince(Date.now());
+      setPendingAction({ since: Date.now(), variant: 'ai_turn', delayMs: 350 });
       try {
         const isAllAi = Boolean(
           onlinePlayerView?.players?.length && onlinePlayerView.players.every((p) => p.type !== 'human')
         );
         const stepsToRun = isAllAi ? 1 : 80;
         const data = await stepOnlineAi(onlineSession.gameId, stepsToRun, onlineSession.playerId);
-        setOnlinePlayerView(data.playerView);
-        setOnlineLegalActions(data.legalActions as GameAction[]);
-        if (data.recentEvents) setOnlineEvents((prev) => mergeOnlineEvents(prev, data.recentEvents));
-        if (data.pendingTermination !== undefined) {
-          setInGameTermination(data.pendingTermination ?? null);
-        }
-        if (data.terminationDismissed !== undefined) {
-          setInGameTerminationDismissed(Boolean(data.terminationDismissed));
-        }
+        commitOnlineState(data);
       } catch (err) {
         console.error('Failed to step AI online:', err);
       } finally {
-        setPendingActionSince(null);
+        setPendingAction(null);
       }
       return;
     }
@@ -2470,8 +2576,13 @@ export const App: React.FC = () => {
   return (
     <div className="app-shell">
       {/* Fixed-position overlay, shown regardless of active tab — covers both the "Start Game"
-          wait (still on the waiting-room screen) and mid-game AI negotiation waits. */}
-      <AiThinkingIndicator since={pendingActionSince} locale={locale} />
+          wait (still on the waiting-room screen) and slow server/AI turn/negotiation waits. */}
+      <AiThinkingIndicator
+        since={pendingAction?.since ?? null}
+        variant={pendingAction?.variant}
+        delayMs={pendingAction?.delayMs}
+        locale={locale}
+      />
 
       {/* Resource cards animating from the producing hex to the receiving player — fixed
           positioning so it escapes the board/sidebar's own overflow clipping. */}
@@ -2624,6 +2735,8 @@ export const App: React.FC = () => {
             }
           }}
           onLeaveOnlineSession={() => {
+            latestOnlineSeqRef.current = -1;
+            latestOnlineOfferSigRef.current = '';
             setOnlineSession(null);
             saveOnlineSession(null);
             setOnlinePlayerView(null);
@@ -2920,7 +3033,7 @@ export const App: React.FC = () => {
                   total={gameState.lastDiceRoll?.total}
                   turn={gameState.turn}
                   rollTriggerKey={diceRollAnimKey}
-                  canRoll={gameState.phase === 'turn_start' && isHumanTurn}
+                  canRoll={gameState.phase === 'turn_start' && isHumanTurn && !pendingAction}
                   onRollClick={() => {
                     if (activePlayerObj) {
                       executeAction(activePlayerObj.id, { type: 'roll_dice' });
@@ -3130,9 +3243,10 @@ export const App: React.FC = () => {
                     <button
                       type="button"
                       className="btn btn-primary"
+                      disabled={Boolean(pendingAction)}
                       onClick={() => executeAction(activePlayerObj.id, { type: 'roll_dice' })}
                     >
-                      🎲 {t.rollDice}
+                      {pendingAction?.actionType === 'roll_dice' ? '⏳' : '🎲'} {t.rollDice}
                     </button>
                   )}
 
@@ -3143,10 +3257,11 @@ export const App: React.FC = () => {
                           type="button"
                           className="btn btn-warning"
                           style={STYLE_FONT_WEIGHT_BOLD}
+                          disabled={Boolean(pendingAction)}
                           onClick={() => executeAction(activePlayerObj.id, { type: 'pass_special_building' })}
                           title={locale === 'ro' ? 'Încheie rândul de construcție specială' : 'Finish special building turn'}
                         >
-                          ⏭️ {locale === 'ro' ? 'Pas Fază Specială' : 'Pass Special Build'}
+                          {pendingAction?.actionType === 'pass_special_building' ? '⏳' : '⏭️'} {locale === 'ro' ? 'Pas Fază Specială' : 'Pass Special Build'}
                         </button>
                       )}
                       <button
@@ -3216,11 +3331,12 @@ export const App: React.FC = () => {
                         className="btn"
                         disabled={
                           !hasResources(activePlayerObj.resources, BUILDING_COSTS.dev_card) ||
-                          gameState.devCardDeck.length === 0
+                          gameState.devCardDeck.length === 0 ||
+                          Boolean(pendingAction)
                         }
                         onClick={() => executeAction(activePlayerObj.id, { type: 'buy_dev_card' })}
                       >
-                        🃏 {t.buyDevCard}
+                        {pendingAction?.actionType === 'buy_dev_card' ? '⏳' : '🃏'} {t.buyDevCard}
                       </button>
 
                       {gameState.phase === 'main_actions' && (
@@ -3239,9 +3355,10 @@ export const App: React.FC = () => {
                     <button
                       type="button"
                       className="btn btn-success"
+                      disabled={Boolean(pendingAction)}
                       onClick={() => executeAction(activePlayerObj.id, { type: 'end_turn' })}
                     >
-                      ⏭️ {t.endTurn}
+                      {pendingAction?.actionType === 'end_turn' ? '⏳' : '⏭️'} {t.endTurn}
                     </button>
                   )}
                 </div>
@@ -4217,6 +4334,8 @@ export const App: React.FC = () => {
         <AdaptiveSurface
           open
           onClose={() => {
+            latestOnlineSeqRef.current = -1;
+            latestOnlineOfferSigRef.current = '';
             setOnlineLobby(null);
             setOnlineSession(null);
             setOnlineError(null);

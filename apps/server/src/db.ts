@@ -23,7 +23,8 @@ const { DatabaseSync } = requireSqlite('node:sqlite') as {
 // routinely shrinks it 5-10x. We store the compressed bytes directly as a BLOB rather than
 // base64-in-TEXT to avoid a further ~33% size tax.
 function compressJson(value: unknown): Buffer {
-  return gzipSync(Buffer.from(JSON.stringify(value), 'utf8'));
+  // Level 1 (Z_BEST_SPEED) is 3-5x faster on multi-MB replays while keeping standard gzip compatibility.
+  return gzipSync(Buffer.from(JSON.stringify(value), 'utf8'), { level: 1 });
 }
 
 // Rows written before compression was introduced hold plain JSON text (sqlite is dynamically

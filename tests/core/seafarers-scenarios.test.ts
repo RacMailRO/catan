@@ -451,9 +451,11 @@ describe('Catan Seafarers (Navigatori) & Custom Map Scenarios', () => {
     // Building a ship touching the fog hex triggers exploration
     const res = applyAction(game, 'p1', { type: 'build_ship', edgeId: adjacentEdge.id });
 
-    // The fog hex was revealed!
+    // The fog hex was revealed in nextState without mutating the prior GameState (copy-on-write)
     expect(res.state.board.hexes[fogHex.id]!.terrain).not.toBe('fog');
     expect(res.state.fogHexesRemaining!.length).toBe(initialFogCount - 1);
+    expect(game.board.hexes[fogHex.id]!.terrain).toBe('fog');
+    expect(game.board.hexes[fogHex.id]!.numberToken).toBeNull();
   });
 
   it('never emits pirateHexId for play_knight on world_map and ensures all legalActions pass validateAction', () => {

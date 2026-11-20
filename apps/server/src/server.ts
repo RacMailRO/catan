@@ -306,8 +306,8 @@ export function createCatanServer(options?: {
   }
 
   function persistRuntime(runtime: ActiveGameRuntime): void {
-    runtime.replay.events = structuredClone(runtime.events);
-    runtime.replay.aiDecisions = structuredClone(runtime.aiDecisions);
+    runtime.replay.events = runtime.events;
+    runtime.replay.aiDecisions = runtime.aiDecisions;
     if (
       runtime.state.sequence % 15 === 0 ||
       runtime.state.phase === 'game_over'
@@ -391,9 +391,45 @@ export function createCatanServer(options?: {
     runtime.tradeExpiryTimer = timer;
   }
 
+  function needsImmediateBotStep(state: GameState): boolean {
+    if (state.phase === 'game_over') return false;
+    if (state.phase === 'discard_resources') {
+      return Object.keys(state.pendingDiscards).some((id) => {
+        const p = getPlayerById(state, id);
+        return p && p.type !== 'human';
+      });
+    }
+    if (state.phase === 'main_actions') {
+      const openOffer = state.activeTradeOffers.find((o) => o.status === 'open');
+      if (openOffer) {
+        const hasBotResponder = state.players.some(
+          (p) =>
+            p.id !== openOffer.fromPlayerId &&
+            p.type !== 'human' &&
+            (!openOffer.toPlayerId || openOffer.toPlayerId === p.id) &&
+            !openOffer.rejectedByPlayerIds.includes(p.id)
+        );
+        if (hasBotResponder) return true;
+        const pendingHuman = state.players.find(
+          (p) =>
+            p.id !== openOffer.fromPlayerId &&
+            p.type === 'human' &&
+            (!openOffer.toPlayerId || openOffer.toPlayerId === p.id) &&
+            !openOffer.rejectedByPlayerIds.includes(p.id)
+        );
+        if (pendingHuman) {
+          return !hasResources(pendingHuman.resources, openOffer.requesting);
+        }
+      }
+    }
+    const activePlayer = getPlayerById(state, state.activePlayerId);
+    return Boolean(activePlayer && activePlayer.type !== 'human');
+  }
+
   function executeBotStepsUntilHumanNeeded(
     runtime: ActiveGameRuntime,
-    maxSteps = autoStepAiMaxBatch
+    maxSteps = autoStepAiMaxBatch,
+    skipPersist = false
   ): number {
     let steps = 0;
     let actionsInTurn = 0;
@@ -528,7 +564,7 @@ export function createCatanServer(options?: {
       actionsInTurn++;
     }
 
-    if (steps > 0) {
+    if (steps > 0 && !skipPersist) {
       persistRuntime(runtime);
     }
     scheduleTradeExpiryWakeup(runtime);
@@ -1297,10 +1333,20 @@ export function createCatanServer(options?: {
         const applied = applyAction(runtime.state, playerId, action);
         runtime.state = applied.state;
         runtime.events.push(applied.event);
-        persistRuntime(runtime);
 
-        // Automatically run AI / passive bot turns if needed
-        executeBotStepsUntilHumanNeeded(runtime);
+        // Broadcast immediately before synchronous AI turns when a bot will act next, so clients
+        // see the human's roll/build/end_turn take effect right away rather than waiting for all bots.
+        const botWillAct = needsImmediateBotStep(runtime.state);
+        if (botWillAct) {
+          broadcastGameSync(runtime);
+        }
+
+        try {
+          // Automatically run AI / passive bot turns if needed (persist once in finally)
+          executeBotStepsUntilHumanNeeded(runtime, autoStepAiMaxBatch, true);
+        } finally {
+          persistRuntime(runtime);
+        }
         broadcastGameSync(runtime);
 
         sendJson(res, 200, {
@@ -1886,9 +1932,17 @@ export function createCatanServer(options?: {
           const applied = applyAction(runtime.state, session.playerId, msg.action);
           runtime.state = applied.state;
           runtime.events.push(applied.event);
-          persistRuntime(runtime);
 
-          executeBotStepsUntilHumanNeeded(runtime);
+          const botWillAct = needsImmediateBotStep(runtime.state);
+          if (botWillAct) {
+            broadcastGameSync(runtime);
+          }
+
+          try {
+            executeBotStepsUntilHumanNeeded(runtime, autoStepAiMaxBatch, true);
+          } finally {
+            persistRuntime(runtime);
+          }
           broadcastGameSync(runtime);
         }
       } catch (err) {

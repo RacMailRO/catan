@@ -36,7 +36,8 @@ import {
   ResourceCount,
   ResourceType,
   TERRAIN_TO_RESOURCE,
-  TerrainType
+  TerrainType,
+  TradeOffer
 } from './types';
 
 export interface ParticipantConfig {
@@ -613,12 +614,20 @@ export function exploreFogHexesAroundEdge(
   const player = getPlayerById(state, playerId);
   if (!player) return;
 
+  let hexesCloned = false;
   for (const hId of candidateHexIds) {
     const hex = state.board.hexes[hId];
     if (hex && hex.terrain === 'fog' && state.fogHexesRemaining.length > 0) {
       const drawn = state.fogHexesRemaining.shift()!;
-      hex.terrain = drawn.terrain;
-      hex.numberToken = drawn.token;
+      if (!hexesCloned) {
+        state.board.hexes = { ...state.board.hexes };
+        hexesCloned = true;
+      }
+      state.board.hexes[hId] = {
+        ...hex,
+        terrain: drawn.terrain,
+        numberToken: drawn.token
+      };
 
       let resReward: ResourceType | null = null;
       if (drawn.terrain === 'forest') resReward = 'wood';
@@ -1835,6 +1844,55 @@ function advanceSetupAfterInitialPiece(nextState: GameState): void {
   }
 }
 
+function cloneTradeOffers(offers: TradeOffer[]): TradeOffer[] {
+  return offers.map((o) => ({
+    ...o,
+    offering: { ...o.offering },
+    requesting: { ...o.requesting },
+    rejectedByPlayerIds: [...o.rejectedByPlayerIds],
+    rejectionReasons: o.rejectionReasons ? { ...o.rejectionReasons } : undefined
+  }));
+}
+
+/**
+ * Clones mutable GameState fields while sharing immutable board geometry (`vertices`, `edges`,
+ * `harbors`, and copy-on-write `hexes`) and `startingOrderRolls`.
+ */
+function cloneGameState(state: GameState): GameState {
+  return {
+    ...state,
+    rules: { ...state.rules },
+    board: {
+      ...state.board,
+      buildings: { ...state.board.buildings },
+      roads: { ...state.board.roads },
+      ships: state.board.ships ? { ...state.board.ships } : undefined
+    },
+    players: state.players.map((p) => ({
+      ...p,
+      resources: { ...p.resources },
+      devCards: p.devCards.map((c) => ({ ...c })),
+      playedDevCardTypesThisTurn: [...p.playedDevCardTypesThisTurn],
+      settledIslands: p.settledIslands ? [...p.settledIslands] : undefined,
+      remainingPieces: { ...p.remainingPieces }
+    })),
+    playerOrder: [...state.playerOrder],
+    lastDiceRoll: state.lastDiceRoll ? { ...state.lastDiceRoll } : undefined,
+    bank: { ...state.bank },
+    devCardDeck: [...state.devCardDeck],
+    pendingDiscards: { ...state.pendingDiscards },
+    robberContext: state.robberContext
+      ? {
+          ...state.robberContext,
+          eligibleTargetIds: [...state.robberContext.eligibleTargetIds]
+        }
+      : undefined,
+    specialBuildingQueue: state.specialBuildingQueue ? [...state.specialBuildingQueue] : undefined,
+    fogHexesRemaining: state.fogHexesRemaining ? [...state.fogHexesRemaining] : undefined,
+    activeTradeOffers: cloneTradeOffers(state.activeTradeOffers)
+  };
+}
+
 /**
  * Applies a validated action to a deep clone of `state`, returning the new state and the recorded GameEvent.
  */
@@ -1845,7 +1903,7 @@ export function applyAction(
   options?: { nowMs?: number; aiDecisionId?: string; skipValidation?: boolean }
 ): { state: GameState; event: GameEvent } {
   const nowMs = options?.nowMs ?? Date.now();
-  const nextState: GameState = structuredClone(state);
+  const nextState: GameState = cloneGameState(state);
 
   // Expire any timed-out trade offers before validating/applying
   expireStaleTradesInPlace(nextState, nowMs);
@@ -2638,7 +2696,7 @@ export function getPlayerView(state: GameState, viewerId: string): PlayerView {
 
     // For other players, only show dev cards that have already been played
     const visibleDevCards = isSelf || isGameOver
-      ? structuredClone(p.devCards)
+      ? p.devCards.map((c) => ({ ...c }))
       : p.devCards.filter((c) => c.played).map((c) => ({ ...c }));
 
     return {
@@ -2670,8 +2728,13 @@ export function getPlayerView(state: GameState, viewerId: string): PlayerView {
     viewerId,
     sequence: state.sequence,
     turn: state.turn,
-    rules: structuredClone(state.rules),
-    board: structuredClone(state.board),
+    rules: { ...state.rules },
+    board: {
+      ...state.board,
+      buildings: { ...state.board.buildings },
+      roads: { ...state.board.roads },
+      ships: state.board.ships ? { ...state.board.ships } : undefined
+    },
     players,
     playerOrder: [...state.playerOrder],
     activePlayerId: state.activePlayerId,
@@ -2686,7 +2749,7 @@ export function getPlayerView(state: GameState, viewerId: string): PlayerView {
     freeRoadsRemaining: state.freeRoadsRemaining,
     specialBuildingQueue: state.specialBuildingQueue ? [...state.specialBuildingQueue] : undefined,
     fogHexesRemaining: state.fogHexesRemaining ? [...state.fogHexesRemaining] : undefined,
-    activeTradeOffers: structuredClone(state.activeTradeOffers),
+    activeTradeOffers: cloneTradeOffers(state.activeTradeOffers),
     longestRoadOwnerId: state.longestRoadOwnerId,
     largestArmyOwnerId: state.largestArmyOwnerId,
     winnerId: state.winnerId

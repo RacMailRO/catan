@@ -758,4 +758,100 @@ describe('Authoritative LAN/Online Server, Protocol Validation & WebSocket Sync'
     }
     ws.close();
   });
+
+  it('broadcasts immediate state_sync after human end_turn before stepping AI turns', async () => {
+    const lobRes = await fetch(`${baseUrl}/api/lobbies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Immediate End Turn WS Test',
+        hostName: 'HumanP1',
+        mode: 'online',
+        seats: [
+          { seatIndex: 0, name: 'HumanP1', type: 'human', color: 'red' },
+          { seatIndex: 1, name: 'BotP2', type: 'ai', color: 'blue' }
+        ]
+      })
+    });
+    const { sessionToken } = (await lobRes.json()) as { sessionToken: string };
+
+    const game = createGame({
+      gameId: 'game_ws_immediate_end_turn',
+      seed: 'ws-immediate-end-turn-seed',
+      rules: createRulesConfig({ autoFillPassiveBotsMinPlayers: 2 }),
+      participants: [
+        { id: 'p1', name: 'HumanP1', type: 'human' },
+        { id: 'p2', name: 'BotP2', type: 'ai', aiDifficulty: 'medium', aiStyle: 'balanced' }
+      ]
+    });
+    game.phase = 'main_actions';
+    game.turn = 2;
+    game.activePlayerId = 'p1';
+    game.playerOrder = ['p1', 'p2'];
+
+    const rec = new ReplayRecorder(game, 1);
+    const impRes = await fetch(`${baseUrl}/api/replays/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rec.toReplayFile())
+    });
+    expect(impRes.status).toBe(200);
+
+    const ws = new WebSocket(wsUrl);
+    const syncSnapshots: Array<{ sequence: number; activePlayerId: string; phase: string }> = [];
+    let authDoneResolve!: () => void;
+    const authDone = new Promise<void>((r) => {
+      authDoneResolve = r;
+    });
+    let bothBroadcastsResolve!: () => void;
+    const bothBroadcasts = new Promise<void>((resolve, reject) => {
+      bothBroadcastsResolve = resolve;
+      setTimeout(() => reject(new Error(`Timed out waiting for pre-AI + post-AI state_sync; got ${JSON.stringify(syncSnapshots)}`)), 5000);
+    });
+
+    ws.on('open', () => {
+      ws.send(JSON.stringify({ type: 'authenticate', gameId: 'game_ws_immediate_end_turn', sessionToken }));
+    });
+    ws.on('message', (raw) => {
+      const msg = JSON.parse(String(raw)) as ServerToClientWsMessage;
+      if (msg.type === 'state_sync') {
+        syncSnapshots.push({
+          sequence: msg.playerView.sequence,
+          activePlayerId: msg.playerView.activePlayerId,
+          phase: msg.playerView.phase
+        });
+        if (syncSnapshots.length === 1) {
+          authDoneResolve();
+        }
+        const sawPreAi = syncSnapshots.some((s) => s.sequence >= 1 && s.activePlayerId === 'p2' && s.phase === 'turn_start');
+        const sawPostAi = syncSnapshots.some((s) => s.sequence >= 2 && s.activePlayerId === 'p1' && s.phase === 'turn_start');
+        if (sawPreAi && sawPostAi) {
+          bothBroadcastsResolve();
+        }
+      }
+    });
+
+    await authDone;
+
+    const actRes = await fetch(`${baseUrl}/api/games/game_ws_immediate_end_turn/action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionToken,
+        playerId: 'p1',
+        expectedSequence: game.sequence,
+        action: { type: 'end_turn' }
+      })
+    });
+    expect(actRes.status).toBe(200);
+
+    await bothBroadcasts;
+
+    const preAiIdx = syncSnapshots.findIndex((s) => s.sequence === 1 && s.activePlayerId === 'p2' && s.phase === 'turn_start');
+    const postAiIdx = syncSnapshots.findIndex((s) => s.sequence > 1 && s.activePlayerId === 'p1' && s.phase === 'turn_start');
+    expect(preAiIdx).toBeGreaterThan(0);
+    expect(postAiIdx).toBeGreaterThan(preAiIdx);
+
+    ws.close();
+  });
 });
